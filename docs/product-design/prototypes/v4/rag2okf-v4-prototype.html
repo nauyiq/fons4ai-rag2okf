@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rag2OKF · V4 Prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: #f5f7fb;
+      --surface: #ffffff;
+      --surface-2: #f8faff;
+      --surface-3: #f0f3fa;
+      --ink: #111827;
+      --ink-2: #4c566b;
+      --ink-3: #8992a7;
+      --line: #dce2ed;
+      --line-2: #cdd5e3;
+      --violet: #6848ff;
+      --violet-2: #8b73ff;
+      --violet-soft: #eeeaff;
+      --teal: #009d87;
+      --teal-soft: #ddf7f1;
+      --amber: #e9721e;
+      --amber-soft: #fff0e2;
+      --red: #dc4b4b;
+      --red-soft: #ffe7e7;
+      --blue: #376df4;
+      --blue-soft: #e8efff;
+      --shadow: 0 18px 50px rgba(40, 50, 75, .08);
+      --shadow-soft: 0 8px 24px rgba(40, 50, 75, .06);
+      --radius: 14px;
+    }
+
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --canvas: #07111f;
+      --surface: #0c1828;
+      --surface-2: #101d2e;
+      --surface-3: #152337;
+      --ink: #e8edf7;
+      --ink-2: #aeb8ca;
+      --ink-3: #738096;
+      --line: #233247;
+      --line-2: #314158;
+      --violet: #8b73ff;
+      --violet-2: #a28fff;
+      --violet-soft: rgba(108, 72, 255, .17);
+      --teal: #23c9ae;
+      --teal-soft: rgba(35, 201, 174, .14);
+      --amber: #ff9b52;
+      --amber-soft: rgba(255, 155, 82, .14);
+      --red: #ff7777;
+      --red-soft: rgba(255, 119, 119, .14);
+      --blue: #6d96ff;
+      --blue-soft: rgba(109, 150, 255, .15);
+      --shadow: 0 20px 60px rgba(0, 0, 0, .25);
+      --shadow-soft: 0 10px 30px rgba(0, 0, 0, .18);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--canvas); color: var(--ink); }
+    body {
+      font-family: Inter, "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      letter-spacing: .01em;
+    }
+    button, input, select { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+      outline: 3px solid color-mix(in srgb, var(--violet) 34%, transparent);
+      outline-offset: 2px;
+    }
+    .mono { font-family: "DIN Alternate", "Roboto Mono", Consolas, monospace; }
+    .hidden { display: none !important; }
+
+    /* Shared */
+    .btn {
+      min-height: 38px; padding: 0 17px; border-radius: 9px; border: 1px solid var(--line-2);
+      background: var(--surface); display: inline-flex; align-items: center; justify-content: center;
+      gap: 8px; font-weight: 650; cursor: pointer;
+    }
+    .btn.primary { color: #fff; border-color: transparent; background: linear-gradient(135deg, var(--violet), #4c31d8); box-shadow: 0 8px 20px rgba(104,72,255,.22); }
+    .btn.teal { color: #fff; border-color: transparent; background: linear-gradient(135deg, var(--teal), #007966); }
+    .btn.ghost { background: transparent; }
+    .btn.danger { border-color: color-mix(in srgb, var(--red) 55%, var(--line)); color: var(--red); background: transparent; }
+    .btn.icon { width: 38px; padding: 0; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px; height: 25px; padding: 0 9px;
+      border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap;
+    }
+    .badge.violet { color: var(--violet); background: var(--violet-soft); }
+    .badge.teal { color: var(--teal); background: var(--teal-soft); }
+    .badge.amber { color: var(--amber); background: var(--amber-soft); }
+    .badge.red { color: var(--red); background: var(--red-soft); }
+    .badge.blue { color: var(--blue); background: var(--blue-soft); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .panel {
+      border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+    .muted { color: var(--ink-2); }
+    .subtle { color: var(--ink-3); }
+    .divider { height: 1px; background: var(--line); }
+    .kicker { color: var(--violet); text-transform: uppercase; font-weight: 800; font-size: 11px; letter-spacing: .15em; }
+    .field-label { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 750; color: var(--ink-2); }
+    .input {
+      width: 100%; height: 42px; border-radius: 9px; border: 1px solid var(--line-2);
+      background: var(--surface-2); color: var(--ink); padding: 0 13px;
+    }
+    .toggle {
+      width: 40px; height: 22px; border-radius: 999px; padding: 3px; background: var(--line-2);
+      display: inline-flex; justify-content: flex-start;
+    }
+    .toggle.on { justify-content: flex-end; background: var(--violet); }
+    .toggle::after { content: ""; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,.18); }
+
+    /* Logo */
+    .brand-mark {
+      position: relative; width: 44px; height: 48px; display: grid; place-items: center;
+      filter: drop-shadow(0 8px 18px rgba(104,72,255,.25));
+    }
+    .brand-mark::before {
+      content: ""; position: absolute; inset: 3px 4px;
+      background: linear-gradient(145deg, var(--violet-2), var(--violet));
+      clip-path: polygon(50% 0, 94% 25%, 94% 75%, 50% 100%, 6% 75%, 6% 25%);
+    }
+    .brand-mark::after {
+      content: ""; position: absolute; inset: 8px 9px; background: #0d1524;
+      clip-path: polygon(50% 0, 94% 25%, 94% 75%, 50% 100%, 6% 75%, 6% 25%);
+    }
+    .brand-cube { z-index: 1; color: var(--violet-2); font-size: 22px; transform: translateY(1px); }
+
+    /* Login */
+    .login-page {
+      min-height: 100vh; display: grid; grid-template-columns: minmax(650px, 1.18fr) minmax(480px, .82fr);
+      background:
+        radial-gradient(circle at 28% 42%, color-mix(in srgb, var(--violet) 14%, transparent), transparent 29%),
+        radial-gradient(circle at 66% 15%, color-mix(in srgb, var(--teal) 8%, transparent), transparent 25%),
+        var(--canvas);
+      overflow: hidden;
+    }
+    .login-stage {
+      min-height: 100vh; padding: 52px 72px 46px 74px; position: relative; border-right: 1px solid var(--line);
+      display: flex; flex-direction: column;
+    }
+    .login-stage::after {
+      content: ""; position: absolute; width: 510px; height: 510px; right: -250px; bottom: -260px;
+      border: 1px solid color-mix(in srgb, var(--violet) 25%, var(--line)); border-radius: 50%;
+      box-shadow: 0 0 0 70px color-mix(in srgb, var(--violet) 3%, transparent), 0 0 0 140px color-mix(in srgb, var(--violet) 2%, transparent);
+    }
+    .login-brand { display: flex; align-items: center; gap: 14px; position: relative; z-index: 1; }
+    .login-brand strong { font-size: 21px; letter-spacing: -.02em; }
+    .login-brand span { display: block; color: var(--ink-3); font-size: 11px; letter-spacing: .16em; margin-top: 2px; }
+    .login-thesis { margin-top: 118px; max-width: 660px; position: relative; z-index: 1; }
+    .login-thesis h1 { margin: 17px 0 21px; font-size: 57px; line-height: 1.08; letter-spacing: -.055em; max-width: 610px; }
+    .login-thesis h1 em { color: var(--violet); font-style: normal; }
+    .login-thesis p { max-width: 590px; margin: 0; color: var(--ink-2); font-size: 17px; line-height: 1.8; }
+    .provenance-track {
+      margin-top: auto; margin-bottom: 48px; position: relative; z-index: 1; display: grid; grid-template-columns: repeat(5, 1fr);
+      max-width: 760px; padding-top: 30px;
+    }
+    .provenance-track::before {
+      content: ""; position: absolute; top: 45px; left: 26px; right: 33px; height: 2px;
+      background: linear-gradient(90deg, var(--violet), var(--violet-2) 48%, var(--teal));
+      box-shadow: 0 0 16px color-mix(in srgb, var(--violet) 32%, transparent);
+    }
+    .proof-node { position: relative; min-width: 100px; }
+    .proof-dot {
+      width: 31px; height: 31px; border-radius: 11px; border: 2px solid var(--surface);
+      background: var(--violet); color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 800;
+      box-shadow: 0 0 0 1px var(--violet), 0 7px 18px rgba(104,72,255,.25); position: relative; z-index: 1;
+    }
+    .proof-node:last-child .proof-dot { background: var(--teal); box-shadow: 0 0 0 1px var(--teal), 0 7px 18px rgba(0,157,135,.23); }
+    .proof-node b { display: block; margin-top: 14px; font-size: 13px; }
+    .proof-node small { color: var(--ink-3); }
+    .stage-footer { position: relative; z-index: 1; color: var(--ink-3); font-size: 12px; display: flex; gap: 28px; }
+    .stage-footer span::before { content: "✓"; color: var(--teal); margin-right: 7px; }
+    .login-side { display: grid; place-items: center; padding: 50px 74px; position: relative; }
+    .theme-fab { position: absolute; right: 32px; top: 28px; }
+    .login-card { width: min(430px, 100%); padding: 34px 36px 31px; }
+    .login-card .welcome { font-size: 30px; letter-spacing: -.04em; margin: 8px 0 8px; }
+    .login-card > p { margin: 0 0 30px; color: var(--ink-2); }
+    .form-row { margin-bottom: 19px; }
+    .password-wrap { position: relative; }
+    .password-wrap .input { padding-right: 50px; }
+    .password-wrap span { position: absolute; right: 13px; top: 10px; color: var(--ink-3); }
+    .login-meta { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 23px; font-size: 12px; color: var(--ink-2); }
+    .check { display: flex; align-items: center; gap: 8px; }
+    .check-box { width: 16px; height: 16px; border-radius: 5px; border: 1px solid var(--line-2); background: var(--surface-2); }
+    .login-submit { width: 100%; height: 46px; }
+    .account-switch { margin-top: 22px; text-align: center; color: var(--ink-2); font-size: 13px; }
+    .account-switch a { color: var(--violet); font-weight: 750; text-decoration: none; margin-left: 5px; }
+    .code-wrap { display: grid; grid-template-columns: 1fr 116px; gap: 10px; }
+    .code-wrap .btn { height: 42px; }
+    .register-card { padding-top: 29px; padding-bottom: 26px; }
+    .register-card > p { margin-bottom: 18px; }
+    .register-card .form-row { margin-bottom: 12px; }
+    .register-card .welcome { font-size: 27px; }
+    .password-hint { margin: -4px 0 13px; color: var(--ink-3); font-size: 11px; line-height: 1.5; }
+    .agreement { display: flex; align-items: flex-start; gap: 9px; color: var(--ink-2); font-size: 12px; margin: 4px 0 19px; }
+    .agreement .check-box { flex: 0 0 auto; margin-top: 1px; }
+    .auth-note {
+      margin-top: 23px; padding: 13px 14px; background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: 10px; display: flex; gap: 11px; color: var(--ink-2); font-size: 12px;
+    }
+    .auth-note b { color: var(--ink); }
+    .login-links { margin-top: 23px; display: flex; justify-content: center; gap: 16px; color: var(--ink-3); font-size: 12px; }
+
+    /* App shell */
+    .app-page { min-height: 100vh; padding-left: 78px; }
+    .rail {
+      position: fixed; inset: 0 auto 0 0; width: 78px; background: #091321; border-right: 1px solid #1f2c3e;
+      display: flex; align-items: center; flex-direction: column; z-index: 20;
+    }
+    .rail .brand-mark { margin: 14px 0 55px; }
+    .rail-nav { display: flex; flex-direction: column; gap: 14px; width: 100%; align-items: center; }
+    .rail-item {
+      width: 46px; height: 46px; border-radius: 11px; color: #aeb9ca; display: grid; place-items: center;
+      position: relative; font-size: 18px; text-decoration: none;
+    }
+    .rail-item.active { color: #fff; background: linear-gradient(145deg, rgba(139,115,255,.30), rgba(88,70,200,.16)); box-shadow: inset 0 0 0 1px rgba(139,115,255,.18); }
+    .rail-item.active::after { content: ""; position: absolute; right: -16px; top: 13px; width: 3px; height: 20px; background: var(--violet-2); border-radius: 3px; box-shadow: 0 0 12px var(--violet-2); }
+    .rail-pipeline { margin-top: auto; margin-bottom: 22px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .mini-node { width: 9px; height: 9px; border: 2px solid #5b6b80; border-radius: 50%; position: relative; }
+    .mini-node::after { content: ""; position: absolute; width: 1px; height: 9px; background: #34445a; left: 2px; top: 8px; }
+    .mini-node:last-child { border-color: var(--teal); background: var(--teal); box-shadow: 0 0 10px rgba(35,201,174,.55); }
+    .mini-node:last-child::after { display: none; }
+    .topbar {
+      height: 64px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(18px); padding: 0 29px; display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 10;
+    }
+    .crumbs { display: flex; align-items: center; gap: 11px; font-weight: 650; }
+    .crumbs .slash { color: var(--ink-3); font-weight: 400; }
+    .top-actions { display: flex; align-items: center; gap: 11px; }
+    .command {
+      width: 390px; height: 38px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2);
+      display: flex; align-items: center; gap: 9px; padding: 0 13px; color: var(--ink-3);
+    }
+    .command kbd { margin-left: auto; border: 1px solid var(--line); background: var(--surface); padding: 1px 6px; border-radius: 5px; font-size: 11px; }
+    .avatar {
+      width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(145deg, #1e293b, #0b1220);
+      color: #fff; display: grid; place-items: center; font-weight: 750; position: relative;
+    }
+    .avatar::after { content: ""; position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--teal); right: -1px; bottom: 1px; border: 2px solid var(--surface); }
+    .contextbar { height: 46px; padding: 0 29px; border-bottom: 1px solid var(--line); background: var(--surface); display: flex; align-items: center; gap: 28px; }
+    .context-item { height: 46px; display: flex; align-items: center; color: var(--ink-2); font-weight: 620; position: relative; }
+    .context-item.active { color: var(--violet); }
+    .context-item.active::after { content: ""; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--violet); }
+    .workspace { padding: 24px 28px 28px; max-width: 1540px; margin: 0 auto; }
+    .page-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 20px; }
+    .page-title h1 { margin: 3px 0 4px; font-size: 27px; letter-spacing: -.035em; }
+    .page-title p { margin: 0; color: var(--ink-2); }
+    .page-actions { display: flex; gap: 10px; }
+    .toolbar {
+      min-height: 56px; display: flex; align-items: center; gap: 10px; padding: 9px 12px; margin-bottom: 14px;
+    }
+    .toolbar .search { width: 330px; }
+    .search { height: 38px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); display: flex; align-items: center; gap: 9px; padding: 0 12px; color: var(--ink-3); }
+    .toolbar-spacer { flex: 1; }
+    .segmented { border: 1px solid var(--line); border-radius: 9px; padding: 3px; display: flex; background: var(--surface-2); }
+    .segmented span { min-width: 68px; height: 29px; display: grid; place-items: center; border-radius: 6px; color: var(--ink-2); font-size: 12px; }
+    .segmented .active { color: var(--ink); background: var(--surface); box-shadow: 0 2px 8px rgba(20,30,50,.08); font-weight: 700; }
+
+    /* Library */
+    .library-summary { display: grid; grid-template-columns: 1.45fr .72fr .72fr .72fr; gap: 12px; margin-bottom: 14px; }
+    .summary-main {
+      padding: 20px 22px; position: relative; overflow: hidden;
+      background: linear-gradient(135deg, color-mix(in srgb, var(--violet-soft) 68%, var(--surface)), var(--surface) 67%);
+    }
+    .summary-main::after { content: ""; position: absolute; width: 180px; height: 180px; border: 1px solid color-mix(in srgb, var(--violet) 23%, var(--line)); border-radius: 50%; right: -67px; top: -88px; box-shadow: 0 0 0 32px color-mix(in srgb, var(--violet) 4%, transparent); }
+    .summary-main h3 { margin: 6px 0 8px; font-size: 19px; }
+    .summary-main p { margin: 0; max-width: 520px; color: var(--ink-2); }
+    .stat { padding: 18px; display: flex; flex-direction: column; justify-content: space-between; min-height: 126px; }
+    .stat strong { font-size: 28px; letter-spacing: -.04em; }
+    .stat small { color: var(--ink-3); }
+    .delta { font-size: 11px; color: var(--teal); }
+    .kb-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
+    .kb-card { padding: 17px 18px 15px; min-height: 218px; position: relative; transition: transform .2s ease, border-color .2s ease; }
+    .kb-card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--violet) 42%, var(--line)); }
+    .kb-top { display: flex; align-items: flex-start; justify-content: space-between; }
+    .kb-icon { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: var(--violet-soft); color: var(--violet); font-size: 20px; }
+    .kb-card h3 { margin: 15px 0 5px; font-size: 17px; }
+    .kb-card > p { margin: 0 0 17px; color: var(--ink-2); min-height: 42px; }
+    .kb-metrics { display: flex; gap: 18px; padding-top: 13px; border-top: 1px solid var(--line); }
+    .kb-metrics b { display: block; font-size: 15px; }
+    .kb-metrics small { color: var(--ink-3); }
+    .kb-foot { margin-top: 13px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--ink-3); }
+
+    /* Table / documents */
+    .table-panel { overflow: hidden; }
+    .table-head, .doc-row {
+      display: grid; grid-template-columns: minmax(310px, 1.55fr) 130px 150px 150px 170px 80px;
+      align-items: center; column-gap: 12px; padding: 0 17px;
+    }
+    .table-head { height: 42px; background: var(--surface-2); color: var(--ink-3); font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; border-bottom: 1px solid var(--line); }
+    .doc-row { min-height: 72px; border-bottom: 1px solid var(--line); }
+    .doc-row:last-child { border-bottom: 0; }
+    .doc-name { display: flex; align-items: center; gap: 12px; }
+    .file-icon { width: 38px; height: 42px; border: 1px solid var(--line-2); border-radius: 8px; display: grid; place-items: center; color: var(--violet); background: var(--surface-2); font-weight: 800; font-size: 11px; }
+    .doc-name b { display: block; margin-bottom: 3px; }
+    .doc-name small { color: var(--ink-3); }
+    .more { text-align: center; font-size: 20px; color: var(--ink-3); }
+    .pipeline-cell { display: flex; gap: 4px; }
+    .pipe-seg { width: 24px; height: 5px; border-radius: 4px; background: var(--line); }
+    .pipe-seg.done { background: var(--teal); }
+    .pipe-seg.active { background: var(--violet); box-shadow: 0 0 8px color-mix(in srgb, var(--violet) 45%, transparent); }
+    .upload-zone { margin-top: 14px; min-height: 92px; border: 1px dashed color-mix(in srgb, var(--violet) 42%, var(--line)); background: color-mix(in srgb, var(--violet-soft) 25%, var(--surface)); display: flex; align-items: center; padding: 15px 20px; gap: 16px; }
+    .upload-plus { width: 48px; height: 48px; border-radius: 13px; background: var(--violet-soft); color: var(--violet); display: grid; place-items: center; font-size: 24px; }
+    .upload-zone h4 { margin: 0 0 4px; }
+    .upload-zone p { margin: 0; color: var(--ink-3); font-size: 12px; }
+    .upload-zone .btn { margin-left: auto; }
+
+    /* Document detail */
+    .doc-layout { display: grid; grid-template-columns: minmax(0, 1.65fr) 360px; gap: 14px; }
+    .current-file { padding: 18px 20px; display: flex; align-items: center; gap: 16px; }
+    .current-file .file-icon { width: 50px; height: 56px; }
+    .current-file h3 { margin: 0 0 5px; font-size: 17px; }
+    .current-file p { margin: 0; color: var(--ink-3); font-size: 12px; }
+    .current-file .file-actions { margin-left: auto; display: flex; gap: 9px; }
+    .process-panel { padding: 18px 20px; margin-top: 13px; }
+    .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
+    .section-head h3 { margin: 0; font-size: 15px; }
+    .process-track { display: grid; grid-template-columns: repeat(4, 1fr); position: relative; padding-top: 4px; }
+    .process-track::before { content: ""; position: absolute; left: 35px; right: 35px; top: 22px; height: 2px; background: linear-gradient(90deg, var(--teal) 0 64%, var(--line) 64%); }
+    .process-step { text-align: center; position: relative; z-index: 1; }
+    .step-dot { margin: 0 auto 9px; width: 38px; height: 38px; border-radius: 13px; display: grid; place-items: center; background: var(--surface-3); border: 1px solid var(--line); font-weight: 850; }
+    .process-step.done .step-dot { color: #fff; background: var(--teal); border-color: var(--teal); }
+    .process-step.active .step-dot { color: #fff; background: var(--violet); border-color: var(--violet); box-shadow: 0 0 0 5px var(--violet-soft); }
+    .process-step b { display: block; font-size: 12px; }
+    .process-step small { color: var(--ink-3); }
+    .preview-panel { margin-top: 13px; overflow: hidden; }
+    .preview-tabs { height: 47px; border-bottom: 1px solid var(--line); padding: 0 18px; display: flex; gap: 23px; align-items: center; }
+    .preview-tabs span { height: 47px; display: flex; align-items: center; position: relative; color: var(--ink-2); }
+    .preview-tabs .active { color: var(--violet); font-weight: 750; }
+    .preview-tabs .active::after { content: ""; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--violet); border-radius: 3px 3px 0 0; }
+    .preview-body { padding: 18px; display: grid; grid-template-columns: 1fr 210px; gap: 15px; min-height: 354px; }
+    .parsed-copy { padding: 18px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 10px; }
+    .parsed-copy h2 { font-size: 20px; margin: 0 0 14px; }
+    .parsed-copy h3 { font-size: 14px; margin: 18px 0 8px; }
+    .parsed-copy p { color: var(--ink-2); margin: 0 0 9px; line-height: 1.75; }
+    .anchor-list { display: flex; flex-direction: column; gap: 8px; }
+    .anchor { padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+    .anchor b { display: block; font-size: 12px; margin-bottom: 4px; }
+    .anchor small { color: var(--ink-3); }
+    .activity-panel { padding: 17px; }
+    .activity-panel h3 { margin: 0 0 15px; }
+    .activity { display: grid; grid-template-columns: 18px 1fr; gap: 10px; margin-bottom: 18px; position: relative; }
+    .activity::after { content: ""; position: absolute; left: 8px; top: 18px; bottom: -18px; width: 1px; background: var(--line); }
+    .activity:last-child::after { display: none; }
+    .activity-dot { width: 17px; height: 17px; border-radius: 50%; background: var(--teal-soft); border: 4px solid var(--teal); margin-top: 2px; }
+    .activity.active .activity-dot { border-color: var(--violet); background: var(--violet-soft); }
+    .activity b { display: block; font-size: 12px; }
+    .activity p { margin: 3px 0; color: var(--ink-2); font-size: 12px; }
+    .activity small { color: var(--ink-3); }
+    .danger-note { margin-top: 16px; padding: 13px; border: 1px solid color-mix(in srgb, var(--amber) 30%, var(--line)); background: var(--amber-soft); border-radius: 10px; color: var(--ink-2); font-size: 12px; }
+
+    /* Profile */
+    .profile-grid { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 14px; }
+    .profile-card { padding: 25px 22px; text-align: center; }
+    .profile-avatar { width: 82px; height: 82px; margin: 0 auto 14px; border-radius: 24px; background: linear-gradient(145deg, var(--violet), #312098); color: #fff; display: grid; place-items: center; font-size: 27px; font-weight: 800; box-shadow: 0 12px 30px rgba(104,72,255,.25); }
+    .profile-card h2 { margin: 0 0 3px; }
+    .profile-card p { margin: 0 0 17px; color: var(--ink-3); }
+    .profile-facts { margin-top: 21px; text-align: left; }
+    .fact { padding: 12px 0; border-top: 1px solid var(--line); display: flex; justify-content: space-between; color: var(--ink-2); }
+    .fact b { color: var(--ink); }
+    .form-panel { padding: 21px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 17px; }
+    .profile-pref { margin-top: 14px; padding: 20px 21px; }
+    .setting-line { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; border-top: 1px solid var(--line); }
+    .setting-line:first-of-type { border-top: 0; }
+    .setting-copy b { display: block; margin-bottom: 3px; }
+    .setting-copy small { color: var(--ink-3); }
+    .security-strip { margin-top: 14px; padding: 16px 18px; display: flex; gap: 13px; align-items: center; background: linear-gradient(90deg, var(--teal-soft), var(--surface)); }
+    .security-strip .shield { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; background: var(--teal); color: #fff; }
+    .security-strip p { margin: 2px 0 0; color: var(--ink-2); font-size: 12px; }
+
+    /* Settings */
+    .settings-layout { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 14px; }
+    .settings-nav { padding: 10px; align-self: start; }
+    .settings-group { padding: 10px 10px 6px; color: var(--ink-3); font-size: 10px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+    .settings-item { height: 42px; border-radius: 9px; padding: 0 11px; display: flex; align-items: center; gap: 10px; color: var(--ink-2); }
+    .settings-item.active { color: var(--violet); background: var(--violet-soft); font-weight: 750; }
+    .settings-main { padding: 22px; }
+    .settings-main > h2 { margin: 0 0 5px; font-size: 20px; }
+    .settings-main > p { margin: 0 0 22px; color: var(--ink-2); }
+    .setting-section { border-top: 1px solid var(--line); padding: 19px 0 5px; }
+    .setting-section h3 { margin: 0 0 12px; font-size: 14px; }
+    .preference-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .choice-card { padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); min-height: 92px; }
+    .choice-card.selected { border-color: var(--violet); box-shadow: inset 0 0 0 1px var(--violet); background: var(--violet-soft); }
+    .choice-card b { display: block; margin-bottom: 5px; }
+    .choice-card small { color: var(--ink-3); }
+    .chunk-grid { display: grid; grid-template-columns: 1.2fr .8fr .8fr; gap: 12px; }
+    .model-placeholder { margin-top: 17px; padding: 17px; border: 1px dashed var(--line-2); border-radius: 11px; background: var(--surface-2); display: flex; gap: 14px; align-items: center; }
+    .model-placeholder .lock { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--amber-soft); color: var(--amber); }
+    .model-placeholder h4 { margin: 0 0 3px; }
+    .model-placeholder p { margin: 0; color: var(--ink-3); font-size: 12px; }
+    .settings-save { margin-top: 19px; display: flex; justify-content: flex-end; gap: 9px; }
+
+    @media (max-width: 1100px) {
+      .login-page { grid-template-columns: 1fr; }
+      .login-stage { display: none; }
+      .kb-grid { grid-template-columns: repeat(2, 1fr); }
+      .library-summary { grid-template-columns: 1fr 1fr; }
+      .doc-layout, .profile-grid { grid-template-columns: 1fr; }
+      .command { width: 270px; }
+    }
+    @media (max-width: 760px) {
+      .app-page { padding-left: 0; padding-bottom: 70px; }
+      .rail { inset: auto 0 0; width: auto; height: 62px; flex-direction: row; justify-content: center; }
+      .rail .brand-mark, .rail-pipeline { display: none; }
+      .rail-nav { flex-direction: row; width: auto; }
+      .rail-item.active::after { right: 10px; top: auto; left: 10px; bottom: -8px; width: auto; height: 3px; }
+      .command { display: none; }
+      .contextbar { overflow-x: auto; }
+      .workspace { padding: 18px 14px; }
+      .kb-grid, .library-summary, .settings-layout, .form-grid, .preference-grid, .chunk-grid { grid-template-columns: 1fr; }
+      .table-panel { overflow-x: auto; }
+      .table-head, .doc-row { min-width: 1000px; }
+      .page-head { align-items: flex-start; gap: 14px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <main id="login" class="page login-page hidden" aria-label="Rag2OKF 登录页">
+    <section class="login-stage">
+      <div class="login-brand">
+        <div class="brand-mark"><span class="brand-cube">◆</span></div>
+        <div><strong>Rag2OKF</strong><span>KNOWLEDGE WORKBENCH</span></div>
+      </div>
+      <div class="login-thesis">
+        <div class="kicker">From evidence to knowledge</div>
+        <h1>让每一条知识，<br />都能回到<em>它的来源</em>。</h1>
+        <p>保存原文件，检查解析结果，调试分块，再把经过确认的内容发布为可追溯知识。Rag2OKF 把知识加工过程留在你的掌控中。</p>
+      </div>
+      <div class="provenance-track" aria-label="知识加工流程">
+        <div class="proof-node"><div class="proof-dot">01</div><b>原文件</b><small>Evidence</small></div>
+        <div class="proof-node"><div class="proof-dot">02</div><b>解析</b><small>Parse</small></div>
+        <div class="proof-node"><div class="proof-dot">03</div><b>分块</b><small>Chunk</small></div>
+        <div class="proof-node"><div class="proof-dot">04</div><b>发布</b><small>Publish</small></div>
+        <div class="proof-node"><div class="proof-dot">05</div><b>OKF</b><small>Knowledge</small></div>
+      </div>
+      <div class="stage-footer"><span>来源可追溯</span><span>发布可控制</span><span>知识可治理</span></div>
+    </section>
+    <section class="login-side">
+      <button class="btn icon theme-fab" data-theme-toggle aria-label="切换主题">◐</button>
+      <div class="panel login-card">
+        <div class="kicker">Secure workspace</div>
+        <h2 class="welcome">欢迎回来</h2>
+        <p>登录你的 Rag2OKF 知识工作台</p>
+        <div class="form-row">
+          <label class="field-label">邮箱</label>
+          <input class="input" type="email" value="ying@rag2okf.cn" aria-label="邮箱" />
+        </div>
+        <div class="form-row">
+          <label class="field-label">密码</label>
+          <div class="password-wrap"><input class="input" value="••••••••••••" aria-label="密码" /><span>◉</span></div>
+        </div>
+        <div class="login-meta"><span class="check"><span class="check-box"></span> 保持登录状态</span></div>
+        <button class="btn primary login-submit">进入知识工作台　→</button>
+        <div class="account-switch">还没有账号？<a href="?page=register">创建账号</a></div>
+        <div class="login-links"><span>隐私说明</span><span>安全策略</span><span>v0.1 Prototype</span></div>
+      </div>
+    </section>
+  </main>
+
+  <main id="register" class="page login-page hidden" aria-label="Rag2OKF 注册页">
+    <section class="login-stage">
+      <div class="login-brand">
+        <div class="brand-mark"><span class="brand-cube">◆</span></div>
+        <div><strong>Rag2OKF</strong><span>KNOWLEDGE WORKBENCH</span></div>
+      </div>
+      <div class="login-thesis">
+        <div class="kicker">Start with your first source</div>
+        <h1>从第一份文件，<br />建立你的<em>知识空间</em>。</h1>
+        <p>先保存来源，再决定是否解析和发布。你可以清楚看到知识经过了什么处理，也能随时回到原始证据。</p>
+      </div>
+      <div class="provenance-track" aria-label="知识加工流程">
+        <div class="proof-node"><div class="proof-dot">01</div><b>原文件</b><small>Evidence</small></div>
+        <div class="proof-node"><div class="proof-dot">02</div><b>解析</b><small>Parse</small></div>
+        <div class="proof-node"><div class="proof-dot">03</div><b>分块</b><small>Chunk</small></div>
+        <div class="proof-node"><div class="proof-dot">04</div><b>发布</b><small>Publish</small></div>
+        <div class="proof-node"><div class="proof-dot">05</div><b>OKF</b><small>Knowledge</small></div>
+      </div>
+      <div class="stage-footer"><span>个人空间自动创建</span><span>处理策略可配置</span><span>来源始终保留</span></div>
+    </section>
+    <section class="login-side">
+      <button class="btn icon theme-fab" data-theme-toggle aria-label="切换主题">◐</button>
+      <div class="panel login-card register-card">
+        <div class="kicker">Create workspace</div>
+        <h2 class="welcome">创建你的账号</h2>
+        <p>使用邮箱创建账号，注册后直接进入个人知识空间</p>
+        <div class="form-row">
+          <label class="field-label">邮箱</label>
+          <input class="input" type="email" value="ying@rag2okf.cn" aria-label="邮箱" />
+          <div class="password-hint">邮箱仅用于登录，暂不发送验证邮件</div>
+        </div>
+        <div class="form-row">
+          <label class="field-label">展示名称</label>
+          <input class="input" placeholder="例如：Chuang Ying" aria-label="展示名称" />
+        </div>
+        <div class="form-row">
+          <label class="field-label">密码</label>
+          <div class="password-wrap"><input class="input" value="••••••••••••" aria-label="密码" /><span>◉</span></div>
+        </div>
+        <div class="form-row">
+          <label class="field-label">确认密码</label>
+          <div class="password-wrap"><input class="input" value="••••••••••••" aria-label="确认密码" /><span>◉</span></div>
+        </div>
+        <div class="password-hint">8–64 位，不能与邮箱相同</div>
+        <div class="agreement"><span class="check-box"></span><span>我已阅读并同意《服务条款》和《隐私说明》</span></div>
+        <button class="btn primary login-submit">创建账号并进入　→</button>
+        <div class="account-switch">已经有账号？<a href="?page=login">返回登录</a></div>
+        <div class="login-links"><span>服务条款</span><span>隐私说明</span><span>v0.1 Prototype</span></div>
+      </div>
+    </section>
+  </main>
+
+  <main id="app" class="page app-page hidden">
+    <aside class="rail">
+      <div class="brand-mark"><span class="brand-cube">◆</span></div>
+      <nav class="rail-nav" aria-label="主导航">
+        <a class="rail-item" data-nav="library" href="?page=library">▤</a>
+        <a class="rail-item" data-nav="documents" href="?page=documents">▱</a>
+        <a class="rail-item" data-nav="qa" href="#">◌</a>
+        <a class="rail-item" data-nav="evaluation" href="#">⌁</a>
+        <a class="rail-item" data-nav="settings" href="?page=settings">⚙</a>
+      </nav>
+      <div class="rail-pipeline" aria-label="知识加工轨道">
+        <span class="mini-node"></span><span class="mini-node"></span><span class="mini-node"></span><span class="mini-node"></span><span class="mini-node"></span>
+      </div>
+    </aside>
+    <header class="topbar">
+      <div class="crumbs"><span>知识库</span><span class="slash">/</span><span id="crumb-context">全部知识库</span></div>
+      <div class="top-actions">
+        <div class="command"><span>⌕</span><span>搜索知识库、文档，或直接提问…</span><kbd>⌘ K</kbd></div>
+        <button class="btn icon">▣</button>
+        <button class="btn icon" data-theme-toggle>◐</button>
+        <div class="avatar">YL</div><span>⌄</span>
+      </div>
+    </header>
+    <nav class="contextbar" id="contextbar">
+      <a class="context-item active">概览</a>
+      <a class="context-item">文档</a>
+      <a class="context-item">OKF</a>
+      <a class="context-item">知识问答</a>
+      <a class="context-item">评测</a>
+      <a class="context-item">设置</a>
+    </nav>
+
+    <section id="library" class="app-content hidden">
+      <div class="workspace">
+        <div class="page-head">
+          <div class="page-title"><div class="kicker">Knowledge spaces</div><h1>我的知识库</h1><p>在独立空间中组织来源文件、处理策略和已发布知识。</p></div>
+          <div class="page-actions"><button class="btn">导入连接器</button><button class="btn primary">＋ 创建知识库</button></div>
+        </div>
+        <div class="library-summary">
+          <article class="panel summary-main"><div class="kicker">Workspace pulse</div><h3>个人工作空间运行正常</h3><p>3 个知识库已发布内容，2 份文档等待处理。上次批量发布于今天 14:26 完成。</p></article>
+          <article class="panel stat"><small>知识库</small><strong class="mono">06</strong><span class="delta">本月 +1</span></article>
+          <article class="panel stat"><small>源文档</small><strong class="mono">128</strong><span class="delta">已发布 104</span></article>
+          <article class="panel stat"><small>待处理</small><strong class="mono" style="color:var(--amber)">02</strong><span class="subtle">需要关注</span></article>
+        </div>
+        <div class="panel toolbar">
+          <div class="search">⌕　搜索知识库</div>
+          <span class="badge violet">全部 6</span><span class="badge teal">已发布 3</span><span class="badge amber">处理中 2</span>
+          <div class="toolbar-spacer"></div>
+          <div class="segmented"><span class="active">卡片</span><span>列表</span></div>
+          <button class="btn icon">↕</button>
+        </div>
+        <div class="kb-grid">
+          <article class="panel kb-card"><div class="kb-top"><div class="kb-icon">◇</div><span class="badge teal"><span class="dot"></span>正常</span></div><h3>小微企业贷款制度库</h3><p>准入、授信、贷后与政策变更材料，作为金融场景演示知识基础。</p><div class="kb-metrics"><span><b class="mono">46</b><small>文档</small></span><span><b class="mono">12.8K</b><small>分块</small></span><span><b class="mono">84</b><small>OKF</small></span></div><div class="kb-foot"><span>14 分钟前更新</span><span>进入知识库　→</span></div></article>
+          <article class="panel kb-card"><div class="kb-top"><div class="kb-icon" style="color:var(--teal);background:var(--teal-soft)">▧</div><span class="badge violet"><span class="dot"></span>解析中</span></div><h3>贷款产品材料库</h3><p>面向产品经理与运营人员的产品说明、申请材料和常见问题。</p><div class="kb-metrics"><span><b class="mono">31</b><small>文档</small></span><span><b class="mono">8.4K</b><small>分块</small></span><span><b class="mono">42</b><small>OKF</small></span></div><div class="kb-foot"><span>正在解析 1 份文件</span><span>查看进度　→</span></div></article>
+          <article class="panel kb-card"><div class="kb-top"><div class="kb-icon" style="color:var(--blue);background:var(--blue-soft)">⌁</div><span class="badge amber"><span class="dot"></span>待发布</span></div><h3>风险策略研究库</h3><p>公开风险策略、指标说明与模拟决策材料，不包含真实客户数据。</p><div class="kb-metrics"><span><b class="mono">18</b><small>文档</small></span><span><b class="mono">5.1K</b><small>分块</small></span><span><b class="mono">21</b><small>OKF</small></span></div><div class="kb-foot"><span>昨天 18:42 更新</span><span>进入知识库　→</span></div></article>
+          <article class="panel kb-card"><div class="kb-top"><div class="kb-icon">▤</div><span class="badge teal"><span class="dot"></span>正常</span></div><h3>Fons4AI 技术资料</h3><p>框架说明、适配器设计、Agent 实践与内部技术决策记录。</p><div class="kb-metrics"><span><b class="mono">22</b><small>文档</small></span><span><b class="mono">3.7K</b><small>分块</small></span><span><b class="mono">36</b><small>OKF</small></span></div><div class="kb-foot"><span>3 天前更新</span><span>进入知识库　→</span></div></article>
+          <article class="panel kb-card"><div class="kb-top"><div class="kb-icon" style="color:var(--amber);background:var(--amber-soft)">□</div><span class="badge">仅保存</span></div><h3>个人阅读摘录</h3><p>暂不自动解析的原始阅读材料与研究报告归档。</p><div class="kb-metrics"><span><b class="mono">11</b><small>文档</small></span><span><b class="mono">—</b><small>分块</small></span><span><b class="mono">—</b><small>OKF</small></span></div><div class="kb-foot"><span>5 天前更新</span><span>进入知识库　→</span></div></article>
+          <article class="panel kb-card" style="display:grid;place-items:center;text-align:center;border-style:dashed;background:var(--surface-2)"><div><div class="kb-icon" style="margin:0 auto 12px">＋</div><h3 style="margin:0 0 6px">创建新的知识空间</h3><p style="min-height:auto">为一组来源文件建立独立策略和权限边界。</p></div></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="documents" class="app-content hidden">
+      <div class="workspace">
+        <div class="page-head">
+          <div class="page-title"><div class="kicker">Source documents</div><h1>文档</h1><p>管理当前文件、解析状态和发布结果；相同文件名不会自动合并。</p></div>
+          <div class="page-actions"><button class="btn">批量操作</button><button class="btn primary">↑ 上传新文档</button></div>
+        </div>
+        <div class="panel toolbar">
+          <div class="search">⌕　搜索文件名或类型</div>
+          <span class="badge violet">全部 46</span><span class="badge teal">已发布 38</span><span class="badge amber">处理中 2</span><span class="badge red">失败 1</span>
+          <div class="toolbar-spacer"></div><button class="btn">筛选　⌄</button><button class="btn">最近更新　⌄</button>
+        </div>
+        <div class="panel table-panel">
+          <div class="table-head"><span>当前文件</span><span>处理轨迹</span><span>解析状态</span><span>发布状态</span><span>最近处理</span><span></span></div>
+          <div class="doc-row"><div class="doc-name"><div class="file-icon">PDF</div><div><b>启航经营贷准入规则 V2.pdf</b><small>2.8 MB · 38 页 · PDF</small></div></div><div class="pipeline-cell"><i class="pipe-seg done"></i><i class="pipe-seg done"></i><i class="pipe-seg done"></i><i class="pipe-seg done"></i></div><span class="badge teal"><span class="dot"></span>解析成功</span><span class="badge teal"><span class="dot"></span>已发布</span><span><b>今天 14:26</b><br><small class="subtle">由 YL 发布</small></span><span class="more">···</span></div>
+          <div class="doc-row"><div class="doc-name"><div class="file-icon">DOCX</div><div><b>2026年二季度准入政策变更通知.docx</b><small>468 KB · DOCX</small></div></div><div class="pipeline-cell"><i class="pipe-seg done"></i><i class="pipe-seg active"></i><i class="pipe-seg"></i><i class="pipe-seg"></i></div><span class="badge violet"><span class="dot"></span>解析中 64%</span><span class="badge">未发布</span><span><b>3 分钟前</b><br><small class="subtle">结构识别</small></span><span class="more">···</span></div>
+          <div class="doc-row"><div class="doc-name"><div class="file-icon">MD</div><div><b>贷款产品申请材料清单.md</b><small>31 KB · Markdown</small></div></div><div class="pipeline-cell"><i class="pipe-seg done"></i><i class="pipe-seg done"></i><i class="pipe-seg done"></i><i class="pipe-seg active"></i></div><span class="badge teal"><span class="dot"></span>解析成功</span><span class="badge amber"><span class="dot"></span>待发布</span><span><b>今天 10:18</b><br><small class="subtle">分块完成</small></span><span class="more">···</span></div>
+          <div class="doc-row"><div class="doc-name"><div class="file-icon">TXT</div><div><b>审批常见问题摘录.txt</b><small>18 KB · TXT</small></div></div><div class="pipeline-cell"><i class="pipe-seg done"></i><i class="pipe-seg"></i><i class="pipe-seg"></i><i class="pipe-seg"></i></div><span class="badge">未解析</span><span class="badge">未发布</span><span><b>昨天 16:05</b><br><small class="subtle">仅保存原文件</small></span><span class="more">···</span></div>
+          <div class="doc-row"><div class="doc-name"><div class="file-icon">PDF</div><div><b>担保方案说明（扫描件）.pdf</b><small>12.2 MB · 24 页 · PDF</small></div></div><div class="pipeline-cell"><i class="pipe-seg done"></i><i class="pipe-seg" style="background:var(--red)"></i><i class="pipe-seg"></i><i class="pipe-seg"></i></div><span class="badge red"><span class="dot"></span>解析失败</span><span class="badge">未发布</span><span><b>昨天 11:34</b><br><small class="subtle">需要布局解析</small></span><span class="more">···</span></div>
+        </div>
+        <div class="panel upload-zone"><div class="upload-plus">＋</div><div><h4>添加来源文件</h4><p>支持 PDF、DOCX、Markdown、TXT。上传后可选择只保存原文件，或立即开始解析。</p></div><button class="btn">选择文件</button></div>
+      </div>
+    </section>
+
+    <section id="document" class="app-content hidden">
+      <div class="workspace">
+        <div class="page-head">
+          <div class="page-title"><div class="kicker">Current document</div><h1>启航经营贷准入规则 V2</h1><p>页面只展示当前文件和当前处理结果，不提供版本中心。</p></div>
+          <div class="page-actions"><button class="btn">更新文件</button><button class="btn">重新分块</button><button class="btn teal">✓ 已发布</button></div>
+        </div>
+        <div class="doc-layout">
+          <div>
+            <article class="panel current-file"><div class="file-icon">PDF</div><div><h3>启航经营贷准入规则 V2.pdf</h3><p>2.8 MB · 38 页 · SHA-256 已校验 · 上传于今天 13:42</p></div><span class="badge teal">当前文件</span><div class="file-actions"><button class="btn">预览原文</button><button class="btn icon">↓</button></div></article>
+            <article class="panel process-panel"><div class="section-head"><h3>知识处理轨迹</h3><span class="subtle mono">Task 01K4…8A2F</span></div><div class="process-track"><div class="process-step done"><div class="step-dot">✓</div><b>原文件</b><small>13:42</small></div><div class="process-step done"><div class="step-dot">✓</div><b>解析完成</b><small>14:06</small></div><div class="process-step done"><div class="step-dot">✓</div><b>分块完成</b><small>14:11</small></div><div class="process-step active"><div class="step-dot">✓</div><b>已发布</b><small>14:26</small></div></div></article>
+            <article class="panel preview-panel">
+              <div class="preview-tabs"><span class="active">解析预览</span><span>分块预览 <small>1,284</small></span><span>任务记录</span><span style="margin-left:auto">⌕ 页面 3 / 38</span></div>
+              <div class="preview-body"><div class="parsed-copy"><h2>第三章　借款人准入条件</h2><h3>3.1 年龄与民事行为能力</h3><p>借款人申请时年龄应为 23 至 58 周岁，且具有完全民事行为能力。</p><p>借款人为企业经营者的，应能够提供真实、连续的经营证明材料。</p><h3>3.2 经营期限</h3><p>当前经营主体持续经营时间原则上不少于 12 个月。对符合专项政策的客群，可按审批授权执行差异化要求。</p></div><div class="anchor-list"><div class="kicker">Source anchors</div><div class="anchor"><b>PAGE_REGION · P3</b><small>x: 84–718 / y: 126–362</small></div><div class="anchor"><b>SECTION · 3.1</b><small>年龄与民事行为能力</small></div><div class="anchor"><b>CHUNK · C-018</b><small>Parent P-004 · 326 tokens</small></div><div class="anchor"><b>完整性校验</b><small style="color:var(--teal)">Hash 与计数一致</small></div></div></div>
+            </article>
+          </div>
+          <aside>
+            <article class="panel activity-panel"><div class="section-head"><h3>最近处理</h3><span class="badge teal">正常</span></div><div class="activity active"><span class="activity-dot"></span><div><b>发布成功</b><p>1,284 个分块已成为当前发布内容</p><small>今天 14:26 · YL</small></div></div><div class="activity"><span class="activity-dot"></span><div><b>分块完成</b><p>recursive · 1000 / overlap 100</p><small>今天 14:11 · 系统</small></div></div><div class="activity"><span class="activity-dot"></span><div><b>解析完成</b><p>Native Tika · 84 个结构块</p><small>今天 14:06 · 系统</small></div></div><div class="activity"><span class="activity-dot"></span><div><b>原文件已保存</b><p>签名、大小与内容 Hash 已校验</p><small>今天 13:42 · YL</small></div></div></article>
+            <article class="panel activity-panel" style="margin-top:13px"><div class="section-head"><h3>当前策略</h3><button class="btn icon">↗</button></div><div class="fact"><span>解析器</span><b>NATIVE_TIKA</b></div><div class="fact"><span>分块方式</span><b>Recursive</b></div><div class="fact"><span>Chunk size</span><b class="mono">1000 / 100</b></div><div class="danger-note"><b>重新分块会删除当前解析侧分块</b><br>已发布内容会继续可用，直到新分块重新发布成功。</div></article>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section id="profile" class="app-content hidden">
+      <div class="workspace">
+        <div class="page-head"><div class="page-title"><div class="kicker">Local business profile</div><h1>个人中心</h1><p>这里维护 Rag2OKF 的本地资料和偏好，不保存认证密码或令牌。</p></div><div class="page-actions"><button class="btn primary">保存更改</button></div></div>
+        <div class="profile-grid">
+          <aside class="panel profile-card"><div class="profile-avatar">YL</div><h2>Chuang Ying</h2><p>ying@rag2okf.cn</p><span class="badge violet">知识管理员</span><div class="profile-facts"><div class="fact"><span>账号状态</span><b style="color:var(--teal)">正常</b></div><div class="fact"><span>所属工作空间</span><b>2</b></div><div class="fact"><span>最近登录</span><b>今天 14:03</b></div><div class="fact"><span>会话状态</span><b style="color:var(--teal)">安全</b></div></div><button class="btn" style="width:100%;margin-top:16px">更换头像</button></aside>
+          <div><article class="panel form-panel"><div class="section-head"><h3>基本资料</h3><span class="badge teal">本地业务资料</span></div><div class="form-grid"><div><label class="field-label">展示名称</label><input class="input" value="Chuang Ying"></div><div><label class="field-label">登录邮箱</label><input class="input" type="email" value="ying@rag2okf.cn" disabled></div><div><label class="field-label">职位/角色描述</label><input class="input" value="Agent 开发者 · 知识管理员"></div><div><label class="field-label">默认工作空间</label><select class="input"><option>个人工作空间</option></select></div></div><div class="password-hint" style="margin-top:12px">登录邮箱暂未验证，仅作为账号标识</div></article>
+          <article class="panel profile-pref"><div class="section-head"><h3>个人偏好</h3><span class="subtle">只影响你的工作体验</span></div><div class="setting-line"><div class="setting-copy"><b>跟随系统主题</b><small>系统切换亮暗模式时同步更新 Rag2OKF</small></div><span class="toggle on"></span></div><div class="setting-line"><div class="setting-copy"><b>完成任务通知</b><small>解析、分块或发布完成后在应用内通知</small></div><span class="toggle on"></span></div><div class="setting-line"><div class="setting-copy"><b>默认显示处理轨迹</b><small>打开文档详情时优先显示来源与处理状态</small></div><span class="toggle"></span></div></article>
+          <article class="panel security-strip"><div class="shield">◇</div><div><b>账号安全状态正常</b><p>最近的登录活动没有发现异常，你可以随时查看安全记录。</p></div><button class="btn" style="margin-left:auto">查看安全记录</button></article></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="settings" class="app-content hidden">
+      <div class="workspace">
+        <div class="page-head"><div class="page-title"><div class="kicker">Layered preferences</div><h1>设置</h1><p>个人习惯、知识库策略和平台能力各自拥有清晰边界。</p></div><div class="page-actions"><button class="btn">恢复默认</button><button class="btn primary">保存设置</button></div></div>
+        <div class="settings-layout">
+          <aside class="panel settings-nav"><div class="settings-group">个人</div><div class="settings-item active">◐　外观与习惯</div><div class="settings-item">▦　默认分块</div><div class="settings-item">◌　通知</div><div class="settings-group">当前知识库</div><div class="settings-item">◇　自动化策略</div><div class="settings-item">▱　解析与分块</div><div class="settings-group">平台</div><div class="settings-item">⌁　模型配置</div><div class="settings-item">♢　存储与索引</div></aside>
+          <article class="panel settings-main"><h2>外观与默认习惯</h2><p>这些设置只属于你的本地业务用户，不会改变其他成员的知识库策略。</p>
+            <section class="setting-section"><h3>主题</h3><div class="preference-grid"><div class="choice-card"><b>☀　亮色</b><small>清晰、克制的浅色工作台</small></div><div class="choice-card"><b>☾　暗色</b><small>适合长时间阅读和审核</small></div><div class="choice-card selected"><b>◐　跟随系统</b><small>根据操作系统自动切换</small></div></div></section>
+            <section class="setting-section"><h3>默认分块习惯</h3><div class="chunk-grid"><div><label class="field-label">首选策略</label><select class="input"><option>Recursive · 通用文本</option></select></div><div><label class="field-label">Chunk size</label><input class="input mono" value="1000"></div><div><label class="field-label">Overlap</label><input class="input mono" value="100"></div></div><div class="auth-note" style="margin-top:12px"><span>ⓘ</span><div><b>这是创建知识库时的个人默认值</b><br>已有知识库和已生成分块不会被自动修改。</div></div></section>
+            <section class="setting-section"><h3>平台模型配置</h3><div class="model-placeholder"><div class="lock">◇</div><div><h4>信息架构已预留，本阶段不启用</h4><p>Embedding、Reranker 和生成模型需要独立完成模型选型与密钥安全设计后再开放配置。</p></div><span class="badge amber" style="margin-left:auto">后续阶段</span></div></section>
+            <div class="settings-save"><button class="btn">取消</button><button class="btn primary">保存个人设置</button></div>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const page = params.get("page") || "login";
+    const theme = params.get("theme") || "light";
+    document.documentElement.dataset.theme = theme;
+
+    const pageTitles = {
+      library: "全部知识库",
+      documents: "小微企业贷款制度库 / 文档",
+      document: "小微企业贷款制度库 / 当前文件",
+      profile: "个人中心",
+      settings: "设置"
+    };
+
+    if (page === "login" || page === "register") {
+      document.querySelector("#" + page).classList.remove("hidden");
+    } else {
+      document.querySelector("#app").classList.remove("hidden");
+      const target = document.querySelector("#" + page) || document.querySelector("#library");
+      target.classList.remove("hidden");
+      document.querySelector("#crumb-context").textContent = pageTitles[page] || pageTitles.library;
+      document.querySelectorAll("[data-nav]").forEach(item => item.classList.toggle("active", item.dataset.nav === (page === "document" ? "documents" : page)));
+      const contextItems = [...document.querySelectorAll("#contextbar .context-item")];
+      contextItems.forEach(item => item.classList.remove("active"));
+      contextItems[(page === "documents" || page === "document") ? 1 : 0]?.classList.add("active");
+      if (page === "profile") document.querySelector("#contextbar").classList.add("hidden");
+      if (page === "settings") {
+        document.querySelector("#contextbar").classList.add("hidden");
+        document.querySelector('[data-nav="settings"]').classList.add("active");
+      }
+    }
+
+    document.querySelectorAll("[data-theme-toggle]").forEach(button => {
+      button.addEventListener("click", () => {
+        const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+        const nextParams = new URLSearchParams(location.search);
+        nextParams.set("theme", next);
+        location.search = nextParams.toString();
+      });
+    });
+  </script>
+</body>
+</html>
