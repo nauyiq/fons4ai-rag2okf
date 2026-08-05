@@ -1,0 +1,57 @@
+schema_version: "1.0"
+from:
+  skill: fons4ai-sdd-change
+  agent_thread_id: tier-0-current-thread
+  stage: change-planning
+  status: success
+to:
+  skill: fons4ai-sdd-implement
+  allowed: false
+artifacts:
+  - path: spec/features/20260731/changes/CR-006-前后端独立项目与打包边界调整.md
+    type: change-request
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/知识库文档生命周期-技术设计说明书.md
+    type: technical-design
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/知识库文档生命周期-任务规划.md
+    type: task-plan
+    validator: validate_sdd_artifacts.py
+evidence:
+  level: L3
+  items:
+    - type: user-confirmation
+      summary: "用户确认仓库根不是 POM 项目，后端和前端目录分别作为项目根"
+      source: dialog
+    - type: repository-fact
+      summary: "当前仓库只有设计资产，没有已验证的后端或前端项目骨架"
+      source: local-repository
+confirmed_facts:
+  - "fons4ai-rag2okf 仓库根不放 pom.xml 或 package.json"
+  - "fons4ai-rag2okf-service 是独立 Maven 项目根"
+  - "fons4ai-rag2okf-ui 是独立 Node/Vite 项目根"
+  - "后端产出 JAR/镜像，前端产出 dist/Nginx 镜像"
+  - "生产由 Nginx 同源托管前端并反向代理 API"
+pending_questions:
+  - "是否重新授权执行修正后的 T001、T002"
+risk_and_blockers:
+  - "实现仍需用户依据修正后的任务再次明确授权"
+  - "T002 UI Gate 仍需用户确认或明确跳过"
+validator_results:
+  - command: "validate_sdd_artifacts.py --change-file spec/features/20260731/changes/CR-006-前后端独立项目与打包边界调整.md"
+    result: pass
+    summary: "CR-006 结构、影响分析和增量任务校验通过"
+    failures: []
+    blocking: false
+  - command: "validate_sdd_artifacts.py --feature-dir spec/features/20260731 --strict"
+    result: pass
+    summary: "需求、技术设计、任务规划与全部 CR 严格校验通过"
+    failures: []
+    blocking: false
+stop_condition:
+  auto_proceed: false
+  requires_user_confirm: true
+  trigger_words:
+    - "执行 T001,T002"
+    - "执行 T001,T002,T030"
+    - "执行全部未完成任务"

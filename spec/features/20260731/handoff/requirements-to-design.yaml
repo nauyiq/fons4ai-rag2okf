@@ -1,0 +1,55 @@
+schema_version: "1.0"
+from:
+  skill: fons4ai-sdd-requirements
+  agent_thread_id: tier-0-current-thread
+  stage: requirements
+  status: success
+to:
+  skill: fons4ai-sdd-design
+  allowed: true
+artifacts:
+  - path: spec/features/20260731/知识库文档生命周期-需求说明书.md
+    type: requirements-spec
+    validator: requirements-self-check
+evidence:
+  level: L2
+  items:
+    - type: user-confirmation
+      summary: "用户确认 V4 作为视觉基线，首个 SDD 聚焦知识库与文档生命周期"
+      source: dialog
+    - type: user-confirmation
+      summary: "用户确认 P0 不设计撤回和回退"
+      source: dialog
+    - type: user-confirmation
+      summary: "用户确认重新分块删除解析侧原分块，但当前已发布内容保留到重新发布成功"
+      source: dialog
+    - type: user-confirmation
+      summary: "用户确认普通上传创建新文档，更新文件在后端保留不可变版本但前端隐藏版本概念"
+      source: dialog
+confirmed_facts:
+  - "外部环境连接验证不作为需求或技术设计前置门禁"
+  - "知识库创建时支持自动解析和自动发布配置，上传时允许决定是否解析"
+  - "普通上传不会按同名文件自动合并"
+  - "P0 前端提供更新文件，但不展示版本号、版本列表、历史版本或回退入口"
+  - "重新分块必须弹窗确认，取消不改变分块，确认后删除并重建解析侧分块"
+  - "已发布文档重新分块时继续使用旧发布内容，新分块重新发布成功后才替换"
+  - "P0 不包含撤回和历史回退"
+pending_questions:
+  - "单文件大小、页数、解析超时和并发容量阈值由设计提出候选并在实现阶段校准"
+  - "解析器、分块参数和检索投影参数由技术设计定义"
+risk_and_blockers: []
+validator_results:
+  - command: "requirements-self-check: required headings + REQ/AC traceability"
+    result: pass
+    summary: "14 个必需章节、13 个 REQ、25 个 AC；所有 REQ 均有 AC 关联"
+    failures: []
+    blocking: false
+  - command: "validate_sdd_artifacts.py --feature-dir spec/features/20260731"
+    result: deferred
+    summary: "完整 SDD 校验在技术设计和任务规划生成后执行"
+    failures: []
+    blocking: false
+stop_condition:
+  auto_proceed: true
+  requires_user_confirm: false
+  trigger_words: []

@@ -1,0 +1,57 @@
+schema_version: "1.0"
+from:
+  skill: fons4ai-sdd-change
+  agent_thread_id: tier-0-current-thread
+  stage: change-planning
+  status: success
+to:
+  skill: fons4ai-sdd-implement
+  allowed: false
+artifacts:
+  - path: spec/features/20260731/changes/CR-007-移除Flyway与手工初始化SQL调整.md
+    type: change-request
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/知识库文档生命周期-技术设计说明书.md
+    type: technical-design
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/知识库文档生命周期-任务规划.md
+    type: task-plan
+    validator: validate_sdd_artifacts.py
+evidence:
+  level: L3
+  items:
+    - type: user-confirmation
+      summary: "用户确认不采用数据结构版本管理工具，并选择单一手工初始化 SQL 方案"
+      source: dialog
+    - type: repository-fact
+      summary: "当前没有已部署数据库或 Flyway 历史，Flyway 只存在于未关闭的 T003 候选实现"
+      source: local-repository
+confirmed_facts:
+  - "完整初始化 SQL 位于 fons4ai-rag2okf-service/sql/init-schema.sql"
+  - "用户、DBA 或部署流程手工执行初始化 SQL"
+  - "应用启动不创建或修改数据库结构"
+  - "测试通过 JDBC 对隔离 MySQL 执行同一份 SQL"
+  - "不创建 flyway_schema_history"
+pending_questions:
+  - "是否授权执行 T031 以及继续验证 T003"
+risk_and_blockers:
+  - "实现仍需用户明确授权"
+  - "当前环境若无 Docker，隔离 MySQL 验证将保持待完成，T003 不得关闭"
+validator_results:
+  - command: "validate_sdd_artifacts.py --change-file spec/features/20260731/changes/CR-007-移除Flyway与手工初始化SQL调整.md"
+    result: pass
+    summary: "CR-007 结构、影响分析、数据边界和增量任务校验通过"
+    failures: []
+    blocking: false
+  - command: "validate_sdd_artifacts.py --feature-dir spec/features/20260731 --strict"
+    result: pass
+    summary: "需求、技术设计、任务规划与全部 CR 严格全量校验通过"
+    failures: []
+    blocking: false
+stop_condition:
+  auto_proceed: false
+  requires_user_confirm: true
+  trigger_words:
+    - "执行 T031"
+    - "执行 T031,T003"
+    - "执行全部未完成任务"

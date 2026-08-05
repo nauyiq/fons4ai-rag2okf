@@ -1,0 +1,93 @@
+{
+  "settings": {
+    "index": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0
+    }
+  },
+  "mappings": {
+    "_source": {
+      "enabled": true
+    },
+    "dynamic": "strict",
+    "properties": {
+      "chunkKey": {
+        "type": "keyword"
+      },
+      "workspaceKey": {
+        "type": "keyword"
+      },
+      "knowledgeBaseKey": {
+        "type": "keyword"
+      },
+      "documentKey": {
+        "type": "keyword"
+      },
+      "publicationRevisionKey": {
+        "type": "keyword"
+      },
+      "documentVersionKey": {
+        "type": "keyword"
+      },
+      "parseRevisionKey": {
+        "type": "keyword"
+      },
+      "chunkRevisionKey": {
+        "type": "keyword"
+      },
+      "parentChunkKey": {
+        "type": "keyword"
+      },
+      "chunkLevel": {
+        "type": "keyword"
+      },
+      "ordinal": {
+        "type": "integer"
+      },
+      "rawText": {
+        "type": "text",
+        "index": false
+      },
+      "displayText": {
+        "type": "text"
+      },
+      "embeddingText": {
+        "type": "text",
+        "index": false
+      },
+      "vector": {
+        "type": "dense_vector",
+        "dims": 1024,
+        "index": true,
+        "similarity": "cosine"
+      },
+      "titlePath": {
+        "type": "keyword"
+      },
+      "titlePathText": {
+        "type": "text"
+      },
+      "sourceLocatorType": {
+        "type": "keyword"
+      },
+      "pageNumber": {
+        "type": "integer",
+        "null_value": -1
+      },
+      "startOffset": {
+        "type": "integer",
+        "null_value": -1
+      },
+      "endOffset": {
+        "type": "integer",
+        "null_value": -1
+      },
+      "contentHash": {
+        "type": "keyword"
+      },
+      "schemaVersion": {
+        "type": "keyword"
+      }
+    }
+  }
+}

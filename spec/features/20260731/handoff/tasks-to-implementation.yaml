@@ -1,0 +1,54 @@
+schema_version: "1.0"
+from:
+  skill: fons4ai-sdd-tasks
+  agent_thread_id: tier-0-current-thread
+  stage: tasks
+  status: success
+to:
+  skill: fons4ai-sdd-implement
+  allowed: false
+artifacts:
+  - path: spec/features/20260731/知识库文档生命周期-需求说明书.md
+    type: requirements-spec
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/知识库文档生命周期-技术设计说明书.md
+    type: technical-design
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/知识库文档生命周期-任务规划.md
+    type: task-plan
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/changes/CR-001-项目技术命名调整.md
+    type: change-request
+    validator: validate_sdd_artifacts.py
+evidence:
+  level: L2
+  items:
+    - type: strict-validator
+      summary: "SDD 三件套通过 validate_sdd_artifacts.py --strict"
+      source: local-validation
+    - type: user-confirmation
+      summary: "用户要求业务方案和技术方案未确认时禁止编码"
+      source: dialog
+confirmed_facts:
+  - "任务规划包含 T001-T023，并覆盖 AC-001 到 AC-025"
+  - "CR-001 已将仓库、模块、服务和 Java 根包技术命名统一为 fons4ai-rag2okf"
+  - "实现默认顺序包含后端、UI Gate、前端、运行态和 S2 Evidence Matrix"
+  - "前端版本概念按方案 A 隐藏，后端保留不可变 DocumentVersion"
+  - "实现阶段的连接验证属于隔离集成/运行验证，不是 SDD 前置门禁"
+pending_questions:
+  - "等待用户明确授权执行全部任务或指定任务 ID"
+risk_and_blockers:
+  - "当前唯一阻塞是缺少实现授权；这不是技术阻塞"
+validator_results:
+  - command: "validate_sdd_artifacts.py --feature-dir spec/features/20260731 --strict"
+    result: pass
+    summary: "完整 SDD 三件套严格校验通过"
+    failures: []
+    blocking: false
+stop_condition:
+  auto_proceed: false
+  requires_user_confirm: true
+  trigger_words:
+    - "执行全部任务"
+    - "开始实现"
+    - "执行 T"

@@ -1,0 +1,69 @@
+schema_version: "1.0"
+from:
+  skill: fons4ai-sdd-change
+  agent_thread_id: tier-0-current-thread
+  stage: change-planning
+  status: success
+to:
+  skill: fons4ai-sdd-implement
+  allowed: false
+artifacts:
+  - path: spec/features/20260731/changes/CR-004-独立账号密码与SaToken认证调整.md
+    type: change-request
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/知识库文档生命周期-需求说明书.md
+    type: requirements
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/知识库文档生命周期-技术设计说明书.md
+    type: technical-design
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/知识库文档生命周期-任务规划.md
+    type: task-plan
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/design/知识库文档生命周期-UI设计.md
+    type: ui-design
+    validator: manual-review
+  - path: docs/product-design/prototypes/v4/rag2okf-v4-prototype.html
+    type: interactive-prototype
+    validator: playwright-render
+evidence:
+  level: L3
+  items:
+    - type: user-confirmation
+      summary: "用户确认不接入统一认证服务，采用自身账号密码和 Fons4Cloud 独立 Sa-Token 能力"
+      source: dialog
+    - type: user-confirmation
+      summary: "用户确认方案 A，保留账号密码自助注册"
+      source: dialog
+    - type: repository-fact
+      summary: "fons4cloud-auth-satoken 面向单点应用并提供 Redis 会话、Token 和权限扩展，不提供密码校验"
+      source: local-repository
+confirmed_facts:
+  - "Rag2OKF 自身维护 username、password_hash、账号状态、资料与工作空间权限"
+  - "fons4cloud-auth-satoken 负责会话、登录校验、Token 管理和踢下线"
+  - "注册使用账号、密码、确认密码和展示名称"
+  - "不再依赖 Auth Service API、Communication API 或认证 Dubbo"
+  - "当前只做设计，不生成业务代码或 DDL"
+pending_questions:
+  - "T002 UI 设计确认 Gate 是否通过"
+risk_and_blockers:
+  - "实现仍需用户明确授权"
+  - "密码安全、暴力尝试、Cookie CSRF、业务 StpInterface 和注册事务必须通过 S2 风险门禁"
+validator_results:
+  - command: "validate_sdd_artifacts.py --change-file spec/features/20260731/changes/CR-004-独立账号密码与SaToken认证调整.md"
+    result: pass
+    summary: "CR-004 结构、AC 映射、数据影响与增量任务校验通过"
+    failures: []
+    blocking: false
+  - command: "validate_sdd_artifacts.py --feature-dir spec/features/20260731 --strict"
+    result: pass
+    summary: "需求、技术设计、任务规划与 CR 严格全量校验通过"
+    failures: []
+    blocking: false
+stop_condition:
+  auto_proceed: false
+  requires_user_confirm: true
+  trigger_words:
+    - "执行全部未完成任务"
+    - "开始实现"
+    - "执行 T"

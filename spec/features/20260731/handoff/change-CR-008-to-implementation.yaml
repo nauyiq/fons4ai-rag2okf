@@ -1,0 +1,73 @@
+schema_version: "1.0"
+from:
+  skill: fons4ai-sdd-change
+  agent_thread_id: tier-0-current-thread
+  stage: change-planning
+  status: success
+to:
+  skill: fons4ai-sdd-implement
+  allowed: false
+artifacts:
+  - path: spec/features/20260731/changes/CR-008-用户模型配置与凭证安全调整.md
+    type: change-request
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/知识库文档生命周期-需求说明书.md
+    type: requirements
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/知识库文档生命周期-技术设计说明书.md
+    type: technical-design
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/design/知识库文档生命周期-UI设计.md
+    type: ui-design
+    validator: manual-ui-gate
+  - path: spec/features/20260731/知识库文档生命周期-任务规划.md
+    type: task-plan
+    validator: validate_sdd_artifacts.py
+evidence:
+  level: L3
+  items:
+    - type: user-confirmation
+      summary: "用户要求所有模型使用用户提供的厂商、Base URL、API Key 和模型名称，并提供常见厂商模板"
+      source: dialog
+    - type: official-documentation
+      summary: "阿里云百炼、火山方舟、腾讯混元和智谱提供 OpenAI-compatible 接口与官方 Base URL"
+      source: official-provider-docs
+    - type: framework-documentation
+      summary: "LangChain4j OpenAI-compatible Chat 与 Embedding Builder 支持动态 baseUrl、apiKey 和 modelName"
+      source: langchain4j-official-docs
+    - type: repository-fact
+      summary: "当前模型设置仍为 V4 占位，后端没有用户级模型配置；现有 T003 候选结构尚未完成 MySQL 验证"
+      source: local-repository
+confirmed_facts:
+  - "Provider 连接与模型档案归属当前用户"
+  - "知识库分别引用 CHAT 和 EMBEDDING 模型档案"
+  - "模板不包含 API Key，不自动选择模型名称"
+  - "API Key 加密保存、只允许替换、API 与页面不回显"
+  - "模型调用缺少有效用户配置时明确失败，不使用应用全局 fallback"
+  - "当前 BM25 发布不调用模型，文档向量化与 RAG/OKF 仍属于后续 SDD"
+pending_questions:
+  - "是否先授权执行 T032，完成模型设置增量原型并进行 UI Gate"
+  - "是否授权后续 T033 至 T036 及其必要依赖进入实现"
+risk_and_blockers:
+  - "实现仍需用户明确授权"
+  - "用户可控 Base URL 需要 SSRF、DNS 重绑定和 redirect 安全门禁"
+  - "模型 API Key 需要部署主密钥或 KMS 引用，真实凭证不得进入仓库和自动化测试"
+  - "当前环境若无 Docker，13 表隔离 MySQL 验证将保持待完成"
+validator_results:
+  - command: "validate_sdd_artifacts.py --change-file spec/features/20260731/changes/CR-008-用户模型配置与凭证安全调整.md"
+    result: pass
+    summary: "CR-008 结构、影响、数据安全、UI Gate 和增量任务校验通过"
+    failures: []
+    blocking: false
+  - command: "validate_sdd_artifacts.py --feature-dir spec/features/20260731 --strict"
+    result: pass
+    summary: "需求、技术设计、任务规划与全部 CR 严格全量校验通过"
+    failures: []
+    blocking: false
+stop_condition:
+  auto_proceed: false
+  requires_user_confirm: true
+  trigger_words:
+    - "执行 T032"
+    - "执行 T033,T034"
+    - "执行全部未完成任务"

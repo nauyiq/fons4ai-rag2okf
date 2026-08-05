@@ -1,0 +1,63 @@
+schema_version: "1.0"
+from:
+  skill: fons4ai-sdd-design
+  agent_thread_id: tier-0-current-thread
+  stage: design
+  status: success
+to:
+  skill: fons4ai-sdd-tasks
+  allowed: true
+artifacts:
+  - path: spec/features/20260731/知识库文档生命周期-需求说明书.md
+    type: requirements-spec
+    validator: requirements-self-check
+  - path: spec/features/20260731/知识库文档生命周期-技术设计说明书.md
+    type: technical-design
+    validator: design-self-check
+evidence:
+  level: L2
+  items:
+    - type: repository-code
+      summary: "Fons4Cloud 提供 AuthenticationResource/AuthUtils、CommonEntity、OssStoreService/MinIO 和官方 Elasticsearch 客户端基线"
+      source: ../fons4cloud
+    - type: repository-code
+      summary: "Fons4AI 提供 Document Parser SPI、ParseTrace、LangChain4j Parser Facade 与 Splitter"
+      source: ../fons4ai
+    - type: user-confirmation
+      summary: "用户确认方案 A：普通上传新建文档，更新文件只显示当前文件，后端保留不可变版本"
+      source: dialog
+    - type: user-confirmation
+      summary: "用户确认 P0 不做撤回和回退，重新分块期间保留当前发布内容"
+      source: dialog
+confirmed_facts:
+  - "采用 Java 21 + Spring Boot 3.5.8 的独立后端服务和 Vue 3 + TypeScript 管理端"
+  - "后端使用 DDD-lite 模块化单体，API 与数据库任务 worker 首期同服务部署"
+  - "MySQL 是业务事实来源，MinIO 保存原文件与 manifest，Elasticsearch 保存可重建发布投影"
+  - "异步处理首期使用 MySQL ProcessingTask + Outbox，不强制 Kafka"
+  - "DocumentVersion、ParseRevision、ChunkRevision、PublicationRevision 相互分离"
+  - "重新分块成功后删除旧解析侧 chunk manifest，但 active publication 指针只在重新发布成功后切换"
+  - "普通上传始终创建新 SourceDocument；更新文件为同一 SourceDocument 创建不可变 DocumentVersion"
+  - "P0 前端隐藏版本号、版本列表、历史与回退"
+  - "使用 fons4ai-rag-common 与 fons4ai-rag-langchain，不同时维护 Spring AI RAG 路径"
+  - "首次发布投影为 BM25 文本投影，Embedding 模型确认后通过 v2 索引扩展"
+  - "V4 是视觉基线；知识库生命周期新增页面在前端实现前需通过 UI 结构确认 Gate"
+pending_questions:
+  - "50 MiB、500 页、10 分钟和各类并发值是实现阶段待校准的配置候选"
+  - "Embedding 模型、维度、中文 analyzer 与混合检索不属于本 SDD，在后续 RAG SDD 决定"
+  - "实际环境地址、端口、凭证和连接验证在实现集成阶段处理"
+risk_and_blockers: []
+validator_results:
+  - command: "design-self-check: required headings + AC mapping + placeholder scan"
+    result: pass
+    summary: "12 个主章节、25 条 AC 映射、0 个模板占位符"
+    failures: []
+    blocking: false
+  - command: "validate_sdd_artifacts.py --feature-dir spec/features/20260731"
+    result: pass
+    summary: "需求、技术设计和任务规划已通过 strict 完整校验"
+    failures: []
+    blocking: false
+stop_condition:
+  auto_proceed: true
+  requires_user_confirm: false
+  trigger_words: []

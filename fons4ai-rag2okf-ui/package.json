@@ -1,0 +1,33 @@
+{
+  "name": "@fons4ai/rag2okf-ui",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.19.0 <25",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json",
+    "test:unit": "vitest run --passWithNoTests",
+    "test:e2e": "playwright test",
+    "build": "npm run typecheck && vite build"
+  },
+  "dependencies": {
+    "ant-design-vue": "4.2.6",
+    "pinia": "3.0.3",
+    "vue": "3.5.18",
+    "vue-router": "4.5.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "6.0.0",
+    "@vue/test-utils": "2.4.6",
+    "@playwright/test": "1.55.0",
+    "happy-dom": "18.0.1",
+    "typescript": "5.8.3",
+    "vite": "7.0.4",
+    "vitest": "3.2.4",
+    "vue-tsc": "3.0.1"
+  }
+}

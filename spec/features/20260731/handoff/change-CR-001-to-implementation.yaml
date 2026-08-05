@@ -1,0 +1,51 @@
+schema_version: "1.0"
+from:
+  skill: fons4ai-sdd-change
+  agent_thread_id: tier-0-current-thread
+  stage: change-planning
+  status: success
+to:
+  skill: fons4ai-sdd-implement
+  allowed: false
+artifacts:
+  - path: spec/features/20260731/changes/CR-001-项目技术命名调整.md
+    type: change-request
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/知识库文档生命周期-技术设计说明书.md
+    type: technical-design
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/知识库文档生命周期-任务规划.md
+    type: task-plan
+    validator: validate_sdd_artifacts.py
+evidence:
+  level: L2
+  items:
+    - type: user-confirmation
+      summary: "用户确认按推荐采用 fons4ai-rag2okf 项目技术名"
+      source: dialog
+    - type: repository-fact
+      summary: "目标目录不存在，当前项目尚无业务代码，命名调整只影响设计资产和未来实现路径"
+      source: local-repository
+confirmed_facts:
+  - "仓库技术名为 fons4ai-rag2okf"
+  - "后端模块和 Spring 服务名为 fons4ai-rag2okf-service"
+  - "前端模块为 fons4ai-rag2okf-ui"
+  - "Java 根包为 com.fons.cloud.ai.rag2okf"
+  - "功能标识、API、领域对象、数据结构、状态与 AC 不变"
+pending_questions:
+  - "独立产品展示名后续设计"
+risk_and_blockers:
+  - "业务实现仍需用户明确授权"
+validator_results:
+  - command: "validate_sdd_artifacts.py --change-file spec/features/20260731/changes/CR-001-项目技术命名调整.md"
+    result: pass
+    summary: "目录重命名和 SDD 命名更新完成，CR 校验通过"
+    failures: []
+    blocking: false
+stop_condition:
+  auto_proceed: false
+  requires_user_confirm: true
+  trigger_words:
+    - "执行全部任务"
+    - "开始实现"
+    - "执行 T"

@@ -1,0 +1,92 @@
+logging:
+  config: classpath:logback.xml
+
+server:
+  port: ${RAG2OKF_SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+spring:
+  application:
+    name: fons4ai-rag2okf-service
+  main:
+    allow-bean-definition-overriding: true
+  autoconfigure:
+    exclude:
+      # rag2okf  不注册全局模型 Bean；
+      # 排除依赖 StreamingChatModel 的自动配置，避免启动失败
+      - com.fons.cloud.ai.agent.langchain.config.LangChain4jAgentAutoConfiguration
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    url: jdbc:mysql://${DB_HOST}:${DB_PORT:3306}/rag2okf?useUnicode=true&autoReconnect=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull&allowMultiQueries=true&verifyServerCertificate=false&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    druid:
+      initial-size: 5 # 连接池初始化时创建的连接数。
+      min-idle: 5 # 连接池中保持的最小空闲连接数量。当连接池中的连接数量小于这个值时，连接池会尝试创建新的连接
+      max-active: 50 # 连接池中允许的最大连接数。如果所有连接都被使用并且没有空闲连接，新的连接请求将被阻塞，直到有连接可用。
+      max-wait: 60000
+      test-while-idle: true
+      validation-query: SELECT 1
+
+sa-token:
+  token-name: Authentication
+  token-prefix: Bearer
+  timeout: ${RAG2OKF_SESSION_TIMEOUT_SECONDS:28800}
+  active-timeout: -1
+  is-concurrent: true
+  is-share: false
+  is-read-cookie: false
+  is-read-header: true
+  is-write-header: false
+  is-log: false
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+    default-enum-type-handler: com.baomidou.mybatisplus.core.handlers.MybatisEnumTypeHandler
+  global-config:
+    db-config:
+      id-type: input
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+sys:
+  sa-token:
+    global-login-check: true
+    exclude-paths:
+      - /auth/login
+      - /auth/registration
+      - /error
+  upload:
+    oss:
+      enabled: true
+      provider: ${OSS_PROVIDER:minio}
+      secret-id: ${OSS_SECRET_ID}
+      secret-key: ${OSS_SECRET_KEY}
+      bucket: ${OSS_BUCKET:rag2okf}
+      endpoint: ${OSS_ENDPOINT}
+  security:
+    auth-rate-limit-salt: ${SYS_AUTH_RATE_LIMIT_SALT:rag2okf}
+    remember-me-timeout-seconds: ${SYS_REMEMBER_ME_TIMEOUT_SECONDS:1209600}
+    model-credential-key: ${SYS_MODEL_CREDENTIAL_KEY:}
+    model-credential-key-version: ${SYS_MODEL_CREDENTIAL_KEY_VERSION:}
+  embedding:
+    dims: ${SYS_EMBEDDING_DIMS:1024}

@@ -1,0 +1,66 @@
+schema_version: "1.0"
+from:
+  skill: fons4ai-sdd-change
+  agent_thread_id: tier-0-current-thread
+  stage: change-planning
+  status: success
+to:
+  skill: fons4ai-sdd-implement
+  allowed: false
+artifacts:
+  - path: spec/features/20260731/changes/CR-005-邮箱密码登录注册调整.md
+    type: change-request
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/知识库文档生命周期-需求说明书.md
+    type: requirements
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/知识库文档生命周期-技术设计说明书.md
+    type: technical-design
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/知识库文档生命周期-任务规划.md
+    type: task-plan
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/design/知识库文档生命周期-UI设计.md
+    type: ui-design
+    validator: manual-review
+  - path: docs/product-design/prototypes/v4/rag2okf-v4-prototype.html
+    type: interactive-prototype
+    validator: playwright-render
+evidence:
+  level: L3
+  items:
+    - type: user-confirmation
+      summary: "用户确认使用邮箱和密码登录注册，不发送验证邮件"
+      source: dialog
+    - type: prior-decision
+      summary: "CR-004 已确认 Rag2OKF 自身维护密码凭证并复用 Fons4Cloud 独立 Sa-Token 会话"
+      source: local-sdd
+confirmed_facts:
+  - "Rag2OKf 使用规范化邮箱作为全局唯一登录标识"
+  - "登录和注册均使用邮箱与密码"
+  - "P0 不发送验证邮件，不建立邮箱验证状态"
+  - "邮箱不能用于密码找回、安全通知、实名判断或所有权证明"
+  - "当前只做设计，不生成业务代码或 DDL"
+pending_questions:
+  - "T002 UI 设计确认 Gate 是否通过"
+risk_and_blockers:
+  - "实现仍需用户明确授权"
+  - "邮箱规范化、唯一性、枚举防护、脱敏和未验证边界必须通过 S2 风险门禁"
+validator_results:
+  - command: "validate_sdd_artifacts.py --change-file spec/features/20260731/changes/CR-005-邮箱密码登录注册调整.md"
+    result: pass
+    summary: "CR-005 结构、AC 映射、数据影响与增量任务校验通过"
+    failures: []
+    blocking: false
+  - command: "validate_sdd_artifacts.py --feature-dir spec/features/20260731 --strict"
+    result: pass
+    summary: "需求、技术设计、任务规划与 CR 严格全量校验通过"
+    failures: []
+    blocking: false
+stop_condition:
+  auto_proceed: false
+  requires_user_confirm: true
+  trigger_words:
+    - "执行全部未完成任务"
+    - "开始实现"
+    - "执行 T"
