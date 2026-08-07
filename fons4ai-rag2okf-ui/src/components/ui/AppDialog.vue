@@ -84,6 +84,8 @@ watch(
   async (visible) => {
     if (visible) {
       previouslyFocused = document.activeElement as HTMLElement
+      // 先绑定键盘监听，确保弹窗打开后立即可响应 Esc/Tab
+      document.addEventListener('keydown', onKeydown, true)
       await nextTick()
       if (dialogRef.value) {
         const first = dialogRef.value.querySelector<HTMLElement>(
@@ -91,13 +93,13 @@ watch(
         )
         first?.focus()
       }
-      document.addEventListener('keydown', onKeydown, true)
     } else {
       document.removeEventListener('keydown', onKeydown, true)
       previouslyFocused?.focus()
       previouslyFocused = null
     }
-  }
+  },
+  { immediate: true }
 )
 
 onBeforeUnmount(() => {
@@ -123,3 +125,46 @@ onBeforeUnmount(() => {
     </section>
   </div>
 </template>
+
+<style scoped>
+/* 覆盖全局 .drawer-backdrop 的右侧抽屉对齐，改为居中弹窗 */
+.drawer-backdrop {
+  justify-content: center;
+  align-items: center;
+}
+
+/* 中央弹窗面板基础样式 */
+.modal-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  width: min(560px, 92vw);
+  max-height: 88vh;
+  padding: 28px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+
+/* 尺寸控制 */
+.size-sm {
+  width: min(420px, 92vw);
+}
+
+.size-md {
+  width: min(560px, 92vw);
+}
+
+.size-lg {
+  width: min(820px, 92vw);
+}
+
+/* 危险操作样式：左侧红色强调边 */
+.danger-modal {
+  border-color: var(--danger);
+  border-left: 4px solid var(--danger);
+}
+</style>

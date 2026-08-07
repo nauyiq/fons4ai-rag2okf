@@ -1,12 +1,30 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+/**
+ * 文档工作台视图。
+ *
+ * <p>左侧目录树（buildFolderTree 从文档 folderPath 聚合 ∪ localStorage 暂存），
+ * 支持右键创建目录、展开收起、按目录过滤文档列表。
+ *
+ * <p>遵循 AC-010/011/014 与技术设计 §5.6。
+ */
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { ApiRequestError } from '../../api/http'
-import { batchUploadDocuments, listDocuments, uploadDocument, type DocumentSummary } from '../../api/documents'
+import {
+  batchDeleteDocuments,
+  batchUploadDocuments,
+  deleteDocument,
+  listDocuments,
+  uploadDocument,
+  type DocumentSummary,
+} from '../../api/documents'
+import AppDialog from '../../components/ui/AppDialog.vue'
+import ConfirmDialog from '../../components/ui/ConfirmDialog.vue'
 import DocumentStatusRail from '../../components/document/DocumentStatusRail.vue'
 import { useWorkspaceStore } from '../../stores/workspace'
 import { formatBytes, formatTime } from '../../utils/formatters'
+import { annotateDocumentCounts, buildFolderTree, type FolderNode } from '../../utils/folderTree'
 
 const route = useRoute()
 const router = useRouter()
@@ -26,6 +44,14 @@ const storedFolders = ref<string[]>([])
 const showNewFolderInput = ref(false)
 const newFolderName = ref('')
 
+// 树状目录展开状态：记录已展开的目录路径
+const expandedPaths = ref<Set<string>>(new Set())
+
+// 右键上下文菜单状态
+const showContextMenu = ref(false)
+const contextMenuX = ref(0)
+const contextMenuY = ref(0)
+
 // 上传状态
 const selectedFiles = ref<File[]>([])
 const targetFolderPath = ref<string>('/')
@@ -35,10 +61,24 @@ const uploadResults = ref<{ name: string; success: boolean; error?: string }[]>(
 const fileInput = ref<HTMLInputElement>()
 const folderInput = ref<HTMLInputElement>()
 
+// === 文档勾选与删除（T024） ===
+// 勾选状态为纯视图状态，删除的业务语义（软删除+ES 清理）在后端
+const selectedKeys = ref<Set<string>>(new Set())
+/** 单行操作菜单：当前打开的 documentKey，空字符串表示无 */
+const openMenuKey = ref('')
+/** 删除确认弹窗状态：single 单个 / batch 批量 / null 关闭 */
+const deleteConfirm = ref<null | { mode: 'single' | 'batch'; key?: string }>(null)
+/** 删除操作独立 ActionState（不使用全局锁），归属到触发位置 */
+const deleteState = ref<{ loading: boolean; error: string; success: string }>({
+  loading: false,
+  error: '',
+  success: '',
+})
+
 const STORAGE_KEY_PREFIX = 'rag2okf_folders_'
 
-/** 文件夹树：从文档 folderPath 去重聚合 ∪ localStorage 暂存。 */
-const folderTree = computed(() => {
+/** 从文档 folderPath 去重聚合 ∪ localStorage 暂存，构建嵌套目录树。 */
+const folderTreeData = computed(() => {
   const folders = new Set<string>()
   for (const doc of documents.value) {
     if (doc.folderPath && doc.folderPath !== '/') {
@@ -48,7 +88,58 @@ const folderTree = computed(() => {
   for (const f of storedFolders.value) {
     folders.add(f)
   }
-  return Array.from(folders).sort()
+  const tree = buildFolderTree(Array.from(folders))
+  // 标注各目录直接子文档数
+  const counts = new Map<string, number>()
+  for (const doc of documents.value) {
+    counts.set(doc.folderPath, (counts.get(doc.folderPath) ?? 0) + 1)
+  }
+  annotateDocumentCounts(tree, counts)
+  return tree
+})
+
+/** 展平目录树为带缩进层级的列表，便于 v-for 渲染。 */
+interface FlatFolderItem {
+  name: string
+  path: string
+  depth: number
+  hasChildren: boolean
+  expanded: boolean
+  documentCount: number
+}
+
+const flatFolderList = computed<FlatFolderItem[]>(() => {
+  const result: FlatFolderItem[] = []
+  function walk(nodes: FolderNode[], depth: number): void {
+    for (const node of nodes) {
+      result.push({
+        name: node.name,
+        path: node.path,
+        depth,
+        hasChildren: node.children.length > 0,
+        expanded: expandedPaths.value.has(node.path),
+        documentCount: node.documentCount,
+      })
+      if (node.children.length > 0 && expandedPaths.value.has(node.path)) {
+        walk(node.children, depth + 1)
+      }
+    }
+  }
+  walk(folderTreeData.value, 0)
+  return result
+})
+
+/** 上传抽屉中可选的目标文件夹列表（展平路径）。 */
+const folderOptions = computed(() => {
+  const paths: string[] = []
+  function collect(nodes: FolderNode[]): void {
+    for (const node of nodes) {
+      paths.push(node.path)
+      collect(node.children)
+    }
+  }
+  collect(folderTreeData.value)
+  return paths
 })
 
 /** 面包屑路径段。 */
@@ -72,6 +163,40 @@ const filteredDocuments = computed(() =>
   )
 )
 
+/** 当前页全选状态（基于 filteredDocuments）。 */
+const allSelected = computed({
+  get: () =>
+    filteredDocuments.value.length > 0 &&
+    filteredDocuments.value.every((d) => selectedKeys.value.has(d.documentKey)),
+  set: (value: boolean) => {
+    if (value) {
+      for (const d of filteredDocuments.value) selectedKeys.value.add(d.documentKey)
+    } else {
+      for (const d of filteredDocuments.value) selectedKeys.value.delete(d.documentKey)
+    }
+    selectedKeys.value = new Set(selectedKeys.value)
+  },
+})
+
+/** 是否半选（部分选中）。 */
+const someSelected = computed(
+  () =>
+    selectedKeys.value.size > 0 &&
+    filteredDocuments.value.some((d) => !selectedKeys.value.has(d.documentKey))
+)
+
+const selectedCount = computed(() => selectedKeys.value.size)
+
+/** 删除确认弹窗的描述文案。 */
+const deleteConfirmDescription = computed(() => {
+  if (!deleteConfirm.value) return ''
+  if (deleteConfirm.value.mode === 'single') {
+    const doc = documents.value.find((d) => d.documentKey === deleteConfirm.value?.key)
+    return `确定要删除文档「${doc?.displayName ?? ''}」吗？此操作不可撤销，相关解析与发布内容将一并清理。`
+  }
+  return `确定要删除选中的 ${selectedCount.value} 个文档吗？此操作不可撤销，相关解析与发布内容将一并清理。`
+})
+
 const totalSelectedSize = computed(() =>
   selectedFiles.value.reduce((sum, f) => sum + f.size, 0)
 )
@@ -80,10 +205,19 @@ const exceedsLimit = computed(() =>
   selectedFiles.value.length > 50 || totalSelectedSize.value > 200 * 1024 * 1024
 )
 
-// 文件夹计数
-function folderCount(folderPath: string): number {
-  if (folderPath === '/') return documents.value.length
-  return documents.value.filter((d) => d.folderPath === folderPath).length
+// 根目录文档计数
+const rootDocumentCount = computed(() => documents.value.filter((d) => d.folderPath === '/' || !d.folderPath).length)
+
+/** 切换目录展开/收起。 */
+function toggleFolder(path: string, event: Event): void {
+  event.stopPropagation()
+  if (expandedPaths.value.has(path)) {
+    expandedPaths.value.delete(path)
+  } else {
+    expandedPaths.value.add(path)
+  }
+  // 触发响应式更新（Set 的 add/delete 不触发 ref 更新）
+  expandedPaths.value = new Set(expandedPaths.value)
 }
 
 // localStorage 暂存文件夹
@@ -111,8 +245,14 @@ function addFolder(): void {
   if (!name) return
   const path = name.startsWith('/') ? name : '/' + name
   saveStoredFolder(path)
+  // 展开父目录以便用户看到新建的子目录
+  if (path.includes('/')) {
+    const parentPath = path.substring(0, path.lastIndexOf('/'))
+    if (parentPath) expandedPaths.value.add(parentPath)
+  }
   newFolderName.value = ''
   showNewFolderInput.value = false
+  closeContextMenu()
 }
 
 async function loadDocuments(): Promise<void> {
@@ -130,6 +270,36 @@ async function loadDocuments(): Promise<void> {
 
 function selectFolder(folderPath: string): void {
   currentFolderPath.value = folderPath
+  closeContextMenu()
+}
+
+// 右键上下文菜单
+function onContextMenu(event: MouseEvent): void {
+  event.preventDefault()
+  showContextMenu.value = true
+  contextMenuX.value = event.clientX
+  contextMenuY.value = event.clientY
+}
+
+function closeContextMenu(): void {
+  showContextMenu.value = false
+}
+
+function contextNewFolder(): void {
+  showNewFolderInput.value = true
+  newFolderName.value = ''
+  closeContextMenu()
+}
+
+/** 点击页面其他位置关闭上下文菜单和单行操作菜单。 */
+function handleDocumentClick(event: MouseEvent): void {
+  const target = event.target as HTMLElement
+  if (showContextMenu.value && !target.closest('.context-menu')) {
+    closeContextMenu()
+  }
+  if (openMenuKey.value && !target.closest('.row-menu') && !target.closest('.row-menu-trigger')) {
+    closeRowMenu()
+  }
 }
 
 // 上传相关
@@ -194,11 +364,99 @@ function openDocument(documentKey: string): void {
   router.push({ name: 'document-detail', params: { knowledgeBaseKey: knowledgeBaseKey.value, documentKey } })
 }
 
+// === 勾选与删除操作（T024） ===
+/** 切换单个文档勾选状态，阻止冒泡以免触发 openDocument。 */
+function toggleSelect(documentKey: string, event: Event): void {
+  event.stopPropagation()
+  if (selectedKeys.value.has(documentKey)) {
+    selectedKeys.value.delete(documentKey)
+  } else {
+    selectedKeys.value.add(documentKey)
+  }
+  selectedKeys.value = new Set(selectedKeys.value)
+}
+
+/** 切换单行操作菜单显隐。 */
+function toggleRowMenu(documentKey: string, event: Event): void {
+  event.stopPropagation()
+  openMenuKey.value = openMenuKey.value === documentKey ? '' : documentKey
+}
+
+/** 关闭单行操作菜单。 */
+function closeRowMenu(): void {
+  openMenuKey.value = ''
+}
+
+/** 打开单个删除确认弹窗。 */
+function confirmDeleteSingle(documentKey: string, event: Event): void {
+  event.stopPropagation()
+  closeRowMenu()
+  deleteState.value.error = ''
+  deleteState.value.success = ''
+  deleteConfirm.value = { mode: 'single', key: documentKey }
+}
+
+/** 打开批量删除确认弹窗。 */
+function confirmDeleteBatch(): void {
+  if (selectedCount.value === 0) return
+  deleteState.value.error = ''
+  deleteState.value.success = ''
+  deleteConfirm.value = { mode: 'batch' }
+}
+
+/** 取消删除确认。 */
+function cancelDelete(): void {
+  deleteConfirm.value = null
+}
+
+/**
+ * 执行删除操作（单个或批量）。
+ * 独立 ActionState，不冻结整页；批量删除部分成功时保留失败项可重试。
+ */
+async function executeDelete(): Promise<void> {
+  if (!deleteConfirm.value) return
+  deleteState.value.loading = true
+  deleteState.value.error = ''
+  deleteState.value.success = ''
+
+  try {
+    if (deleteConfirm.value.mode === 'single') {
+      const key = deleteConfirm.value.key!
+      await deleteDocument(key)
+      selectedKeys.value.delete(key)
+      selectedKeys.value = new Set(selectedKeys.value)
+      deleteState.value.success = '文档已删除'
+    } else {
+      const keys = Array.from(selectedKeys.value)
+      const result = await batchDeleteDocuments(keys)
+      // 从列表移除成功删除的文档，保留失败项可重试
+      for (const key of result.deleted) selectedKeys.value.delete(key)
+      selectedKeys.value = new Set(selectedKeys.value)
+      if (result.failed.length > 0) {
+        deleteState.value.error = `${result.deleted.length} 个文档已删除，${result.failed.length} 个失败：${result.failed.map((f) => f.error).join('；')}`
+      } else {
+        deleteState.value.success = `已删除 ${result.deleted.length} 个文档`
+      }
+    }
+    deleteConfirm.value = null
+    await loadDocuments()
+  } catch (error) {
+    deleteState.value.error = error instanceof ApiRequestError ? error.message : '删除未能完成，请稍后重试。'
+  } finally {
+    deleteState.value.loading = false
+  }
+}
+
 watch(currentFolderPath, loadDocuments)
 
 onMounted(() => {
   loadStoredFolders()
   loadDocuments()
+  document.addEventListener('click', handleDocumentClick)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleDocumentClick)
 })
 </script>
 
@@ -215,30 +473,40 @@ onMounted(() => {
     </header>
 
     <div class="document-layout">
-      <!-- 文件夹侧栏 -->
-      <aside class="folder-sidebar" aria-label="文件夹导航">
+      <!-- 文件夹侧栏（树状目录） -->
+      <aside class="folder-sidebar" aria-label="文件夹导航" data-test="folder-sidebar" @contextmenu="onContextMenu">
         <p class="sidebar-heading">文件夹</p>
         <button
           class="folder-item"
           :class="{ active: currentFolderPath === '/' }"
           type="button"
+          data-test="folder-item"
           @click="selectFolder('/')"
         >
           <span aria-hidden="true">▣</span>
           <span class="folder-name">全部文件</span>
-          <span class="folder-count">{{ folderCount('/') }}</span>
+          <span class="folder-count">{{ rootDocumentCount }}</span>
         </button>
         <button
-          v-for="folder in folderTree"
-          :key="folder"
+          v-for="folder in flatFolderList"
+          :key="folder.path"
           class="folder-item"
-          :class="{ active: currentFolderPath === folder }"
+          :class="{ active: currentFolderPath === folder.path }"
+          :style="{ paddingLeft: `${10 + folder.depth * 16}px` }"
           type="button"
-          @click="selectFolder(folder)"
+          data-test="folder-item"
+          @click="selectFolder(folder.path)"
         >
-          <span aria-hidden="true">▢</span>
-          <span class="folder-name">{{ folder }}</span>
-          <span class="folder-count">{{ folderCount(folder) }}</span>
+          <span
+            v-if="folder.hasChildren"
+            class="folder-toggle"
+            :data-test="`folder-toggle-${folder.path}`"
+            aria-hidden="true"
+            @click="toggleFolder(folder.path, $event)"
+          >{{ folder.expanded ? '▼' : '▶' }}</span>
+          <span v-else class="folder-toggle-placeholder" aria-hidden="true" />
+          <span class="folder-name">{{ folder.name }}</span>
+          <span class="folder-count">{{ folder.documentCount }}</span>
         </button>
         <template v-if="workspaceStore.canManage">
           <button v-if="!showNewFolderInput" class="folder-add" type="button" @click="showNewFolderInput = true">
@@ -250,14 +518,24 @@ onMounted(() => {
               type="text"
               placeholder="如：合规材料/2024年报"
               maxlength="512"
+              data-test="new-folder-input"
               @keyup.enter="addFolder"
               @keyup.esc="showNewFolderInput = false"
             />
-            <button class="secondary-action" type="button" @click="addFolder">确定</button>
+            <button class="secondary-action" type="button" data-test="new-folder-confirm" @click="addFolder">确定</button>
             <button class="text-button" type="button" @click="showNewFolderInput = false">取消</button>
           </div>
         </template>
       </aside>
+
+      <!-- 右键上下文菜单 -->
+      <div
+        v-if="showContextMenu"
+        class="context-menu"
+        :style="{ left: `${contextMenuX}px`, top: `${contextMenuY}px` }"
+      >
+        <button type="button" data-test="context-new-folder" @click="contextNewFolder">新建目录</button>
+      </div>
 
       <!-- 文档列表区 -->
       <div class="document-main">
@@ -276,13 +554,36 @@ onMounted(() => {
         </nav>
 
         <section class="document-toolbar">
+          <label v-if="workspaceStore.canManage && filteredDocuments.length > 0" class="select-all-label">
+            <input
+              type="checkbox"
+              :checked="allSelected"
+              :indeterminate.prop="someSelected"
+              data-test="select-all"
+              @change="allSelected = !allSelected"
+            />
+            <span>全选</span>
+          </label>
           <label class="list-search">
             <span>⌕</span>
             <input v-model="query" placeholder="按文件名筛选" />
           </label>
           <span>{{ filteredDocuments.length }} 个文档</span>
+          <template v-if="workspaceStore.canManage && selectedCount > 0">
+            <span class="selected-count">已选 {{ selectedCount }} 个</span>
+            <button
+              class="danger-action"
+              type="button"
+              data-test="batch-delete-btn"
+              @click="confirmDeleteBatch"
+            >批量删除</button>
+          </template>
           <button class="text-button" :disabled="loading" type="button" @click="loadDocuments">↻ 刷新</button>
         </section>
+
+        <!-- 删除操作反馈（归属到操作区，不冻结整页） -->
+        <p v-if="deleteState.success" class="inline-success" role="status">{{ deleteState.success }}</p>
+        <p v-if="deleteState.error" class="inline-error" role="alert">{{ deleteState.error }}</p>
 
         <p v-if="errorMessage" class="inline-error" role="alert">
           {{ errorMessage }}
@@ -296,13 +597,28 @@ onMounted(() => {
           <button v-if="workspaceStore.canManage" class="primary-action" type="button" @click="openUpload">上传文件</button>
         </div>
         <div v-else class="document-list">
-          <button
+          <div
             v-for="item in filteredDocuments"
             :key="item.documentKey"
             class="document-row"
-            type="button"
+            :class="{ selected: selectedKeys.has(item.documentKey) }"
+            tabindex="0"
+            role="button"
             @click="openDocument(item.documentKey)"
+            @keyup.enter="openDocument(item.documentKey)"
           >
+            <label
+              v-if="workspaceStore.canManage"
+              class="row-checkbox"
+              @click.stop
+            >
+              <input
+                type="checkbox"
+                :checked="selectedKeys.has(item.documentKey)"
+                :data-test="`select-${item.documentKey}`"
+                @change="toggleSelect(item.documentKey, $event)"
+              />
+            </label>
             <span class="file-glyph">⌑</span>
             <span class="document-primary">
               <strong>{{ item.displayName }}</strong>
@@ -310,22 +626,39 @@ onMounted(() => {
             </span>
             <DocumentStatusRail :document="item" />
             <span class="row-arrow">→</span>
-          </button>
+            <button
+              v-if="workspaceStore.canManage"
+              class="row-menu-trigger"
+              type="button"
+              aria-label="文档操作"
+              data-test="row-menu-trigger"
+              @click="toggleRowMenu(item.documentKey, $event)"
+            >⋯</button>
+            <div
+              v-if="workspaceStore.canManage && openMenuKey === item.documentKey"
+              class="row-menu"
+              :data-test="`row-menu-${item.documentKey}`"
+              @click.stop
+            >
+              <button type="button" data-test="row-delete" @click="confirmDeleteSingle(item.documentKey, $event)">删除</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- 合并上传抽屉 -->
-    <div v-if="showUpload" class="drawer-backdrop" @click.self="showUpload = false">
-      <form class="upload-panel" @submit.prevent="submitUpload">
+    <!-- 合并上传弹窗（居中模态，替代原右侧抽屉） -->
+    <AppDialog v-model="showUpload" title="上传文档" size="md">
+      <header class="dialog-header">
         <p class="eyebrow">UPLOAD</p>
-        <h2>上传文档</h2>
-        <p>选择文件上传单个文档，或选择文件夹批量上传并保留目录结构。单次最多 50 文件 / 200MB。</p>
-
+        <h2 id="dialog-title">上传文档</h2>
+        <p class="dialog-description">选择文件上传单个文档，或选择文件夹批量上传并保留目录结构。单次最多 50 文件 / 200MB。</p>
+      </header>
+      <form class="upload-form" @submit.prevent="submitUpload">
         <label class="upload-target">目标文件夹
           <select v-model="targetFolderPath">
             <option value="/">全部文件（根级）</option>
-            <option v-for="f in folderTree" :key="f" :value="f">{{ f }}</option>
+            <option v-for="f in folderOptions" :key="f" :value="f">{{ f }}</option>
           </select>
         </label>
 
@@ -375,7 +708,7 @@ onMounted(() => {
 
         <p v-if="uploadError" class="inline-error" role="alert">{{ uploadError }}</p>
 
-        <footer>
+        <footer class="dialog-actions">
           <button class="secondary-action" type="button" @click="showUpload = false">取消</button>
           <button
             class="primary-action"
@@ -385,7 +718,19 @@ onMounted(() => {
           >{{ uploading ? '上传中…' : '确认上传' }}</button>
         </footer>
       </form>
-    </div>
+    </AppDialog>
+
+    <!-- 删除二次确认弹窗（danger + persistent，遵循 AC-024） -->
+    <ConfirmDialog
+      :model-value="deleteConfirm !== null"
+      :title="deleteConfirm?.mode === 'single' ? '删除文档' : '批量删除文档'"
+      :description="deleteConfirmDescription"
+      confirm-text="删除"
+      :danger="true"
+      :persistent="true"
+      @update:model-value="(v: boolean) => { if (!v) cancelDelete() }"
+      @confirm="executeDelete"
+    />
   </section>
 </template>
 
@@ -434,6 +779,14 @@ onMounted(() => {
 .folder-item.active { background: var(--violet-soft); color: var(--violet); font-weight: 700; }
 .folder-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .folder-count { color: var(--muted-foreground); font-size: 11px; font-family: "Roboto Mono", monospace; }
+.folder-toggle {
+  width: 14px;
+  font-size: 10px;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  user-select: none;
+}
+.folder-toggle-placeholder { width: 14px; }
 .folder-add {
   margin-top: 8px;
   padding: 8px 10px;
@@ -454,6 +807,31 @@ onMounted(() => {
   color: var(--ink);
   font-size: 12px;
 }
+
+/* 右键上下文菜单 */
+.context-menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 120px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--shadow, 0 8px 30px rgba(0,0,0,0.12));
+}
+.context-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: var(--ink);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.context-menu button:hover { background: var(--surface-muted); }
 
 .folder-breadcrumb {
   display: flex;
@@ -483,26 +861,57 @@ onMounted(() => {
   font-size: .86rem;
 }
 .document-toolbar .text-button { margin-left: auto; }
+.select-all-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.selected-count { color: var(--ink); font-weight: 600; }
+.danger-action {
+  padding: 5px 12px;
+  border: 1px solid var(--danger, #d54848);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--danger, #d54848);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background .15s ease;
+}
+.danger-action:hover { background: color-mix(in srgb, var(--danger, #d54848) 8%, transparent); }
+.inline-success {
+  margin: 0 0 .75rem;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, #2c8a4e 10%, transparent);
+  color: #2c8a4e;
+  font-size: 13px;
+}
 .document-list { display: grid; gap: .65rem; }
 .document-row {
+  position: relative;
   border: 1px solid var(--border-color);
   border-radius: 16px;
   background: var(--surface);
   padding: 1rem 1.1rem;
-  display: grid;
-  grid-template-columns: auto minmax(12rem, 1fr) minmax(20rem, .9fr) auto;
-  gap: 1rem;
+  display: flex;
   align-items: center;
+  gap: 1rem;
   text-align: left;
   color: inherit;
   transition: .18s ease;
+  cursor: pointer;
 }
 .document-row:hover {
   transform: translateY(-1px);
   border-color: #8b7bff;
   box-shadow: 0 12px 30px color-mix(in srgb, #8b7bff 9%, transparent);
 }
+.document-row.selected { border-color: var(--violet); background: var(--violet-soft); }
+.document-row:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+.row-checkbox { display: flex; align-items: center; cursor: pointer; }
 .file-glyph {
+  flex-shrink: 0;
   width: 2.3rem;
   height: 2.3rem;
   border-radius: 11px;
@@ -512,23 +921,55 @@ onMounted(() => {
   color: #7565e8;
   font-size: 1.25rem;
 }
-.document-primary { display: grid; gap: .28rem; }
+.document-primary { flex: 1; min-width: 0; display: grid; gap: .28rem; }
 .document-primary strong { font-size: .95rem; }
 .document-primary small { color: var(--muted-foreground); }
-.row-arrow { color: #8b7bff; font-size: 1.1rem; }
-
-.upload-panel {
-  width: min(34rem, calc(100vw - 2rem));
-  max-height: 85vh;
-  overflow-y: auto;
-  border: 1px solid var(--border-color);
-  border-radius: 22px;
-  background: var(--surface);
-  padding: 1.75rem;
-  box-shadow: 0 24px 70px #0003;
+.row-arrow { color: #8b7bff; font-size: 1.1rem; flex-shrink: 0; }
+.row-menu-trigger {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 16px;
+  cursor: pointer;
+  transition: background .15s ease;
 }
-.upload-panel h2 { margin: .35rem 0; }
-.upload-panel p { color: var(--muted-foreground); line-height: 1.6; }
+.row-menu-trigger:hover { background: var(--surface-muted); }
+.row-menu {
+  position: absolute;
+  right: 8px;
+  top: calc(100% - 4px);
+  z-index: 50;
+  min-width: 100px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--shadow, 0 8px 30px rgba(0,0,0,0.12));
+}
+.row-menu button {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  color: var(--danger, #d54848);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.row-menu button:hover { background: color-mix(in srgb, var(--danger, #d54848) 8%, transparent); }
+
+.upload-form {
+  display: grid;
+  gap: 0;
+}
+.upload-form h2 { margin: .35rem 0; }
+.upload-form p { color: var(--muted-foreground); line-height: 1.6; }
 .upload-target { display: grid; gap: 6px; margin: 1rem 0; color: var(--muted-foreground); font-size: 13px; }
 .upload-target select {
   padding: 9px 10px;
@@ -563,19 +1004,30 @@ onMounted(() => {
 .file-list-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-list-meta { color: var(--muted-foreground); font-family: "Roboto Mono", monospace; }
 
-.upload-panel fieldset {
+.upload-form fieldset {
   display: grid;
   gap: .65rem;
   border: 0;
   padding: 0;
   margin: 1rem 0;
 }
-.upload-panel label { display: flex; gap: .55rem; align-items: center; }
-.upload-panel footer {
+.upload-form fieldset label { display: flex; gap: .55rem; align-items: center; }
+.dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: .75rem;
   margin-top: 1.5rem;
+}
+.dialog-header h2 {
+  margin: 0 0 4px;
+  font-size: 21px;
+  letter-spacing: -.02em;
+}
+.dialog-description {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 @media (max-width: 760px) {
@@ -590,8 +1042,9 @@ onMounted(() => {
   .folder-item { flex-shrink: 0; }
   .folder-add { flex-shrink: 0; margin-top: 0; }
   .folder-input-group { display: none; }
-  .document-row { grid-template-columns: auto 1fr; }
-  .document-row .status-rail { grid-column: 2; }
+  .document-row { flex-wrap: wrap; gap: .5rem; }
+  .document-row .status-rail { flex-basis: 100%; }
   .row-arrow { display: none; }
+  .row-menu-trigger { width: 24px; height: 24px; }
 }
 </style>

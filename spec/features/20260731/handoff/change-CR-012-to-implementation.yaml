@@ -1,0 +1,51 @@
+schema_version: "1.0"
+from:
+  skill: fons4ai-sdd-change
+  agent_thread_id: tier-0-current-thread
+  stage: change-planning
+  status: success
+to:
+  skill: fons4ai-sdd-implement
+  allowed: true
+artifacts:
+  - path: spec/features/20260731/changes/CR-012-文档列表与当前文件契约补齐.md
+    type: change-request
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/知识库文档生命周期-技术设计说明书.md
+    type: technical-design
+    validator: validate_sdd_artifacts.py
+  - path: spec/features/20260731/知识库文档生命周期-任务规划.md
+    type: task-plan
+    validator: validate_sdd_artifacts.py
+evidence:
+  level: L2
+  items:
+    - type: user-confirmation
+      summary: "用户明确要求补充设计和任务后执行 T018"
+      source: dialog
+    - type: repository-fact
+      summary: "现有 DocumentController 无文档列表；详情无当前文件令牌和最近任务摘要"
+      source: fons4ai-rag2okf-service/src/main/java/com/fons/cloud/ai/rag2okf/controller/DocumentController.java
+    - type: technical-design
+      summary: "技术设计已列出文档列表和详情任务摘要，当前实现未收敛"
+      source: spec/features/20260731/知识库文档生命周期-技术设计说明书.md
+confirmed_facts:
+  - "文档列表只返回当前文件与当前状态，不返回版本历史"
+  - "currentFileToken 仅用于 CAS 更新，页面不得展示或持久化"
+  - "latestTask 仅返回安全化任务摘要，支持刷新后轮询和失败重试"
+  - "无数据库结构、DDL、DML、对象存储或 ES 变更"
+pending_questions: []
+risk_and_blockers:
+  - "T040 必须先通过契约/权限/CAS 测试，T018 才能使用正式列表接口"
+  - "三主题浏览器视觉回归仍归属 T019"
+validator_results:
+  - command: "validate_sdd_artifacts.py --change-file spec/features/20260731/changes/CR-012-文档列表与当前文件契约补齐.md"
+    result: pass
+    summary: "CR-012 结构、接口契约和 T040 增量任务校验通过"
+    failures: []
+    blocking: false
+stop_condition:
+  auto_proceed: true
+  requires_user_confirm: false
+  trigger_words:
+    - "补充设计和任务后执行T018"

@@ -1,15 +1,30 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+/**
+ * 知识库列表视图。
+ *
+ * <p>展示当前工作空间的知识库卡片，支持：
+ * - 创建知识库（管理员，右侧抽屉表单）
+ * - 重命名知识库（AppDialog size sm，仅提交 name）
+ * - 删除知识库（AppDialog danger + persistent，需输入名称确认防止误删）
+ * - 搜索与刷新
+ *
+ * <p>权限判断：前端根据 canDelete 控制删除入口可见性，服务端二次校验创建者。
+ * 遵循 AC-003/004/005/014 与技术设计 §5.7。
+ */
+import { computed, onMounted, onBeforeUnmount, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import {
   createKnowledgeBase,
+  deleteKnowledgeBase,
   listKnowledgeBases,
+  updateKnowledgeBase,
   type KnowledgeBaseSummary,
 } from '../../api/knowledge-bases'
 import { ApiRequestError } from '../../api/http'
 import { useWorkspaceStore } from '../../stores/workspace'
 import { formatTime } from '../../utils/formatters'
+import AppDialog from '../../components/ui/AppDialog.vue'
 
 const router = useRouter()
 const workspaceStore = useWorkspaceStore()
@@ -30,11 +45,34 @@ const form = reactive({
   overlap: 120,
 })
 
+// 卡片操作菜单：记录当前展开菜单的 knowledgeBaseKey，同一时间仅一张卡片展开菜单
+const openMenuKey = ref<string | null>(null)
+
+// 重命名状态：renameTarget 持有当前重命名的知识库，反馈归属到该弹窗
+const renameTarget = ref<KnowledgeBaseSummary | null>(null)
+const renameName = ref('')
+const renameError = ref('')
+const renaming = ref(false)
+
+// 删除状态：deleteTarget 持有当前删除的知识库，反馈归属到该弹窗
+const deleteTarget = ref<KnowledgeBaseSummary | null>(null)
+const deleteConfirmName = ref('')
+const deleteError = ref('')
+const deleting = ref(false)
+
 const filteredKnowledgeBases = computed(() => {
   const keyword = searchText.value.trim().toLocaleLowerCase()
   if (!keyword) return knowledgeBases.value
   return knowledgeBases.value.filter((item) => `${item.name}${item.description}`.toLocaleLowerCase().includes(keyword))
 })
+
+/** 是否有重命名弹窗打开 */
+const showRenameDialog = computed(() => renameTarget.value !== null)
+
+/** 是否有删除确认弹窗打开 */
+const showDeleteDialog = computed(() => deleteTarget.value !== null)
+
+/** 删除确认按钮是否可用：正在删除时禁用，名称匹配校验在点击时执行并提示错误 */
 
 function resetForm(): void {
   Object.assign(form, { name: '', description: '', autoParse: true, autoPublish: false, parserProfile: 'standard', chunkSize: 800, overlap: 120 })
@@ -93,6 +131,8 @@ async function submitCreate(): Promise<void> {
       autoParse: created.autoParse,
       autoPublish: created.autoPublish,
       updated: created.updated,
+      ownerUserKey: created.ownerUserKey,
+      canDelete: created.canDelete,
     }, ...knowledgeBases.value]
     showCreatePanel.value = false
   } catch (error) {
@@ -102,11 +142,99 @@ async function submitCreate(): Promise<void> {
   }
 }
 
+/** 切换卡片操作菜单展开/关闭 */
+function toggleMenu(knowledgeBaseKey: string, event: Event): void {
+  event.stopPropagation()
+  openMenuKey.value = openMenuKey.value === knowledgeBaseKey ? null : knowledgeBaseKey
+}
+
+/** 打开重命名弹窗，预填当前名称 */
+function openRename(target: KnowledgeBaseSummary): void {
+  renameTarget.value = target
+  renameName.value = target.name
+  renameError.value = ''
+  openMenuKey.value = null
+}
+
+/** 提交重命名：仅提交 name，调用 updateKnowledgeBase */
+async function submitRename(): Promise<void> {
+  if (!renameTarget.value) return
+  const name = renameName.value.trim()
+  if (!name) {
+    renameError.value = '请输入知识库名称。'
+    return
+  }
+  if (name === renameTarget.value.name) {
+    renameError.value = '新名称与当前名称相同，无需修改。'
+    return
+  }
+  renaming.value = true
+  renameError.value = ''
+  try {
+    // 重命名仅提交 name；revision 传 0 表示不校验版本（服务端按 name 更新）
+    await updateKnowledgeBase(renameTarget.value.knowledgeBaseKey, { name, revision: 0 })
+    const idx = knowledgeBases.value.findIndex((kb) => kb.knowledgeBaseKey === renameTarget.value!.knowledgeBaseKey)
+    if (idx !== -1) {
+      knowledgeBases.value[idx] = { ...knowledgeBases.value[idx], name }
+    }
+    renameTarget.value = null
+  } catch (error) {
+    renameError.value = error instanceof ApiRequestError ? error.message : '重命名失败，请稍后重试。'
+  } finally {
+    renaming.value = false
+  }
+}
+
+/** 打开删除确认弹窗 */
+function openDelete(target: KnowledgeBaseSummary): void {
+  deleteTarget.value = target
+  deleteConfirmName.value = ''
+  deleteError.value = ''
+  openMenuKey.value = null
+}
+
+/** 提交删除：名称匹配后调用 deleteKnowledgeBase，成功后从列表移除 */
+async function submitDelete(): Promise<void> {
+  if (!deleteTarget.value) return
+  if (deleteConfirmName.value.trim() !== deleteTarget.value.name) {
+    deleteError.value = '输入的名称与知识库名称不匹配，请重新输入。'
+    return
+  }
+  deleting.value = true
+  deleteError.value = ''
+  try {
+    await deleteKnowledgeBase(deleteTarget.value.knowledgeBaseKey)
+    const targetKey = deleteTarget.value.knowledgeBaseKey
+    knowledgeBases.value = knowledgeBases.value.filter((kb) => kb.knowledgeBaseKey !== targetKey)
+    deleteTarget.value = null
+  } catch (error) {
+    deleteError.value = error instanceof ApiRequestError ? error.message : '删除失败，请稍后重试。'
+  } finally {
+    deleting.value = false
+  }
+}
+
 function openSettings(knowledgeBaseKey: string): void {
   router.push({ name: 'knowledge-base-settings', params: { knowledgeBaseKey } })
 }
 
-onMounted(loadKnowledgeBases)
+/** 点击卡片外部关闭操作菜单 */
+function handleDocumentClick(event: MouseEvent): void {
+  if (!openMenuKey.value) return
+  const target = event.target as HTMLElement
+  if (!target.closest('.card-menu-wrap')) {
+    openMenuKey.value = null
+  }
+}
+
+onMounted(() => {
+  loadKnowledgeBases()
+  document.addEventListener('click', handleDocumentClick)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleDocumentClick)
+})
 </script>
 
 <template>
@@ -142,24 +270,184 @@ onMounted(loadKnowledgeBases)
     </div>
     <div v-else class="knowledge-grid">
       <article v-for="knowledgeBase in filteredKnowledgeBases" :key="knowledgeBase.knowledgeBaseKey" class="knowledge-card" @click="router.push({ name: 'documents', params: { knowledgeBaseKey: knowledgeBase.knowledgeBaseKey } })">
-        <div class="card-top"><span class="knowledge-glyph">◇</span><span class="status-chip" :class="knowledgeBase.autoPublish ? 'published' : 'pending'">{{ knowledgeBase.autoPublish ? '自动发布' : knowledgeBase.autoParse ? '自动解析' : '仅保留原文件' }}</span></div>
+        <div class="card-top">
+          <span class="knowledge-glyph">◇</span>
+          <span class="status-chip" :class="knowledgeBase.autoPublish ? 'published' : 'pending'">{{ knowledgeBase.autoPublish ? '自动发布' : knowledgeBase.autoParse ? '自动解析' : '仅保留原文件' }}</span>
+          <div v-if="workspaceStore.canManage" class="card-menu-wrap">
+            <button class="card-menu-trigger" type="button" :data-test="`card-menu-trigger-${knowledgeBase.knowledgeBaseKey}`" :aria-label="`${knowledgeBase.name} 操作菜单`" @click="toggleMenu(knowledgeBase.knowledgeBaseKey, $event)">⋯</button>
+            <div v-if="openMenuKey === knowledgeBase.knowledgeBaseKey" class="card-menu" :data-test="`card-menu-${knowledgeBase.knowledgeBaseKey}`" role="menu">
+              <button type="button" role="menuitem" :data-test="`rename-action-${knowledgeBase.knowledgeBaseKey}`" @click.stop="openRename(knowledgeBase)">重命名</button>
+              <button v-if="knowledgeBase.canDelete" type="button" role="menuitem" class="danger-item" :data-test="`delete-action-${knowledgeBase.knowledgeBaseKey}`" @click.stop="openDelete(knowledgeBase)">删除</button>
+            </div>
+          </div>
+        </div>
         <h2>{{ knowledgeBase.name }}</h2><p>{{ knowledgeBase.description || '尚未填写描述。' }}</p>
         <div class="card-settings"><span>解析：{{ knowledgeBase.autoParse ? '自动' : '手动' }}</span><span>发布：{{ knowledgeBase.autoPublish ? '自动' : '手动' }}</span></div>
         <footer><time>{{ formatTime(knowledgeBase.updated) }} 更新</time><button v-if="workspaceStore.canManage" type="button" @click.stop="openSettings(knowledgeBase.knowledgeBaseKey)">管理设置 -></button><span v-else>点击查看文档</span></footer>
       </article>
     </div>
 
-    <div v-if="showCreatePanel" class="drawer-backdrop" role="presentation" @click.self="showCreatePanel = false">
-      <form class="settings-drawer" @submit.prevent="submitCreate">
-        <p class="eyebrow">NEW KNOWLEDGE SPACE</p><h2>创建知识库</h2><p class="drawer-description">默认设置仅对之后上传的文件生效，不会追溯处理已有文档。</p>
+    <!-- 创建知识库弹窗（居中模态，替代原右侧抽屉） -->
+    <AppDialog v-model="showCreatePanel" title="创建知识库" size="md">
+      <header class="dialog-header">
+        <p class="eyebrow">NEW KNOWLEDGE SPACE</p>
+        <h2 id="dialog-title">创建知识库</h2>
+        <p class="dialog-description">默认设置仅对之后上传的文件生效，不会追溯处理已有文档。</p>
+      </header>
+      <form class="settings-form" @submit.prevent="submitCreate">
         <label>名称<input v-model="form.name" data-test="knowledge-base-name" maxlength="80" autocomplete="off" /></label>
         <label>描述<textarea v-model="form.description" data-test="knowledge-base-description" maxlength="500" rows="3" /></label>
         <div class="toggle-row"><div><strong>自动解析</strong><span>上传后创建解析任务</span></div><input v-model="form.autoParse" type="checkbox" role="switch" /></div>
         <div class="toggle-row"><div><strong>自动发布</strong><span>解析成功后直接发布用于检索</span></div><input v-model="form.autoPublish" type="checkbox" role="switch" :disabled="!form.autoParse" /></div>
         <div class="form-columns"><label>解析策略<select v-model="form.parserProfile"><option value="standard">标准解析</option><option value="structure-first">结构优先</option></select></label><label>分块大小<input v-model.number="form.chunkSize" type="number" min="100" /></label></div>
         <p v-if="formError" class="inline-error" role="alert">{{ formError }}</p>
-        <footer><button class="secondary-action" type="button" @click="showCreatePanel = false">取消</button><button class="primary-action" type="submit" data-test="submit-knowledge-base" :disabled="creating">{{ creating ? '正在创建…' : '创建知识库' }}</button></footer>
+        <footer class="dialog-actions">
+          <button class="secondary-action" type="button" @click="showCreatePanel = false">取消</button>
+          <button class="primary-action" type="submit" data-test="submit-knowledge-base" :disabled="creating">{{ creating ? '正在创建…' : '创建知识库' }}</button>
+        </footer>
       </form>
-    </div>
+    </AppDialog>
+
+    <!-- 重命名弹窗 -->
+    <AppDialog v-model="showRenameDialog" title="重命名知识库" size="sm">
+      <header>
+        <h2 id="dialog-title">重命名知识库</h2>
+        <p class="dialog-description">为「{{ renameTarget?.name }}」输入新的名称。</p>
+      </header>
+      <label class="rename-field">名称<input v-model="renameName" data-test="rename-input" maxlength="80" autocomplete="off" @keyup.enter="submitRename" /></label>
+      <p v-if="renameError" class="inline-error" role="alert">{{ renameError }}</p>
+      <footer class="dialog-actions">
+        <button class="secondary-action" type="button" @click="renameTarget = null">取消</button>
+        <button class="primary-action" type="button" data-test="rename-submit" :disabled="renaming" @click="submitRename">{{ renaming ? '保存中…' : '保存' }}</button>
+      </footer>
+    </AppDialog>
+
+    <!-- 删除确认弹窗（danger + persistent，需输入名称匹配确认） -->
+    <AppDialog v-model="showDeleteDialog" title="删除知识库" size="sm" danger persistent>
+      <header>
+        <h2 id="dialog-title">删除知识库</h2>
+        <p class="dialog-description danger-text">此操作不可撤销。知识库「{{ deleteTarget?.name }}」下的所有来源文件、已发布知识和检索索引将被永久删除。</p>
+        <p class="dialog-description">请输入知识库名称 <strong>{{ deleteTarget?.name }}</strong> 以确认删除：</p>
+      </header>
+      <label class="rename-field">知识库名称<input v-model="deleteConfirmName" data-test="delete-confirm-input" maxlength="80" autocomplete="off" /></label>
+      <p v-if="deleteError" class="inline-error" role="alert">{{ deleteError }}</p>
+      <footer class="dialog-actions">
+        <button class="secondary-action" type="button" data-test="delete-cancel" @click="deleteTarget = null">取消</button>
+        <button class="primary-action danger-btn" type="button" data-test="delete-confirm-submit" :disabled="deleting" @click="submitDelete">{{ deleting ? '删除中…' : '确认删除' }}</button>
+      </footer>
+    </AppDialog>
   </section>
 </template>
+
+<style scoped>
+/* 卡片操作菜单容器：定位在下拉触发按钮旁 */
+.card-menu-wrap {
+  position: relative;
+  margin-left: auto;
+}
+
+/* 三点按钮 */
+.card-menu-trigger {
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.card-menu-trigger:hover {
+  background: var(--line-soft);
+  color: var(--ink);
+}
+
+/* 下拉操作菜单 */
+.card-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 20;
+  min-width: 120px;
+  margin-top: 4px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.card-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: var(--ink);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.card-menu button:hover {
+  background: var(--line-soft);
+}
+
+.card-menu .danger-item {
+  color: var(--danger);
+}
+
+.card-menu .danger-item:hover {
+  background: var(--danger-soft, rgba(213, 72, 72, 0.1));
+}
+
+/* 弹窗内表单与操作区 */
+.rename-field {
+  display: block;
+  margin: 4px 0;
+}
+
+.rename-field input {
+  width: 100%;
+  padding: 8px 10px;
+  margin-top: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.dialog-description {
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.danger-text {
+  color: var(--danger);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* 删除确认按钮使用红色背景强调破坏性 */
+.danger-btn {
+  background: var(--danger);
+  box-shadow: 0 8px 20px rgb(213 72 72 / 25%);
+}
+
+.danger-btn:disabled {
+  opacity: 0.5;
+  box-shadow: none;
+}
+</style>

@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
 
 import { ApiRequestError } from '../../api/http'
 import { useSessionStore } from '../../stores/session'
 
-const router = useRouter()
 const sessionStore = useSessionStore()
 const loading = ref(true)
 const saving = ref(false)
@@ -46,7 +44,7 @@ onMounted(loadProfile)
 
 <template>
   <section class="knowledge-page profile-page">
-    <header class="page-heading"><div><p class="eyebrow">LOCAL PROFILE</p><h1>个人中心</h1><p>维护只属于你的展示资料与个人偏好。</p></div><button class="secondary-action" type="button" @click="router.push({ name: 'personal-settings' })">打开个人偏好 →</button></header>
+    <header class="page-heading"><div><p class="eyebrow">LOCAL PROFILE</p><h1>个人中心</h1><p>维护只属于你的展示资料。</p></div></header>
     <div v-if="loading" class="state-panel">正在读取个人资料…</div>
     <p v-else-if="errorMessage" class="inline-error" role="alert">{{ errorMessage }} <button type="button" @click="loadProfile">重试</button></p>
     <form v-else class="profile-layout" @submit.prevent="saveProfile">

@@ -1,4 +1,12 @@
 import { request } from './http'
+import { isDemoMode } from '../composables/useDataSource'
+import {
+  mockLogin,
+  mockRegister,
+  mockLogout,
+  mockGetCurrentUser,
+  mockUpdateCurrentUser,
+} from './mock/auth'
 
 export interface UserProfile {
   userKey: string
@@ -32,21 +40,37 @@ export interface UserProfileInput {
 }
 
 export function login(input: LoginInput): Promise<{ token: string }> {
+  if (isDemoMode()) {
+    return Promise.resolve(mockLogin(input))
+  }
   return request('/auth/login', { method: 'POST', body: JSON.stringify(input) })
 }
 
 export function register(input: RegisterInput): Promise<{ token: string }> {
+  if (isDemoMode()) {
+    return Promise.resolve(mockRegister(input))
+  }
   return request('/auth/registration', { method: 'POST', body: JSON.stringify(input) })
 }
 
 export function logout(): Promise<void> {
+  if (isDemoMode()) {
+    mockLogout()
+    return Promise.resolve()
+  }
   return request('/auth/logout', { method: 'POST' })
 }
 
 export function getCurrentUser(): Promise<UserProfile> {
+  if (isDemoMode()) {
+    return Promise.resolve(mockGetCurrentUser())
+  }
   return request('/users/me')
 }
 
 export function updateCurrentUser(input: UserProfileInput): Promise<UserProfile> {
+  if (isDemoMode()) {
+    return Promise.resolve(mockUpdateCurrentUser(input))
+  }
   return request('/users/me', { method: 'PATCH', body: JSON.stringify(input) })
 }

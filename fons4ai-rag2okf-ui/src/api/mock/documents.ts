@@ -2,6 +2,9 @@
  * 文档演示数据。
  * 忠实模拟真实接口响应结构（DocumentSummary、DocumentDetail、TaskSummary、ChunkPreview、ParsePreview）。
  * 仅在 demo 模式下使用，完全在内存中，不写入 localStorage 真实 key。
+ *
+ * 文档全部归属于 kb-demo-001（产品帮助文档），覆盖多级目录与多种文件类型，
+ * 便于展示 T009 树状目录、T023 源文件预览、T024 删除与批量删除。
  */
 import type {
   DocumentSummary,
@@ -16,8 +19,11 @@ import type {
 const now = new Date().toISOString()
 const oneHourAgo = new Date(Date.now() - 3600_000).toISOString()
 const twoHoursAgo = new Date(Date.now() - 7200_000).toISOString()
+const oneDayAgo = new Date(Date.now() - 86400_000).toISOString()
 
+/** 内部文档存储（含 knowledgeBaseKey），全部归属 kb-demo-001。 */
 const documents: (DocumentDetail & { knowledgeBaseKey: string })[] = [
+  // === 根目录 ===
   {
     documentKey: 'doc-demo-001',
     displayName: '快速入门指南.md',
@@ -41,6 +47,19 @@ const documents: (DocumentDetail & { knowledgeBaseKey: string })[] = [
     knowledgeBaseKey: 'kb-demo-001',
   },
   {
+    documentKey: 'doc-demo-010',
+    displayName: 'API参考文档.txt',
+    folderPath: '/',
+    currentFile: { filename: 'api-ref.txt', contentType: 'text/plain', size: 8_800 },
+    currentFileToken: 'mock-token-010',
+    parseStatus: 'SUCCEEDED',
+    publishStatus: 'UNPUBLISHED',
+    hasActivePublication: false,
+    updated: twoHoursAgo,
+    knowledgeBaseKey: 'kb-demo-001',
+  },
+  // === /合规材料 ===
+  {
     documentKey: 'doc-demo-002',
     displayName: '风控规则手册.pdf',
     folderPath: '/合规材料',
@@ -60,8 +79,97 @@ const documents: (DocumentDetail & { knowledgeBaseKey: string })[] = [
       updated: now,
     },
     updated: now,
-    knowledgeBaseKey: 'kb-demo-002',
+    knowledgeBaseKey: 'kb-demo-001',
   },
+  {
+    documentKey: 'doc-demo-011',
+    displayName: '反洗钱法规汇编.docx',
+    folderPath: '/合规材料',
+    currentFile: { filename: 'aml-regs.docx', contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: 560_000 },
+    currentFileToken: 'mock-token-011',
+    parseStatus: 'SUCCEEDED',
+    publishStatus: 'PUBLISHED',
+    hasActivePublication: true,
+    updated: oneDayAgo,
+    knowledgeBaseKey: 'kb-demo-001',
+  },
+  // === /合规材料/2024Q4 ===
+  {
+    documentKey: 'doc-demo-004',
+    displayName: '2024Q4季度合规报告.docx',
+    folderPath: '/合规材料/2024Q4',
+    currentFile: { filename: '2024q4-report.docx', contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: 890_000 },
+    currentFileToken: 'mock-token-004',
+    parseStatus: 'PENDING',
+    publishStatus: 'UNPUBLISHED',
+    hasActivePublication: false,
+    updated: now,
+    knowledgeBaseKey: 'kb-demo-001',
+  },
+  // === /合规材料/2025Q1 ===
+  {
+    documentKey: 'doc-demo-012',
+    displayName: '2025Q1季度合规报告.docx',
+    folderPath: '/合规材料/2025Q1',
+    currentFile: { filename: '2025q1-report.docx', contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: 920_000 },
+    currentFileToken: 'mock-token-012',
+    parseStatus: 'SUCCEEDED',
+    publishStatus: 'UNPUBLISHED',
+    hasActivePublication: false,
+    updated: oneDayAgo,
+    knowledgeBaseKey: 'kb-demo-001',
+  },
+  // === /技术文档 ===
+  {
+    documentKey: 'doc-demo-005',
+    displayName: '系统架构设计.md',
+    folderPath: '/技术文档',
+    currentFile: { filename: 'architecture.md', contentType: 'text/markdown', size: 24_000 },
+    currentFileToken: 'mock-token-005',
+    parseStatus: 'SUCCEEDED',
+    publishStatus: 'PUBLISHED',
+    hasActivePublication: true,
+    updated: oneHourAgo,
+    knowledgeBaseKey: 'kb-demo-001',
+  },
+  {
+    documentKey: 'doc-demo-006',
+    displayName: '部署运维指南.md',
+    folderPath: '/技术文档',
+    currentFile: { filename: 'deploy-guide.md', contentType: 'text/markdown', size: 18_500 },
+    currentFileToken: 'mock-token-006',
+    parseStatus: 'FAILED',
+    publishStatus: 'UNPUBLISHED',
+    hasActivePublication: false,
+    latestTask: {
+      taskKey: 'task-demo-006',
+      taskType: 'PARSE',
+      status: 'FAILED',
+      stage: '失败',
+      progress: 0,
+      attempt: 3,
+      maxAttempts: 3,
+      errorCode: 'PARSE_ENCODING_UNSUPPORTED',
+      errorMessage: '文件编码无法识别，请转换为 UTF-8 后重试。',
+      updated: twoHoursAgo,
+    },
+    updated: twoHoursAgo,
+    knowledgeBaseKey: 'kb-demo-001',
+  },
+  // === /技术文档/前端 ===
+  {
+    documentKey: 'doc-demo-007',
+    displayName: '前端组件规范.md',
+    folderPath: '/技术文档/前端',
+    currentFile: { filename: 'frontend-spec.md', contentType: 'text/markdown', size: 9_600 },
+    currentFileToken: 'mock-token-007',
+    parseStatus: 'SUCCEEDED',
+    publishStatus: 'PUBLISHED',
+    hasActivePublication: true,
+    updated: oneDayAgo,
+    knowledgeBaseKey: 'kb-demo-001',
+  },
+  // === /图片资料 ===
   {
     documentKey: 'doc-demo-003',
     displayName: '系统架构图.png',
@@ -87,12 +195,12 @@ const documents: (DocumentDetail & { knowledgeBaseKey: string })[] = [
     knowledgeBaseKey: 'kb-demo-001',
   },
   {
-    documentKey: 'doc-demo-004',
-    displayName: '产品需求文档.docx',
-    folderPath: '/合规材料/2024Q4',
-    currentFile: { filename: 'prd.docx', contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: 890_000 },
-    currentFileToken: 'mock-token-004',
-    parseStatus: 'PENDING',
+    documentKey: 'doc-demo-008',
+    displayName: '业务流程图.png',
+    folderPath: '/图片资料',
+    currentFile: { filename: 'flowchart.png', contentType: 'image/png', size: 320_000 },
+    currentFileToken: 'mock-token-008',
+    parseStatus: 'NOT_STARTED',
     publishStatus: 'UNPUBLISHED',
     hasActivePublication: false,
     updated: now,
@@ -117,6 +225,69 @@ export function mockGetDocument(documentKey: string): DocumentDetail | undefined
   if (!doc) return undefined
   const { knowledgeBaseKey: _kb, ...detail } = doc
   return { ...detail, knowledgeBaseKey: doc.knowledgeBaseKey }
+}
+
+/** 模拟上传单个文档（demo 模式下生成新记录）。 */
+export function mockUploadDocument(knowledgeBaseKey: string, file: File, parseMode: 'DEFAULT' | 'PARSE' | 'SKIP', folderPath?: string): OperationAccepted {
+  const documentKey = `doc-demo-${Date.now()}`
+  const path = folderPath || '/'
+  const doc: DocumentDetail & { knowledgeBaseKey: string } = {
+    documentKey,
+    displayName: file.name,
+    folderPath: path,
+    currentFile: { filename: file.name, contentType: file.type || 'application/octet-stream', size: file.size },
+    currentFileToken: `mock-token-${Date.now()}`,
+    parseStatus: parseMode === 'SKIP' ? 'NOT_STARTED' : 'PENDING',
+    publishStatus: 'UNPUBLISHED',
+    hasActivePublication: false,
+    updated: new Date().toISOString(),
+    knowledgeBaseKey,
+  }
+  documents.push(doc)
+  return { documentKey }
+}
+
+/** 模拟批量上传文档。 */
+export function mockBatchUploadDocuments(knowledgeBaseKey: string, files: File[], parseMode: 'DEFAULT' | 'PARSE' | 'SKIP', relativePaths?: string[]): OperationAccepted[] {
+  const results: OperationAccepted[] = []
+  files.forEach((file, i) => {
+    const documentKey = `doc-demo-${Date.now()}-${i}`
+    const relPath = relativePaths?.[i]
+    // 从 relativePath 提取目录（如 "合规材料/sub/a.md" -> "/合规材料/sub"）
+    let folderPath = '/'
+    if (relPath && relPath.includes('/')) {
+      const lastSlash = relPath.lastIndexOf('/')
+      const dirPart = relPath.substring(0, lastSlash)
+      folderPath = dirPart.startsWith('/') ? dirPart : '/' + dirPart
+    }
+    const doc: DocumentDetail & { knowledgeBaseKey: string } = {
+      documentKey,
+      displayName: file.name,
+      folderPath,
+      currentFile: { filename: file.name, contentType: file.type || 'application/octet-stream', size: file.size },
+      currentFileToken: `mock-token-${Date.now()}-${i}`,
+      parseStatus: parseMode === 'SKIP' ? 'NOT_STARTED' : 'PENDING',
+      publishStatus: 'UNPUBLISHED',
+      hasActivePublication: false,
+      updated: new Date().toISOString(),
+      knowledgeBaseKey,
+    }
+    documents.push(doc)
+    results.push({ documentKey })
+  })
+  return results
+}
+
+/** 模拟更新文档文件（替换当前文件）。 */
+export function mockUpdateDocumentFile(documentKey: string, file: File, parseMode: 'DEFAULT' | 'PARSE' | 'SKIP', _currentFileToken: string): OperationAccepted {
+  const doc = documents.find((d) => d.documentKey === documentKey)
+  if (doc) {
+    doc.currentFile = { filename: file.name, contentType: file.type || 'application/octet-stream', size: file.size }
+    doc.currentFileToken = `mock-token-${Date.now()}`
+    doc.parseStatus = parseMode === 'SKIP' ? 'NOT_STARTED' : 'PENDING'
+    doc.updated = new Date().toISOString()
+  }
+  return { documentKey }
 }
 
 /** 模拟触发解析。 */
@@ -216,6 +387,48 @@ export function mockBatchDeleteDocuments(documentKeys: string[]): { deleted: str
 /** 获取全部 mock 文档（供调试或其他 mock 模块引用）。 */
 export function mockAllDocuments(): (DocumentDetail & { knowledgeBaseKey: string })[] {
   return documents
+}
+
+/**
+ * 模拟获取源文件内容（返回 blobUrl 供 SourceFilePreview 组件渲染）。
+ * 按 contentType 返回对应演示内容，覆盖 Markdown/TXT/PDF/图片/DOCX 五种格式。
+ */
+export function mockGetSourceContent(documentKey: string): { blobUrl: string; contentType: string; filename: string } {
+  const doc = documents.find((d) => d.documentKey === documentKey)
+  if (!doc) {
+    return { blobUrl: '', contentType: 'application/octet-stream', filename: 'unknown' }
+  }
+  const { contentType, filename } = doc.currentFile
+  let content = ''
+  if (contentType === 'text/markdown') {
+    content = `# ${filename}\n\n这是演示用的 Markdown 内容。\n\n## 概述\n\nRag2OKF 是可追溯、可观察的企业知识库与知识工程平台。\n\n## 核心能力\n\n- 文档工程\n- RAG 混合检索\n- OKF 知识工程\n\n## 快速开始\n\n1. 创建知识库\n2. 上传源文件\n3. 选择是否解析\n4. 发布 RAG 知识\n`
+  } else if (contentType === 'text/plain') {
+    content = '这是演示用的纯文本内容。\n\nRag2OKF API 参考文档\n\nGET /knowledge-bases\nPOST /knowledge-bases/{key}/documents\nGET /documents/{key}/source-content\n'
+  } else if (contentType.startsWith('image/')) {
+    // 生成 1x1 透明像素的 PNG，便于 demo 模式下图片预览不报错
+    content = ''
+    const byteString = atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==')
+    const bytes = new Uint8Array(byteString.length)
+    for (let i = 0; i < byteString.length; i++) bytes[i] = byteString.charCodeAt(i)
+    const blob = new Blob([bytes], { type: contentType })
+    return { blobUrl: URL.createObjectURL(blob), contentType, filename }
+  } else if (contentType === 'application/pdf') {
+    // PDF 文件头 + 简单内容
+    const pdfContent = '%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\nxref\n0 3\n0000000000 65535 f \ntrailer\n<< /Size 3 /Root 1 0 R >>\nstartxref\n0\n%%EOF'
+    const blob = new Blob([pdfContent], { type: contentType })
+    return { blobUrl: URL.createObjectURL(blob), contentType, filename }
+  } else if (contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    // DOCX 无法简单构造有效二进制，返回 HTML 文本以供 mammoth 转换
+    const htmlContent = `<html><body><h1>${filename}</h1><p>这是演示用的 DOCX 文档内容。Rag2OKF 平台支持文档工程、RAG 混合检索和 OKF 知识工程。</p></body></html>`
+    const blob = new Blob([htmlContent], { type: 'text/html' })
+    return { blobUrl: URL.createObjectURL(blob), contentType: 'text/html', filename }
+  } else {
+    content = '演示文件内容'
+    const blob = new Blob([content], { type: contentType })
+    return { blobUrl: URL.createObjectURL(blob), contentType, filename }
+  }
+  const blob = new Blob([content], { type: contentType })
+  return { blobUrl: URL.createObjectURL(blob), contentType, filename }
 }
 
 /** 模拟获取最新任务（供 useTaskPolling 轮询使用）。 */

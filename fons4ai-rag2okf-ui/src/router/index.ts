@@ -7,7 +7,6 @@ import DocumentDetailView from '../views/documents/DocumentDetailView.vue'
 import LoginView from '../views/auth/LoginView.vue'
 import RegisterView from '../views/auth/RegisterView.vue'
 import ProfileView from '../views/profile/ProfileView.vue'
-import PersonalSettingsView from '../views/settings/PersonalSettingsView.vue'
 import ModelSettingsView from '../views/settings/ModelSettingsView.vue'
 import { hasRuntimeSession } from '../stores/session'
 
@@ -18,7 +17,6 @@ export const router = createRouter({
     { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
     { path: '/register', name: 'register', component: RegisterView, meta: { public: true } },
     { path: '/profile', name: 'profile', component: ProfileView, meta: { requiresAuth: true, sectionLabel: '个人中心' } },
-    { path: '/settings/personal', name: 'personal-settings', component: PersonalSettingsView, meta: { requiresAuth: true, sectionLabel: '个人偏好' } },
     { path: '/settings/models', name: 'model-settings', component: ModelSettingsView, meta: { requiresAuth: true, sectionLabel: '模型设置' } },
     { path: '/knowledge-bases', name: 'knowledge-bases', component: KnowledgeBaseListView, meta: { requiresAuth: true, sectionLabel: '全部知识库' } },
     { path: '/knowledge-bases/:knowledgeBaseKey/settings', name: 'knowledge-base-settings', component: KnowledgeBaseSettingsView, meta: { requiresAuth: true, sectionLabel: '知识库设置' } },
