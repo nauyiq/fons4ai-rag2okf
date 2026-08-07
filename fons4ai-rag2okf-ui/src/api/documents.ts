@@ -22,6 +22,7 @@ export interface TaskSummary {
 export interface DocumentSummary {
   documentKey: string
   displayName: string
+  folderPath: string
   currentFile: CurrentFile
   /** Opaque, in-memory-only CAS token. Never render or persist it. */
   currentFileToken: string
@@ -46,6 +47,7 @@ export interface PageResponse<T> {
 export interface OperationAccepted {
   taskKey?: string
   documentKey?: string
+  folderPath?: string
   currentFileToken?: string
 }
 
@@ -64,19 +66,40 @@ export interface ParsePreview {
   blockCount: number
 }
 
-export function listDocuments(knowledgeBaseKey: string, page = 0, size = 20): Promise<PageResponse<DocumentSummary>> {
-  return request(`/knowledge-bases/${encodeURIComponent(knowledgeBaseKey)}/documents?page=${page}&size=${size}`)
+export function listDocuments(knowledgeBaseKey: string, page = 0, size = 20, folderPath?: string): Promise<PageResponse<DocumentSummary>> {
+  let url = `/knowledge-bases/${encodeURIComponent(knowledgeBaseKey)}/documents?page=${page}&size=${size}`
+  if (folderPath) {
+    url += `&folderPath=${encodeURIComponent(folderPath)}`
+  }
+  return request(url)
 }
 
 export function getDocument(documentKey: string): Promise<DocumentDetail> {
   return request(`/documents/${encodeURIComponent(documentKey)}`)
 }
 
-export function uploadDocument(knowledgeBaseKey: string, file: File, parseMode: 'DEFAULT' | 'PARSE' | 'SKIP'): Promise<OperationAccepted> {
+export function uploadDocument(knowledgeBaseKey: string, file: File, parseMode: 'DEFAULT' | 'PARSE' | 'SKIP', folderPath?: string): Promise<OperationAccepted> {
   const body = new FormData()
   body.append('file', file)
   body.append('parseMode', parseMode)
+  if (folderPath) {
+    body.append('folderPath', folderPath)
+  }
   return request(`/knowledge-bases/${encodeURIComponent(knowledgeBaseKey)}/documents`, { method: 'POST', body })
+}
+
+export function batchUploadDocuments(knowledgeBaseKey: string, files: File[], parseMode: 'DEFAULT' | 'PARSE' | 'SKIP', relativePaths?: string[]): Promise<OperationAccepted[]> {
+  const body = new FormData()
+  for (const file of files) {
+    body.append('files', file)
+  }
+  body.append('parseMode', parseMode)
+  if (relativePaths && relativePaths.length > 0) {
+    for (const rp of relativePaths) {
+      body.append('relativePaths', rp)
+    }
+  }
+  return request(`/knowledge-bases/${encodeURIComponent(knowledgeBaseKey)}/documents/batch`, { method: 'POST', body })
 }
 
 export function updateDocumentFile(documentKey: string, file: File, parseMode: 'DEFAULT' | 'PARSE' | 'SKIP', currentFileToken: string): Promise<OperationAccepted> {

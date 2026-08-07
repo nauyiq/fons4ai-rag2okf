@@ -1,25 +1,89 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { ApiRequestError } from '../../api/http'
 import { getChunkPreview, getDocument, getParsePreview, rechunkDocument, retryTask, triggerParse, triggerPublish, updateDocumentFile, type ChunkPreview, type DocumentDetail, type ParsePreview } from '../../api/documents'
 import DocumentStatusRail from '../../components/document/DocumentStatusRail.vue'
 import { useWorkspaceStore } from '../../stores/workspace'
+import { formatBytes, taskStatusLabel } from '../../utils/formatters'
 
 const route = useRoute(); const router = useRouter(); const workspaceStore = useWorkspaceStore()
 const document = ref<DocumentDetail>(); const chunk = ref<ChunkPreview>(); const parse = ref<ParsePreview>(); const loading = ref(true); const submitting = ref(false); const errorMessage = ref('')
-const showReplace = ref(false); const replacement = ref<File | null>(null); const showRechunk = ref(false); let pollHandle: number | undefined
+const showReplace = ref(false); const replacement = ref<File | null>(null); const showRechunk = ref(false)
+let pollHandle: number | undefined
+let polling = false
 const documentKey = String(route.params.documentKey)
-function formatBytes(value: number): string { return value < 1024 * 1024 ? `${Math.ceil(value / 1024)} KB` : `${(value / 1024 / 1024).toFixed(1)} MB` }
-async function load(): Promise<void> { loading.value = true; errorMessage.value = ''; try { const [detail, chunkPreview, parsePreview] = await Promise.all([getDocument(documentKey), getChunkPreview(documentKey), getParsePreview(documentKey)]); document.value = detail; chunk.value = chunkPreview; parse.value = parsePreview } catch (error) { errorMessage.value = error instanceof ApiRequestError ? error.message : '无法读取文档详情。' } finally { loading.value = false } }
-async function run(action: () => Promise<unknown>): Promise<void> { submitting.value = true; errorMessage.value = ''; try { await action(); await load() } catch (error) { errorMessage.value = error instanceof ApiRequestError ? error.message : '操作未能完成，请稍后重试。' } finally { submitting.value = false } }
+
+async function load(): Promise<void> {
+  loading.value = true; errorMessage.value = ''
+  try {
+    const [detail, chunkPreview, parsePreview] = await Promise.all([getDocument(documentKey), getChunkPreview(documentKey), getParsePreview(documentKey)])
+    document.value = detail; chunk.value = chunkPreview; parse.value = parsePreview
+  } catch (error) {
+    errorMessage.value = error instanceof ApiRequestError ? error.message : '无法读取文档详情。'
+  } finally {
+    loading.value = false
+  }
+}
+
+/** 后台刷新只更新文档状态和任务摘要，不重置整个页面。 */
+async function refreshStatus(): Promise<void> {
+  if (polling) return
+  polling = true
+  try {
+    const detail = await getDocument(documentKey)
+    document.value = detail
+  } catch {
+    // 后台刷新失败不影响现有展示
+  } finally {
+    polling = false
+  }
+}
+
+async function run(action: () => Promise<unknown>): Promise<void> {
+  submitting.value = true; errorMessage.value = ''
+  try { await action(); await load() }
+  catch (error) { errorMessage.value = error instanceof ApiRequestError ? error.message : '操作未能完成，请稍后重试。' }
+  finally { submitting.value = false }
+}
+
 function chooseReplacement(event: Event): void { replacement.value = (event.target as HTMLInputElement).files?.[0] ?? null }
 async function replaceFile(): Promise<void> { if (!replacement.value || !document.value) return; await run(() => updateDocumentFile(documentKey, replacement.value!, 'DEFAULT', document.value!.currentFileToken)); showReplace.value = false; replacement.value = null }
 async function confirmRechunk(): Promise<void> { if (!chunk.value?.currentChunkRevisionKey) return; await run(() => rechunkDocument(documentKey, chunk.value!.currentChunkRevisionKey!, chunk.value!.chunkProfile ?? {})); showRechunk.value = false }
 async function retryLatestTask(): Promise<void> { const taskKey = document.value?.latestTask?.taskKey; if (taskKey) await run(() => retryTask(taskKey)) }
-function startPolling(): void { if (document.value?.latestTask?.status === 'RUNNING' || document.value?.latestTask?.status === 'QUEUED') pollHandle = window.setInterval(load, 4000) }
-onMounted(async () => { await load(); startPolling() }); onBeforeUnmount(() => { if (pollHandle) window.clearInterval(pollHandle) })
+
+/** 判断任务是否处于需要轮询的活跃状态。 */
+function isTaskActive(): boolean {
+  const status = document.value?.latestTask?.status
+  return status === 'RUNNING' || status === 'QUEUED' || status === 'PENDING'
+}
+
+function startPolling(): void {
+  stopPolling()
+  if (isTaskActive()) {
+    pollHandle = window.setInterval(refreshStatus, 4000)
+  }
+}
+
+function stopPolling(): void {
+  if (pollHandle) {
+    window.clearInterval(pollHandle)
+    pollHandle = undefined
+  }
+}
+
+/** 监听文档状态变化，自动启停轮询。 */
+watch(() => document.value?.latestTask?.status, (newStatus) => {
+  if (newStatus && isTaskActive()) {
+    startPolling()
+  } else {
+    stopPolling()
+  }
+})
+
+onMounted(async () => { await load(); startPolling() })
+onBeforeUnmount(stopPolling)
 </script>
 
 <template>
@@ -33,7 +97,7 @@ onMounted(async () => { await load(); startPolling() }); onBeforeUnmount(() => {
     <p v-if="errorMessage" class="inline-error" role="alert">{{ errorMessage }} <button type="button" @click="load">重试</button></p><div v-else-if="loading" class="state-panel">正在读取文档…</div>
     <template v-else-if="document"><header class="document-hero"><div><p class="eyebrow">CURRENT SOURCE FILE</p><h1>{{ document.displayName }}</h1><p>{{ document.currentFile.contentType || 'unknown' }} · {{ formatBytes(document.currentFile.size) }}。页面只展示当前文件，不提供版本历史或回退。</p></div><div v-if="workspaceStore.canManage" class="hero-actions"><button class="secondary-action" type="button" :disabled="submitting" @click="showReplace = true">上传新文件</button><button class="primary-action" type="button" :disabled="submitting || document.parseStatus === 'RUNNING'" @click="run(() => triggerParse(documentKey))">解析文档</button></div></header>
       <DocumentStatusRail class="detail-rail" :document="document" />
-      <section v-if="document.latestTask" class="task-card"><div><p class="eyebrow">LATEST TASK</p><strong>{{ document.latestTask.taskType }} · {{ document.latestTask.status }}</strong><p v-if="document.latestTask.status === 'RUNNING'">{{ document.latestTask.progress }}% · {{ document.latestTask.stage || '处理中' }}</p><p v-else-if="document.latestTask.errorMessage" class="task-error">{{ document.latestTask.errorCode || '任务失败' }}：{{ document.latestTask.errorMessage }}</p></div><button v-if="workspaceStore.canManage && document.latestTask.status === 'FAILED'" class="secondary-action" type="button" :disabled="submitting" @click="retryLatestTask">重试任务</button></section>
+      <section v-if="document.latestTask" class="task-card"><div><p class="eyebrow">LATEST TASK</p><strong>{{ document.latestTask.taskType }} · {{ taskStatusLabel(document.latestTask.status) }}</strong><p v-if="document.latestTask.status === 'RUNNING'">{{ document.latestTask.progress }}% · {{ document.latestTask.stage || '处理中' }}</p><p v-else-if="document.latestTask.errorMessage" class="task-error">{{ document.latestTask.errorCode || '任务失败' }}：{{ document.latestTask.errorMessage }}</p></div><button v-if="workspaceStore.canManage && document.latestTask.status === 'FAILED'" class="secondary-action" type="button" :disabled="submitting" @click="retryLatestTask">重试任务</button></section>
       <section class="processing-grid"><article><p class="eyebrow">CHUNKS</p><h2>{{ chunk?.hasChunk ? `${chunk.total} 个分块` : '尚无可用分块' }}</h2><p>{{ chunk?.hasChunk ? `父块 ${chunk.parentCount} · 子块 ${chunk.childCount}` : '未解析或尚未生成分块时，不展示伪造的结构化结果。' }}</p><button v-if="workspaceStore.canManage && chunk?.hasChunk" class="danger-link" type="button" :disabled="submitting" @click="showRechunk = true">重新分块</button></article><article><p class="eyebrow">PUBLICATION</p><h2>{{ document.publishStatus === 'PUBLISHED' ? '已进入检索' : '尚未发布' }}</h2><p v-if="document.publishStatus === 'PUBLISH_FAILED' && document.hasActivePublication">最新发布失败，但此前已发布内容继续对检索可用。</p><p v-else>发布仅使用当前成功的分块，不会因处理失败静默替换可用内容。</p><button v-if="workspaceStore.canManage" class="primary-action" type="button" :disabled="submitting || !chunk?.hasChunk" @click="run(() => triggerPublish(documentKey))">发布到检索</button></article></section>
     </template>
     <div v-if="showReplace" class="drawer-backdrop" @click.self="showReplace = false"><form class="modal-panel" @submit.prevent="replaceFile"><p class="eyebrow">REPLACE CURRENT FILE</p><h2>上传新文件</h2><p>这会仅更新此文档的当前文件。版本能力在后端保留，但不会在界面展示。</p><input type="file" @change="chooseReplacement" /><footer><button class="secondary-action" type="button" @click="showReplace = false">取消</button><button class="primary-action" :disabled="!replacement || submitting" type="submit">确认更新</button></footer></form></div>

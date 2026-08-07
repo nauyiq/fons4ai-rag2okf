@@ -17,15 +17,20 @@ export class ApiRequestError extends Error {
 }
 
 const apiBaseUrl = (import.meta.env.VITE_RAG2OKF_API_BASE_URL ?? '/knowledge/api/v1').replace(/\/$/, '')
-let authenticationToken: string | undefined
+const TOKEN_STORAGE_KEY = 'rag2okf_auth_token'
+let authenticationToken: string | undefined = localStorage.getItem(TOKEN_STORAGE_KEY) ?? undefined
 let unauthorizedHandler: (() => void) | undefined
 
 /**
- * Keeps the short-lived bearer token only in runtime memory. Authentication
- * pages will populate it in T026; it is intentionally never persisted here.
+ * Persists the bearer token to localStorage so the session survives page refresh.
  */
 export function setAuthenticationToken(token?: string): void {
   authenticationToken = token
+  if (token) {
+    localStorage.setItem(TOKEN_STORAGE_KEY, token)
+  } else {
+    localStorage.removeItem(TOKEN_STORAGE_KEY)
+  }
 }
 
 /** Lets the UI return to its own login page when a Bearer session expires. */

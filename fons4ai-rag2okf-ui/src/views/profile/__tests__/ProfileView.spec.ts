@@ -15,11 +15,11 @@ describe('ProfileView', () => {
     setActivePinia(createPinia())
     hasRuntimeSession.value = true
     setAuthenticationToken('runtime-only-token')
-    vi.mocked(getCurrentUser).mockResolvedValue({ userKey: 'u1', email: 'me@example.com', displayName: 'Me', avatarUrl: '', preferenceJson: '{}' })
+    vi.mocked(getCurrentUser).mockResolvedValue({ userKey: 'u1', email: 'me@example.com', displayName: 'Me', avatarUrl: '', preferenceJson: '{}', workspaceKey: 'ws-1', workspaceName: '个人工作空间', workspaceRole: 'ADMIN' })
   })
 
   it('keeps the login email read-only and saves only the profile whitelist', async () => {
-    vi.mocked(updateCurrentUser).mockResolvedValue({ userKey: 'u1', email: 'me@example.com', displayName: 'New name', avatarUrl: '', preferenceJson: '{}' })
+    vi.mocked(updateCurrentUser).mockResolvedValue({ userKey: 'u1', email: 'me@example.com', displayName: 'New name', avatarUrl: '', preferenceJson: '{}', workspaceKey: 'ws-1', workspaceName: '个人工作空间', workspaceRole: 'ADMIN' })
     const wrapper = mount(ProfileView)
     await flushPromises()
     const inputs = wrapper.findAll('input')

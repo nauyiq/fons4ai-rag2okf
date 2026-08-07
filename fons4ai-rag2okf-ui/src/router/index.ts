@@ -5,6 +5,7 @@ import KnowledgeBaseSettingsView from '../views/knowledge-bases/KnowledgeBaseSet
 import DocumentsView from '../views/documents/DocumentsView.vue'
 import DocumentDetailView from '../views/documents/DocumentDetailView.vue'
 import LoginView from '../views/auth/LoginView.vue'
+import RegisterView from '../views/auth/RegisterView.vue'
 import ProfileView from '../views/profile/ProfileView.vue'
 import PersonalSettingsView from '../views/settings/PersonalSettingsView.vue'
 import ModelSettingsView from '../views/settings/ModelSettingsView.vue'
@@ -15,6 +16,7 @@ export const router = createRouter({
   routes: [
     { path: '/', redirect: { name: 'knowledge-bases' } },
     { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
+    { path: '/register', name: 'register', component: RegisterView, meta: { public: true } },
     { path: '/profile', name: 'profile', component: ProfileView, meta: { requiresAuth: true, sectionLabel: '个人中心' } },
     { path: '/settings/personal', name: 'personal-settings', component: PersonalSettingsView, meta: { requiresAuth: true, sectionLabel: '个人偏好' } },
     { path: '/settings/models', name: 'model-settings', component: ModelSettingsView, meta: { requiresAuth: true, sectionLabel: '模型设置' } },
@@ -29,7 +31,7 @@ router.beforeEach((to) => {
   if (to.meta.requiresAuth && !hasRuntimeSession.value) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
-  if (to.name === 'login' && hasRuntimeSession.value) {
+  if ((to.name === 'login' || to.name === 'register') && hasRuntimeSession.value) {
     return { name: 'knowledge-bases' }
   }
   return true

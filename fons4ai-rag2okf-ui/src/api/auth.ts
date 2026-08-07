@@ -6,12 +6,23 @@ export interface UserProfile {
   displayName: string
   avatarUrl: string
   preferenceJson: string
+  workspaceKey: string
+  workspaceName: string
+  workspaceRole: string
 }
 
 export interface LoginInput {
   email: string
   password: string
   rememberMe: boolean
+}
+
+export interface RegisterInput {
+  email: string
+  password: string
+  confirmPassword: string
+  displayName: string
+  termsAccepted: boolean
 }
 
 export interface UserProfileInput {
@@ -22,6 +33,10 @@ export interface UserProfileInput {
 
 export function login(input: LoginInput): Promise<{ token: string }> {
   return request('/auth/login', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function register(input: RegisterInput): Promise<{ token: string }> {
+  return request('/auth/registration', { method: 'POST', body: JSON.stringify(input) })
 }
 
 export function logout(): Promise<void> {

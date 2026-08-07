@@ -13,7 +13,7 @@ describe('DocumentDetailView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     useWorkspaceStore().setWorkspace({ key: 'personal', name: 'Personal', role: 'ADMIN' })
-    vi.mocked(getDocument).mockResolvedValue({ documentKey: 'doc-1', knowledgeBaseKey: 'loan-policy', displayName: 'policy.md', currentFile: { filename: 'policy.md', contentType: 'text/markdown', size: 1024 }, currentFileToken: 'opaque', parseStatus: 'SUCCEEDED', publishStatus: 'UNPUBLISHED', hasActivePublication: false, updated: '2026-08-05T08:00:00Z' })
+    vi.mocked(getDocument).mockResolvedValue({ documentKey: 'doc-1', knowledgeBaseKey: 'loan-policy', displayName: 'policy.md', folderPath: '/', currentFile: { filename: 'policy.md', contentType: 'text/markdown', size: 1024 }, currentFileToken: 'opaque', parseStatus: 'SUCCEEDED', publishStatus: 'UNPUBLISHED', hasActivePublication: false, updated: '2026-08-05T08:00:00Z' })
     vi.mocked(getChunkPreview).mockResolvedValue({ hasChunk: true, currentChunkRevisionKey: 'chunk-token', chunkProfile: {}, parentCount: 1, childCount: 2, total: 2 })
     vi.mocked(getParsePreview).mockResolvedValue({ hasParse: true, parserProfile: 'native', blockCount: 3 })
   })

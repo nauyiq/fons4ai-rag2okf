@@ -1,21 +1,15 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 
 import { ApiRequestError } from '../../api/http'
 import { useSessionStore } from '../../stores/session'
 
 const router = useRouter()
-const route = useRoute()
 const sessionStore = useSessionStore()
 const submitting = ref(false)
-const errorMessage = ref(route.query.expired === '1' ? '会话已结束，请重新登录。' : '')
-const form = reactive({ email: '', password: '', rememberMe: false })
-
-function normalizeRedirect(): string {
-  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
-  return redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/knowledge-bases'
-}
+const errorMessage = ref('')
+const form = reactive({ email: '', password: '', confirmPassword: '', displayName: '', termsAccepted: false })
 
 async function submit(): Promise<void> {
   errorMessage.value = ''
@@ -23,17 +17,32 @@ async function submit(): Promise<void> {
     errorMessage.value = '请输入邮箱和密码。'
     return
   }
+  if (form.password !== form.confirmPassword) {
+    errorMessage.value = '两次输入的密码不一致。'
+    return
+  }
+  if (!form.termsAccepted) {
+    errorMessage.value = '请阅读并同意服务条款后再创建账号。'
+    return
+  }
   submitting.value = true
   try {
-    await sessionStore.signIn({ email: form.email.trim(), password: form.password, rememberMe: form.rememberMe })
-    await router.replace(normalizeRedirect())
+    await sessionStore.signUp({
+      email: form.email.trim(),
+      password: form.password,
+      confirmPassword: form.confirmPassword,
+      displayName: form.displayName.trim(),
+      termsAccepted: form.termsAccepted,
+    })
+    await router.replace('/knowledge-bases')
   } catch (error) {
     errorMessage.value = error instanceof ApiRequestError && error.status === 429
-      ? '登录尝试过于频繁，请稍后再试。'
-      : '邮箱或密码不正确。'
+      ? '注册请求过于频繁，请稍后再试。'
+      : '注册失败，请更换邮箱或密码后重试。'
   } finally {
     submitting.value = false
     form.password = ''
+    form.confirmPassword = ''
   }
 }
 </script>
@@ -54,13 +63,15 @@ async function submit(): Promise<void> {
 
     <section class="login-panel">
       <form class="login-card" @submit.prevent="submit">
-        <p class="eyebrow">WELCOME BACK</p><h2>登录你的知识空间</h2><p class="login-lead">使用邮箱与密码继续管理你的知识库。</p>
+        <p class="eyebrow">CREATE ACCOUNT</p><h2>注册你的知识空间</h2><p class="login-lead">使用邮箱与密码创建本地账号，立即拥有个人知识空间。</p>
         <label>邮箱<input v-model="form.email" type="email" inputmode="email" autocomplete="email" maxlength="254" placeholder="name@example.com" /></label>
-        <label>密码<input v-model="form.password" type="password" autocomplete="current-password" placeholder="输入密码" /></label>
-        <label class="remember-row"><input v-model="form.rememberMe" type="checkbox" /><span><strong>保持登录</strong><small>在这台设备上延长安全会话</small></span></label>
+        <label>密码<input v-model="form.password" type="password" autocomplete="new-password" placeholder="8～64 位密码" /></label>
+        <label>确认密码<input v-model="form.confirmPassword" type="password" autocomplete="new-password" placeholder="再次输入密码" /></label>
+        <label>展示名称（可选）<input v-model="form.displayName" maxlength="80" autocomplete="nickname" placeholder="输入你的展示名称" /></label>
+        <label class="terms-row"><input v-model="form.termsAccepted" type="checkbox" name="terms" />我已阅读并同意服务条款</label>
         <p v-if="errorMessage" class="inline-error" role="alert">{{ errorMessage }}</p>
-        <button class="primary-action login-submit" type="submit" :disabled="submitting">{{ submitting ? '正在进入…' : '进入知识空间' }}</button>
-        <p class="login-footnote">还没有账号？<router-link to="/register">注册新账号</router-link></p>
+        <button class="primary-action login-submit" type="submit" :disabled="submitting">{{ submitting ? '正在创建…' : '创建账号' }}</button>
+        <p class="login-footnote">已有账号？<router-link to="/login">返回登录</router-link></p>
       </form>
     </section>
   </main>

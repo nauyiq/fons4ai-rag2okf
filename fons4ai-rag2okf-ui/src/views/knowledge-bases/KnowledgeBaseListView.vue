@@ -9,6 +9,7 @@ import {
 } from '../../api/knowledge-bases'
 import { ApiRequestError } from '../../api/http'
 import { useWorkspaceStore } from '../../stores/workspace'
+import { formatTime } from '../../utils/formatters'
 
 const router = useRouter()
 const workspaceStore = useWorkspaceStore()
@@ -34,11 +35,6 @@ const filteredKnowledgeBases = computed(() => {
   if (!keyword) return knowledgeBases.value
   return knowledgeBases.value.filter((item) => `${item.name}${item.description}`.toLocaleLowerCase().includes(keyword))
 })
-
-function formatTime(value: string): string {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.valueOf()) ? '刚刚更新' : parsed.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
 
 function resetForm(): void {
   Object.assign(form, { name: '', description: '', autoParse: true, autoPublish: false, parserProfile: 'standard', chunkSize: 800, overlap: 120 })
@@ -145,11 +141,11 @@ onMounted(loadKnowledgeBases)
       <button v-if="workspaceStore.canManage && !searchText" class="primary-action" type="button" @click="openCreatePanel">创建新的知识空间</button>
     </div>
     <div v-else class="knowledge-grid">
-      <article v-for="knowledgeBase in filteredKnowledgeBases" :key="knowledgeBase.knowledgeBaseKey" class="knowledge-card">
+      <article v-for="knowledgeBase in filteredKnowledgeBases" :key="knowledgeBase.knowledgeBaseKey" class="knowledge-card" @click="router.push({ name: 'documents', params: { knowledgeBaseKey: knowledgeBase.knowledgeBaseKey } })">
         <div class="card-top"><span class="knowledge-glyph">◇</span><span class="status-chip" :class="knowledgeBase.autoPublish ? 'published' : 'pending'">{{ knowledgeBase.autoPublish ? '自动发布' : knowledgeBase.autoParse ? '自动解析' : '仅保留原文件' }}</span></div>
         <h2>{{ knowledgeBase.name }}</h2><p>{{ knowledgeBase.description || '尚未填写描述。' }}</p>
         <div class="card-settings"><span>解析：{{ knowledgeBase.autoParse ? '自动' : '手动' }}</span><span>发布：{{ knowledgeBase.autoPublish ? '自动' : '手动' }}</span></div>
-        <footer><time>{{ formatTime(knowledgeBase.updated) }} 更新</time><button v-if="workspaceStore.canManage" type="button" @click="openSettings(knowledgeBase.knowledgeBaseKey)">管理设置 →</button><span v-else>可查看</span></footer>
+        <footer><time>{{ formatTime(knowledgeBase.updated) }} 更新</time><button v-if="workspaceStore.canManage" type="button" @click.stop="openSettings(knowledgeBase.knowledgeBaseKey)">管理设置 -></button><span v-else>点击查看文档</span></footer>
       </article>
     </div>
 
