@@ -1,5 +1,6 @@
 package com.fons.cloud.ai.rag2okf.application.document;
 
+import com.fons.cloud.ai.rag2okf.common.dto.FileValidationPolicy;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;

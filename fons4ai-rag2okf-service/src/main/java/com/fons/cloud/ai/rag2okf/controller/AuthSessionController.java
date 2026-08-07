@@ -1,7 +1,7 @@
 package com.fons.cloud.ai.rag2okf.controller;
 
 import com.fons.cloud.ai.rag2okf.application.identity.AuthenticationApplicationService;
-import com.fons.cloud.ai.rag2okf.application.identity.LoginCommand;
+import com.fons.cloud.ai.rag2okf.common.dto.LoginCommand;
 import com.fons.cloud.ai.rag2okf.common.request.LoginRequest;
 import com.fons.cloud.ai.rag2okf.common.response.LoginResponse;
 import com.fons.cloud.common.result.R;

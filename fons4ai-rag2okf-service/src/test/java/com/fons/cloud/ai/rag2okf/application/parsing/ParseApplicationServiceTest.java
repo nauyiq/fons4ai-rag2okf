@@ -1,30 +1,28 @@
 package com.fons.cloud.ai.rag2okf.application.parsing;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fons.cloud.ai.rag2okf.application.model.CurrentUserContext;
-import com.fons.cloud.ai.rag2okf.application.model.ModelBusinessKeyGenerator;
+import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
+import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.common.constants.WorkspaceRole;
 import com.fons.cloud.ai.rag2okf.common.exeception.TaskExecutionException;
 import com.fons.cloud.ai.rag2okf.common.response.ChunkPreviewResponse;
 import com.fons.cloud.ai.rag2okf.common.response.ParsePreviewResponse;
 import com.fons.cloud.ai.rag2okf.common.response.ParseTriggerResponse;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbDocumentVersionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBaseEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbProcessingTaskEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
-import com.fons.cloud.ai.rag2okf.domain.task.ProcessingTask;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskType;
+import com.fons.cloud.ai.rag2okf.common.dto.ProcessingTask;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskType;
 import com.fons.cloud.ai.rag2okf.infrastructure.identity.WorkspaceAccessPolicy;
 import com.fons.cloud.ai.rag2okf.domain.service.KbChunkRevisionDomainService;
-import com.fons.cloud.ai.rag2okf.domain.service.KbDocumentVersionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbParseRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbSourceDocumentDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbWorkspaceDomainService;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -54,7 +52,6 @@ class ParseApplicationServiceTest {
     @Mock private WorkspaceAccessPolicy workspaceAccessPolicy;
     @Mock private KbSourceDocumentDomainService sourceDocumentDomainService;
     @Mock private KbKnowledgeBaseDomainService knowledgeBaseDomainService;
-    @Mock private KbDocumentVersionDomainService documentVersionDomainService;
     @Mock private KbParseRevisionDomainService parseRevisionDomainService;
     @Mock private KbChunkRevisionDomainService chunkRevisionDomainService;
     @Mock private KbWorkspaceDomainService workspaceDomainService;
@@ -69,7 +66,6 @@ class ParseApplicationServiceTest {
     private KbWorkspaceEntity workspace;
     private KbKnowledgeBaseEntity knowledgeBase;
     private KbSourceDocumentEntity document;
-    private KbDocumentVersionEntity version;
 
     @BeforeEach
     void setUp() {
@@ -92,15 +88,13 @@ class ParseApplicationServiceTest {
         document.setId(3L);
         document.setDocumentKey("01J_DOC");
         document.setKnowledgeBaseId(2L);
-        document.setCurrentDocumentVersionId(4L);
+        // 文件元数据已合并到源文档，直接在 document 上设置
+        document.setObjectKey("objects/01J_DOC.md");
+        document.setOriginalFilename("test.md");
+        document.setContentType("text/markdown");
+        document.setFileToken("01J_VER");
         document.setParseStatus("NOT_STARTED");
         document.setPublishStatus("UNPUBLISHED");
-
-        version = new KbDocumentVersionEntity();
-        version.setId(4L);
-        version.setVersionKey("01J_VER");
-        version.setOriginalFilename("test.md");
-        version.setContentType("text/markdown");
     }
 
     @Test
@@ -215,6 +209,5 @@ class ParseApplicationServiceTest {
         when(sourceDocumentDomainService.getOne(any())).thenReturn(document);
         when(knowledgeBaseDomainService.getById(2L)).thenReturn(knowledgeBase);
         when(workspaceDomainService.getById(1L)).thenReturn(workspace);
-        when(documentVersionDomainService.getById(4L)).thenReturn(version);
     }
 }

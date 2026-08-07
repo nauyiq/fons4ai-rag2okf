@@ -2,7 +2,7 @@ logging:
   config: classpath:logback.xml
 
 server:
-  port: ${RAG2OKF_SERVER_PORT:8080}
+  port: ${SERVER_PORT:8080}
 
 management:
   endpoints:

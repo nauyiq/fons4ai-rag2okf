@@ -1,9 +1,9 @@
 package com.fons.cloud.ai.rag2okf.task;
 
 import com.fons.cloud.ai.rag2okf.domain.entity.KbProcessingTaskEntity;
-import com.fons.cloud.ai.rag2okf.domain.task.ProcessingTask;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskStatus;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskType;
+import com.fons.cloud.ai.rag2okf.common.dto.ProcessingTask;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskStatus;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

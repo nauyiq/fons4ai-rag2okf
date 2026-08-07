@@ -1,5 +1,6 @@
 package com.fons.cloud.ai.rag2okf.application.identity;
 
+import com.fons.cloud.ai.rag2okf.common.dto.LoginCommand;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
 import com.fons.cloud.ai.rag2okf.common.exeception.AuthenticationDeniedException;
 import com.fons.cloud.ai.rag2okf.infrastructure.identity.AuthenticationRateLimiter;

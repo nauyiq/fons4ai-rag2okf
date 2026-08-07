@@ -2,8 +2,8 @@ package com.fons.cloud.ai.rag2okf.infrastructure.model;
 
 import com.fons.cloud.ai.rag2okf.common.constants.ModelType;
 import com.fons.cloud.ai.rag2okf.common.exeception.ModelConfigurationException;
-import com.fons.cloud.ai.rag2okf.application.model.ModelClientFactory;
-import com.fons.cloud.ai.rag2okf.application.model.ResolvedModelDescriptor;
+import com.fons.cloud.ai.rag2okf.common.dto.ModelClientFactory;
+import com.fons.cloud.ai.rag2okf.common.dto.ResolvedModelDescriptor;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;

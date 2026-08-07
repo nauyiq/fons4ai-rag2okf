@@ -1,6 +1,6 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.artifact;
 
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore;
 import com.fons.cloud.file.api.OssStoreService;
 import com.fons.cloud.file.common.request.OssObjectRequest;
 import com.fons.cloud.file.common.request.OssUploadRequest;
@@ -36,7 +36,6 @@ class FonsOssDocumentArtifactStoreTest {
         DocumentArtifactStore.StoredArtifact stored = store.storeOriginal(
                 new DocumentArtifactStore.OriginalArtifactRequest(
                         scope,
-                        "01J00000000000000000000003",
                         "loan-policy.pdf",
                         "application/pdf",
                         new ByteArrayInputStream("original content".getBytes(StandardCharsets.UTF_8))
@@ -45,7 +44,7 @@ class FonsOssDocumentArtifactStoreTest {
 
         assertThat(stored.objectKey()).isEqualTo(
                 "workspaces/01J00000000000000000000000/knowledge-bases/01J00000000000000000000001/"
-                        + "documents/01J00000000000000000000002/versions/01J00000000000000000000003/original"
+                        + "documents/01J00000000000000000000002/loan-policy.pdf"
         );
         assertThat(stored.sha256()).isEqualTo("bf573149b23303cac63c2a359b53760d919770c5d070047e76de42e2184f1046");
         assertThat(stored.metadata()).containsEntry("original-filename", "loan-policy.pdf")
@@ -55,7 +54,8 @@ class FonsOssDocumentArtifactStoreTest {
         try (InputStream inputStream = store.open(new DocumentArtifactStore.ArtifactReference(
                 scope,
                 DocumentArtifactStore.ArtifactType.ORIGINAL,
-                "01J00000000000000000000003"
+                "01J00000000000000000000003",
+                "loan-policy.pdf"
         )).inputStream()) {
             assertThat(inputStream.readAllBytes()).isEqualTo("original content".getBytes(StandardCharsets.UTF_8));
         }
@@ -63,12 +63,14 @@ class FonsOssDocumentArtifactStoreTest {
         store.delete(new DocumentArtifactStore.ArtifactReference(
                 scope,
                 DocumentArtifactStore.ArtifactType.ORIGINAL,
-                "01J00000000000000000000003"
+                "01J00000000000000000000003",
+                "loan-policy.pdf"
         ));
         assertThat(store.exists(new DocumentArtifactStore.ArtifactReference(
                 scope,
                 DocumentArtifactStore.ArtifactType.ORIGINAL,
-                "01J00000000000000000000003"
+                "01J00000000000000000000003",
+                "loan-policy.pdf"
         ))).isFalse();
     }
 
@@ -84,7 +86,6 @@ class FonsOssDocumentArtifactStoreTest {
 
         assertThatThrownBy(() -> store.storeOriginal(new DocumentArtifactStore.OriginalArtifactRequest(
                 scope,
-                "01J00000000000000000000003",
                 "loan-policy.txt",
                 "text/plain",
                 new ByteArrayInputStream("original content".getBytes(StandardCharsets.UTF_8))
@@ -99,14 +100,13 @@ class FonsOssDocumentArtifactStoreTest {
         );
         assertThatThrownBy(() -> store.storeOriginal(new DocumentArtifactStore.OriginalArtifactRequest(
                 validScope,
-                "01J00000000000000000000003",
                 "loan-policy.txt",
                 "text/plain",
                 new ByteArrayInputStream("original content".getBytes(StandardCharsets.UTF_8))
         ))).isInstanceOf(RuntimeException.class);
         assertThat(ossStoreService.deletedObjectKeys).containsKey(
                 "workspaces/01J00000000000000000000000/knowledge-bases/01J00000000000000000000001/"
-                        + "documents/01J00000000000000000000002/versions/01J00000000000000000000003/original"
+                        + "documents/01J00000000000000000000002/loan-policy.txt"
         );
     }
 

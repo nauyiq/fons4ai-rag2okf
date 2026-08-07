@@ -7,6 +7,7 @@ package com.fons.cloud.ai.rag2okf.common.response;
  *
  * @param documentKey 文档业务标识
  * @param displayName 文档展示名称
+ * @param folderPath 文件夹路径，根级为 /
  * @param currentFile 当前文件摘要
  * @param taskKey 异步任务业务标识，无任务时为 null
  * @param parseStatus 当前解析状态
@@ -16,6 +17,7 @@ package com.fons.cloud.ai.rag2okf.common.response;
 public record DocumentUploadResponse(
         String documentKey,
         String displayName,
+        String folderPath,
         CurrentFileSummary currentFile,
         String currentFileToken,
         String taskKey,

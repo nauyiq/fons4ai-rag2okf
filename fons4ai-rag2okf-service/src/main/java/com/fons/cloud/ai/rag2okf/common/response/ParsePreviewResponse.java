@@ -1,7 +1,7 @@
 package com.fons.cloud.ai.rag2okf.common.response;
 
-import com.fons.cloud.ai.rag2okf.domain.parsing.ParserTrace;
-import com.fons.cloud.ai.rag2okf.domain.parsing.SourceAnchor;
+import com.fons.cloud.ai.rag2okf.common.dto.ParserTrace;
+import com.fons.cloud.ai.rag2okf.common.dto.SourceAnchor;
 
 import java.util.List;
 

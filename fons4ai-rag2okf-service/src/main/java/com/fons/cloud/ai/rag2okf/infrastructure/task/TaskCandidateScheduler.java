@@ -1,7 +1,7 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.task;
 
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
-import com.fons.cloud.ai.rag2okf.domain.task.ProcessingTask;
+import com.fons.cloud.ai.rag2okf.common.dto.ProcessingTask;
 import com.fons.cloud.lock.common.DistributeLockException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,7 +38,7 @@ public class TaskCandidateScheduler {
      *
      * <p>固定延迟 5 秒，初始延迟 10 秒。worker 不占用 HTTP 线程。
      */
-    @Scheduled(fixedDelayString = "${rag2okf.task.scan-interval-ms:5000}", initialDelayString = "10000")
+    @Scheduled(fixedDelayString = "${rag2okf.task.scan-interval-ms:60000}", initialDelayString = "10000")
     public void scanAndExecute() {
         Date now = new Date();
         List<ProcessingTask> candidates = taskApplicationService.scanCandidates(now, scanBatchSize);

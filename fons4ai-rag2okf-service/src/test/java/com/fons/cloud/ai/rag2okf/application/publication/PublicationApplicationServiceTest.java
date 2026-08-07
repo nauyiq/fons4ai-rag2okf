@@ -1,13 +1,12 @@
 package com.fons.cloud.ai.rag2okf.application.publication;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fons.cloud.ai.rag2okf.application.model.CurrentUserContext;
+import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.common.exeception.KnowledgeBaseConflictException;
 import com.fons.cloud.ai.rag2okf.common.exeception.TaskExecutionException;
 import com.fons.cloud.ai.rag2okf.common.response.PublicationResponse;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbChunkRevisionEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbDocumentVersionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBaseEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbProcessingTaskEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbPublicationRevisionEntity;
@@ -15,14 +14,13 @@ import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
 import com.fons.cloud.ai.rag2okf.domain.service.KbChunkRevisionDomainService;
-import com.fons.cloud.ai.rag2okf.domain.service.KbDocumentVersionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbProcessingTaskDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbPublicationRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbSourceDocumentDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbWorkspaceDomainService;
-import com.fons.cloud.ai.rag2okf.domain.task.ProcessingTask;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskType;
+import com.fons.cloud.ai.rag2okf.common.dto.ProcessingTask;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskType;
 import com.fons.cloud.ai.rag2okf.infrastructure.identity.WorkspaceAccessPolicy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -55,7 +53,6 @@ class PublicationApplicationServiceTest {
     @Mock private KbSourceDocumentDomainService sourceDocumentDomainService;
     @Mock private KbKnowledgeBaseDomainService knowledgeBaseDomainService;
     @Mock private KbWorkspaceDomainService workspaceDomainService;
-    @Mock private KbDocumentVersionDomainService documentVersionDomainService;
     @Mock private KbChunkRevisionDomainService chunkRevisionDomainService;
     @Mock private KbPublicationRevisionDomainService publicationRevisionDomainService;
     @Mock private KbProcessingTaskDomainService processingTaskDomainService;
@@ -68,7 +65,6 @@ class PublicationApplicationServiceTest {
     private KbWorkspaceEntity workspace;
     private KbKnowledgeBaseEntity knowledgeBase;
     private KbSourceDocumentEntity document;
-    private KbDocumentVersionEntity version;
     private KbChunkRevisionEntity chunkRevision;
 
     @BeforeEach
@@ -89,15 +85,13 @@ class PublicationApplicationServiceTest {
         document.setId(3L);
         document.setDocumentKey("01J_DOC");
         document.setKnowledgeBaseId(2L);
-        document.setCurrentDocumentVersionId(4L);
+        document.setFileToken("01J_FILE_TOKEN");
+        document.setOriginalFilename("test.pdf");
+        document.setContentType("application/pdf");
         document.setCurrentParseRevisionId(5L);
         document.setCurrentChunkRevisionId(6L);
         document.setParseStatus("SUCCEEDED");
         document.setPublishStatus("UNPUBLISHED");
-
-        version = new KbDocumentVersionEntity();
-        version.setId(4L);
-        version.setVersionKey("01J_VER");
 
         chunkRevision = new KbChunkRevisionEntity();
         chunkRevision.setId(6L);
@@ -134,7 +128,6 @@ class PublicationApplicationServiceTest {
     void triggerPublish_runningTaskExists_throwsConflict() {
         setupCommonMocks();
         when(chunkRevisionDomainService.getById(6L)).thenReturn(chunkRevision);
-        when(documentVersionDomainService.getById(4L)).thenReturn(version);
         KbProcessingTaskEntity runningTask = new KbProcessingTaskEntity();
         when(processingTaskDomainService.getOne(any())).thenReturn(runningTask);
 
@@ -147,7 +140,6 @@ class PublicationApplicationServiceTest {
     void triggerPublish_firstPublish_createsTaskAndSetsPublishing() {
         setupCommonMocks();
         when(chunkRevisionDomainService.getById(6L)).thenReturn(chunkRevision);
-        when(documentVersionDomainService.getById(4L)).thenReturn(version);
 
         KbProcessingTaskEntity taskEntity = new KbProcessingTaskEntity();
         taskEntity.setTaskKey("01J_PUB_TASK");
@@ -172,7 +164,6 @@ class PublicationApplicationServiceTest {
         document.setPublishStatus("PUBLISHED");
         setupCommonMocks();
         when(chunkRevisionDomainService.getById(6L)).thenReturn(chunkRevision);
-        when(documentVersionDomainService.getById(4L)).thenReturn(version);
         KbPublicationRevisionEntity existingPublication = new KbPublicationRevisionEntity();
         existingPublication.setPublicationRevisionKey("01J_OLD_PUB");
         when(publicationRevisionDomainService.getById(7L)).thenReturn(existingPublication);
@@ -194,7 +185,6 @@ class PublicationApplicationServiceTest {
     void triggerPublish_autoAndManualShareSameFlow() {
         setupCommonMocks();
         when(chunkRevisionDomainService.getById(6L)).thenReturn(chunkRevision);
-        when(documentVersionDomainService.getById(4L)).thenReturn(version);
 
         KbProcessingTaskEntity taskEntity = new KbProcessingTaskEntity();
         taskEntity.setTaskKey("01J_PUB_AUTO");

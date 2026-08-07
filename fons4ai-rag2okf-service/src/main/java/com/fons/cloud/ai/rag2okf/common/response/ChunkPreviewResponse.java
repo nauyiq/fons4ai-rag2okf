@@ -1,6 +1,6 @@
 package com.fons.cloud.ai.rag2okf.common.response;
 
-import com.fons.cloud.ai.rag2okf.domain.parsing.ChunkProfile;
+import com.fons.cloud.ai.rag2okf.common.dto.ParsingChunkProfile;
 
 import java.util.List;
 
@@ -23,7 +23,7 @@ import java.util.List;
 public record ChunkPreviewResponse(
         boolean hasChunk,
         String currentChunkRevisionKey,
-        ChunkProfile chunkProfile,
+        ParsingChunkProfile chunkProfile,
         int parentCount,
         int childCount,
         String contentHash,

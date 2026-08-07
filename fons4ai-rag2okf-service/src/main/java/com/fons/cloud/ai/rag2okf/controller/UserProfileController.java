@@ -3,6 +3,9 @@ package com.fons.cloud.ai.rag2okf.controller;
 import com.fons.cloud.ai.rag2okf.application.identity.UserProfileApplicationService;
 import com.fons.cloud.ai.rag2okf.common.request.UpdateUserProfileRequest;
 import com.fons.cloud.ai.rag2okf.common.response.UserProfileResponse;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceMemberEntity;
 import com.fons.cloud.common.result.R;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,7 +33,10 @@ public class UserProfileController {
      */
     @GetMapping
     public R<UserProfileResponse> currentUser() {
-        return R.ok(UserProfileResponse.from(userProfileApplicationService.currentUser()));
+        KbUserEntity user = userProfileApplicationService.currentUser();
+        KbWorkspaceEntity workspace = userProfileApplicationService.currentWorkspace(user);
+        KbWorkspaceMemberEntity membership = userProfileApplicationService.currentMembership(user, workspace);
+        return R.ok(UserProfileResponse.from(user, workspace, membership));
     }
 
     /**
@@ -41,9 +47,11 @@ public class UserProfileController {
      */
     @PatchMapping
     public R<UserProfileResponse> updateCurrentUser(@RequestBody UpdateUserProfileRequest request) {
-        return R.ok(UserProfileResponse.from(userProfileApplicationService.updateCurrentUser(
-                request.displayName(), request.avatarUrl(), request.preferenceJson()
-        )));
+        KbUserEntity user = userProfileApplicationService.updateCurrentUser(
+                request.displayName(), request.avatarUrl(), request.preferenceJson());
+        KbWorkspaceEntity workspace = userProfileApplicationService.currentWorkspace(user);
+        KbWorkspaceMemberEntity membership = userProfileApplicationService.currentMembership(user, workspace);
+        return R.ok(UserProfileResponse.from(user, workspace, membership));
     }
 
 }

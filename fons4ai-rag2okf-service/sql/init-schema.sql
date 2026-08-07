@@ -148,7 +148,15 @@ CREATE TABLE kb_source_document (
     document_key CHAR(26) NOT NULL COMMENT '文档逻辑业务标识',
     knowledge_base_id BIGINT NOT NULL COMMENT '所属知识库主键',
     display_name VARCHAR(255) NOT NULL COMMENT '文档展示名称',
-    current_document_version_id BIGINT NULL COMMENT '当前不可变文件版本主键',
+    folder_path VARCHAR(512) NOT NULL DEFAULT '/' COMMENT '文件夹路径，根级为 /',
+    object_key VARCHAR(512) NOT NULL COMMENT 'MinIO 系统对象 key',
+    original_filename VARCHAR(255) NOT NULL COMMENT '上传时原始文件名',
+    content_type VARCHAR(128) NOT NULL COMMENT '服务端识别的媒体类型',
+    file_extension VARCHAR(32) NOT NULL COMMENT '规范化文件扩展名',
+    size_bytes BIGINT NOT NULL COMMENT '文件字节数',
+    sha256 CHAR(64) NOT NULL COMMENT '文件内容 SHA-256',
+    file_token CHAR(26) NOT NULL COMMENT '文件更新 CAS 令牌，每次更新重新生成',
+    upload_actor_id BIGINT NOT NULL COMMENT '上传用户主键',
     current_parse_revision_id BIGINT NULL COMMENT '当前解析 Revision 主键',
     current_chunk_revision_id BIGINT NULL COMMENT '当前解析侧分块 Revision 主键',
     active_publication_revision_id BIGINT NULL COMMENT '当前生效发布 Revision 主键',
@@ -160,36 +168,16 @@ CREATE TABLE kb_source_document (
     version INT NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
     PRIMARY KEY (id),
     UNIQUE KEY uk_kb_source_document_key (document_key),
+    UNIQUE KEY uk_kb_source_document_object_key (object_key),
     KEY idx_kb_source_document_knowledge_updated (knowledge_base_id, updated),
+    KEY idx_kb_source_document_folder (knowledge_base_id, folder_path),
     KEY idx_kb_source_document_active_publication (active_publication_revision_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='源文档逻辑身份与当前指针';
-
-CREATE TABLE kb_document_version (
-    id BIGINT NOT NULL AUTO_INCREMENT COMMENT '自增主键',
-    version_key CHAR(26) NOT NULL COMMENT '不可变文件版本业务标识',
-    source_document_id BIGINT NOT NULL COMMENT '源文档主键',
-    object_key VARCHAR(512) NOT NULL COMMENT 'MinIO 系统对象 key',
-    original_filename VARCHAR(255) NOT NULL COMMENT '上传时原始文件名',
-    content_type VARCHAR(128) NOT NULL COMMENT '服务端识别的媒体类型',
-    file_extension VARCHAR(32) NOT NULL COMMENT '规范化文件扩展名',
-    size_bytes BIGINT NOT NULL COMMENT '文件字节数',
-    sha256 CHAR(64) NOT NULL COMMENT '文件内容 SHA-256',
-    upload_actor_id BIGINT NOT NULL COMMENT '上传用户主键',
-    created DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
-    updated DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
-    deleted TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除标记',
-    version INT NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_kb_document_version_key (version_key),
-    UNIQUE KEY uk_kb_document_version_object_key (object_key),
-    KEY idx_kb_document_version_document_created (source_document_id, created)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='不可变文档文件版本';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='源文档逻辑身份、文件元数据与当前指针';
 
 CREATE TABLE kb_parse_revision (
     id BIGINT NOT NULL AUTO_INCREMENT COMMENT '自增主键',
     parse_revision_key CHAR(26) NOT NULL COMMENT '解析 Revision 业务标识',
     source_document_id BIGINT NOT NULL COMMENT '源文档主键',
-    document_version_id BIGINT NOT NULL COMMENT '被解析的文件版本主键',
     parser_profile_json JSON NOT NULL COMMENT '解析器 Profile 输入快照',
     parser_trace_json JSON NULL COMMENT '解析器选择与执行轨迹',
     manifest_object_key VARCHAR(512) NULL COMMENT '解析结果 manifest 对象 key',
@@ -204,8 +192,7 @@ CREATE TABLE kb_parse_revision (
     version INT NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
     PRIMARY KEY (id),
     UNIQUE KEY uk_kb_parse_revision_key (parse_revision_key),
-    KEY idx_kb_parse_revision_document_created (source_document_id, created),
-    KEY idx_kb_parse_revision_version_status (document_version_id, status)
+    KEY idx_kb_parse_revision_document_created (source_document_id, created)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='不可变解析结果及执行轨迹';
 
 CREATE TABLE kb_chunk_revision (
@@ -233,7 +220,6 @@ CREATE TABLE kb_publication_revision (
     id BIGINT NOT NULL AUTO_INCREMENT COMMENT '自增主键',
     publication_revision_key CHAR(26) NOT NULL COMMENT '发布 Revision 业务标识',
     source_document_id BIGINT NOT NULL COMMENT '源文档主键',
-    document_version_id BIGINT NOT NULL COMMENT '发布快照文件版本主键',
     parse_revision_id BIGINT NOT NULL COMMENT '发布快照解析 Revision 主键',
     chunk_revision_id BIGINT NOT NULL COMMENT '发布快照分块 Revision 主键',
     manifest_object_key VARCHAR(512) NULL COMMENT '发布 manifest 对象 key',

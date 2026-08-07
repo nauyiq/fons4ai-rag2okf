@@ -17,10 +17,10 @@ import co.elastic.clients.elasticsearch.indices.GetMappingResponse;
 import co.elastic.clients.elasticsearch.indices.get_mapping.IndexMappingRecord;
 import co.elastic.clients.transport.endpoints.BooleanResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fons.cloud.ai.rag2okf.domain.publication.PublicationProjectionPort.ChunkProjection;
-import com.fons.cloud.ai.rag2okf.domain.publication.PublicationProjectionPort.ProjectionException;
-import com.fons.cloud.ai.rag2okf.domain.publication.PublicationProjectionPort.ProjectionRequest;
-import com.fons.cloud.ai.rag2okf.domain.publication.PublicationProjectionPort.ProjectionResult;
+import com.fons.cloud.ai.rag2okf.common.dto.PublicationProjectionPort.ChunkProjection;
+import com.fons.cloud.ai.rag2okf.common.dto.PublicationProjectionPort.ProjectionException;
+import com.fons.cloud.ai.rag2okf.common.dto.PublicationProjectionPort.ProjectionRequest;
+import com.fons.cloud.ai.rag2okf.common.dto.PublicationProjectionPort.ProjectionResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -159,7 +159,7 @@ class ElasticsearchPublicationProjectionTest {
     @DisplayName("projectChunks: 空分块列表拒绝写入")
     void shouldRejectEmptyChunkList() {
         ProjectionRequest request = new ProjectionRequest(
-                "pub-01", "ws", "kb", "doc", "ver", "parse", "chunk",
+                "pub-01", "ws", "kb", "doc", "parse", "chunk",
                 "hash", List.of());
         assertThatThrownBy(() -> adapter.projectChunks(request))
                 .isInstanceOf(ProjectionException.class)
@@ -247,7 +247,7 @@ class ElasticsearchPublicationProjectionTest {
                     null));
         }
         return new ProjectionRequest(
-                "pub-01", "ws-01", "kb-01", "doc-01", "ver-01",
+                "pub-01", "ws-01", "kb-01", "doc-01",
                 "parse-01", "chunk-01", "sha256:abc", chunks);
     }
 

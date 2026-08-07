@@ -1,7 +1,7 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.artifact;
 
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore;
 import com.fons.cloud.file.api.OssStoreService;
 import com.fons.cloud.file.common.request.OssObjectRequest;
 import com.fons.cloud.file.common.request.OssUploadRequest;
@@ -39,7 +39,7 @@ public class FonsOssDocumentArtifactStore implements DocumentArtifactStore {
     @Override
     public StoredArtifact storeOriginal(OriginalArtifactRequest request) {
         requireOriginalRequest(request);
-        String objectKey = originalObjectKey(request.scope(), request.versionKey());
+        String objectKey = originalObjectKey(request.scope(), request.originalFilename());
         Map<String, String> metadata = new LinkedHashMap<>();
         metadata.put(ORIGINAL_FILENAME_METADATA, request.originalFilename());
         metadata.put(CONTENT_TYPE_METADATA, request.contentType());
@@ -125,15 +125,21 @@ public class FonsOssDocumentArtifactStore implements DocumentArtifactStore {
             throw new DocumentArtifactException();
         }
         return reference.type() == ArtifactType.ORIGINAL
-                ? originalObjectKey(reference.scope(), reference.revisionKey())
+                ? originalObjectKey(reference.scope(), reference.detail())
                 : manifestObjectKey(reference.scope(), reference.type(), reference.revisionKey());
     }
 
-    private String originalObjectKey(ArtifactScope scope, String versionKey) {
+    /**
+     * 构造原文件对象 key。CR-014 后去掉 versions/{versionKey} 段，
+     * 直接使用 scope.documentKey 定位文档级原文件。
+     */
+    private String originalObjectKey(ArtifactScope scope, String originalFilename) {
         validateScope(scope);
-        validateBusinessKey(versionKey);
-        return "workspaces/%s/knowledge-bases/%s/documents/%s/versions/%s/original".formatted(
-                scope.workspaceKey(), scope.knowledgeBaseKey(), scope.documentKey(), versionKey
+        String safeName = (originalFilename != null && !originalFilename.isBlank())
+                ? sanitizeFilename(originalFilename)
+                : "original";
+        return "workspaces/%s/knowledge-bases/%s/documents/%s/%s".formatted(
+                scope.workspaceKey(), scope.knowledgeBaseKey(), scope.documentKey(), safeName
         );
     }
 
@@ -173,6 +179,16 @@ public class FonsOssDocumentArtifactStore implements DocumentArtifactStore {
         return filename != null && !filename.isBlank() && filename.length() <= 255
                 && filename.indexOf('/') < 0 && filename.indexOf('\\') < 0
                 && filename.chars().noneMatch(character -> character == 0 || Character.isISOControl(character));
+    }
+
+    private String sanitizeFilename(String filename) {
+        String name = filename.strip();
+        name = name.replace('/', '_').replace('\\', '_');
+        name = name.replaceAll("[\\x00-\\x1f]", "_");
+        if (name.length() > 255) {
+            name = name.substring(0, 255);
+        }
+        return name.isBlank() ? "original" : name;
     }
 
     private void validateScope(ArtifactScope scope) {

@@ -8,6 +8,7 @@ package com.fons.cloud.ai.rag2okf.common.response;
  * @param documentKey 文档业务标识
  * @param knowledgeBaseKey 所属知识库业务标识
  * @param displayName 文档展示名称
+ * @param folderPath 文件夹路径，根级为 /
  * @param currentFile 当前文件摘要
  * @param currentFileToken 当前文件 CAS 令牌，仅用于更新请求，不得展示或持久化
  * @param parseStatus 当前解析状态
@@ -21,6 +22,7 @@ public record DocumentDetailResponse(
         String documentKey,
         String knowledgeBaseKey,
         String displayName,
+        String folderPath,
         CurrentFileSummary currentFile,
         String currentFileToken,
         String parseStatus,

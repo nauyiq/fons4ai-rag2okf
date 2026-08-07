@@ -1,36 +1,34 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.task;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fons.cloud.ai.rag2okf.application.publication.PublicationTaskPayload;
+import com.fons.cloud.ai.rag2okf.common.dto.PublicationTaskPayload;
 import com.fons.cloud.ai.rag2okf.application.task.OutboxApplicationService;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactContent;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactReference;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactScope;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactType;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactContent;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactReference;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactScope;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactType;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbChunkRevisionEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbDocumentVersionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbParseRevisionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbPublicationRevisionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
-import com.fons.cloud.ai.rag2okf.domain.parsing.ChunkManifest;
-import com.fons.cloud.ai.rag2okf.domain.publication.PublicationManifest;
-import com.fons.cloud.ai.rag2okf.domain.publication.PublicationProjectionPort;
-import com.fons.cloud.ai.rag2okf.domain.publication.PublicationProjectionPort.ChunkProjection;
-import com.fons.cloud.ai.rag2okf.domain.publication.PublicationProjectionPort.ProjectionRequest;
-import com.fons.cloud.ai.rag2okf.domain.publication.PublicationProjectionPort.ProjectionResult;
+import com.fons.cloud.ai.rag2okf.common.dto.ChunkManifest;
+import com.fons.cloud.ai.rag2okf.common.dto.PublicationManifest;
+import com.fons.cloud.ai.rag2okf.common.dto.PublicationProjectionPort;
+import com.fons.cloud.ai.rag2okf.common.dto.PublicationProjectionPort.ChunkProjection;
+import com.fons.cloud.ai.rag2okf.common.dto.PublicationProjectionPort.ProjectionRequest;
+import com.fons.cloud.ai.rag2okf.common.dto.PublicationProjectionPort.ProjectionResult;
 import com.fons.cloud.ai.rag2okf.domain.service.KbChunkRevisionDomainService;
-import com.fons.cloud.ai.rag2okf.domain.service.KbDocumentVersionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbParseRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbPublicationRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbSourceDocumentDomainService;
-import com.fons.cloud.ai.rag2okf.domain.task.ProcessingTask;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskExecutionPort;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskExecutionResult;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskType;
-import com.fons.cloud.ai.rag2okf.application.model.ModelBusinessKeyGenerator;
+import com.fons.cloud.ai.rag2okf.common.dto.ProcessingTask;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskExecutionPort;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskExecutionResult;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskType;
+import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.application.publication.EmbeddingProjectionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -77,7 +75,6 @@ public class PublicationTaskExecutor implements TaskExecutionPort {
     private final KbSourceDocumentDomainService sourceDocumentDomainService;
     private final KbParseRevisionDomainService parseRevisionDomainService;
     private final KbChunkRevisionDomainService chunkRevisionDomainService;
-    private final KbDocumentVersionDomainService documentVersionDomainService;
     private final KbPublicationRevisionDomainService publicationRevisionDomainService;
     private final TaskApplicationService taskApplicationService;
     private final OutboxApplicationService outboxApplicationService;
@@ -94,7 +91,6 @@ public class PublicationTaskExecutor implements TaskExecutionPort {
                                    KbSourceDocumentDomainService sourceDocumentDomainService,
                                    KbParseRevisionDomainService parseRevisionDomainService,
                                    KbChunkRevisionDomainService chunkRevisionDomainService,
-                                   KbDocumentVersionDomainService documentVersionDomainService,
                                    KbPublicationRevisionDomainService publicationRevisionDomainService,
                                    TaskApplicationService taskApplicationService,
                                    OutboxApplicationService outboxApplicationService,
@@ -106,7 +102,6 @@ public class PublicationTaskExecutor implements TaskExecutionPort {
         this.sourceDocumentDomainService = sourceDocumentDomainService;
         this.parseRevisionDomainService = parseRevisionDomainService;
         this.chunkRevisionDomainService = chunkRevisionDomainService;
-        this.documentVersionDomainService = documentVersionDomainService;
         this.publicationRevisionDomainService = publicationRevisionDomainService;
         this.taskApplicationService = taskApplicationService;
         this.outboxApplicationService = outboxApplicationService;
@@ -163,7 +158,6 @@ public class PublicationTaskExecutor implements TaskExecutionPort {
                     payload.workspaceKey(),
                     payload.knowledgeBaseKey(),
                     payload.documentKey(),
-                    payload.versionKey(),
                     payload.parseRevisionKey(),
                     payload.chunkRevisionKey(),
                     contentHash,
@@ -241,7 +235,6 @@ public class PublicationTaskExecutor implements TaskExecutionPort {
         KbPublicationRevisionEntity publicationRevision = new KbPublicationRevisionEntity();
         publicationRevision.setPublicationRevisionKey(publicationRevisionKey);
         publicationRevision.setSourceDocumentId(payload.sourceDocumentId());
-        publicationRevision.setDocumentVersionId(payload.documentVersionId());
         publicationRevision.setParseRevisionId(payload.parseRevisionId());
         publicationRevision.setChunkRevisionId(payload.chunkRevisionId());
         publicationRevision.setProjectionIndex(projectionResult.projectionIndex());

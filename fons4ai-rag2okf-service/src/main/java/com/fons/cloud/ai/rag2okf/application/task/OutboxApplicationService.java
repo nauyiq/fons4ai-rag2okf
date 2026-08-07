@@ -1,10 +1,10 @@
 package com.fons.cloud.ai.rag2okf.application.task;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.fons.cloud.ai.rag2okf.application.model.ModelBusinessKeyGenerator;
+import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbOutboxEventEntity;
 import com.fons.cloud.ai.rag2okf.domain.service.KbOutboxEventDomainService;
-import com.fons.cloud.ai.rag2okf.domain.task.OutboxEventStatus;
+import com.fons.cloud.ai.rag2okf.common.dto.OutboxEventStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

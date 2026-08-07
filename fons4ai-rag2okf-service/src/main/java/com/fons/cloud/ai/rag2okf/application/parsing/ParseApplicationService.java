@@ -2,8 +2,9 @@ package com.fons.cloud.ai.rag2okf.application.parsing;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fons.cloud.ai.rag2okf.application.model.CurrentUserContext;
-import com.fons.cloud.ai.rag2okf.application.model.ModelBusinessKeyGenerator;
+import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
+import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
+import com.fons.cloud.ai.rag2okf.common.dto.ParseTaskPayload;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.common.constants.WorkspaceRole;
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
@@ -15,28 +16,26 @@ import com.fons.cloud.ai.rag2okf.common.response.ChunkPreviewResponse.ChunkView;
 import com.fons.cloud.ai.rag2okf.common.response.ParsePreviewResponse;
 import com.fons.cloud.ai.rag2okf.common.response.ParsePreviewResponse.ParsedBlockView;
 import com.fons.cloud.ai.rag2okf.common.response.ParseTriggerResponse;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactContent;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactReference;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactScope;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactType;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactContent;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactReference;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactScope;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactType;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbChunkRevisionEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbDocumentVersionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBaseEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbParseRevisionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
-import com.fons.cloud.ai.rag2okf.domain.parsing.ChunkManifest;
-import com.fons.cloud.ai.rag2okf.domain.parsing.ChunkProfile;
-import com.fons.cloud.ai.rag2okf.domain.parsing.ParseManifest;
+import com.fons.cloud.ai.rag2okf.common.dto.ChunkManifest;
+import com.fons.cloud.ai.rag2okf.common.dto.ParsingChunkProfile;
+import com.fons.cloud.ai.rag2okf.common.dto.ParseManifest;
 import com.fons.cloud.ai.rag2okf.domain.service.KbChunkRevisionDomainService;
-import com.fons.cloud.ai.rag2okf.domain.service.KbDocumentVersionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbParseRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbSourceDocumentDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbWorkspaceDomainService;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskType;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskType;
 import com.fons.cloud.ai.rag2okf.infrastructure.identity.WorkspaceAccessPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -72,7 +71,6 @@ public class ParseApplicationService {
     private final WorkspaceAccessPolicy workspaceAccessPolicy;
     private final KbSourceDocumentDomainService sourceDocumentDomainService;
     private final KbKnowledgeBaseDomainService knowledgeBaseDomainService;
-    private final KbDocumentVersionDomainService documentVersionDomainService;
     private final KbParseRevisionDomainService parseRevisionDomainService;
     private final KbChunkRevisionDomainService chunkRevisionDomainService;
     private final KbWorkspaceDomainService workspaceDomainService;
@@ -98,12 +96,6 @@ public class ParseApplicationService {
         workspaceAccessPolicy.checkAccess(
                 user.getUserKey(), workspace.getWorkspaceKey(), WorkspaceRole.ADMIN);
 
-        KbDocumentVersionEntity currentVersion = documentVersionDomainService.getById(
-                document.getCurrentDocumentVersionId());
-        if (currentVersion == null) {
-            throw new DocumentArtifactException();
-        }
-
         // SKIP 模式不创建任务（AC-013）
         if ("SKIP".equalsIgnoreCase(parseMode)) {
             log.info("Parse skipped by explicit SKIP mode: documentKey={}", documentKey);
@@ -121,8 +113,8 @@ public class ParseApplicationService {
                     document.getPublishStatus(), document.getUpdated());
         }
 
-        // 构建任务输入快照
-        ChunkProfile chunkProfile = resolveChunkProfile(knowledgeBase);
+        // 构建任务输入快照（文件元数据直接取自源文档）
+        ParsingChunkProfile chunkProfile = resolveParsingChunkProfile(knowledgeBase);
         String parserProfile = resolveParserProfile(knowledgeBase);
         boolean autoPublish = Boolean.TRUE.equals(knowledgeBase.getAutoPublish());
 
@@ -131,21 +123,20 @@ public class ParseApplicationService {
                 knowledgeBase.getKnowledgeBaseKey(),
                 documentKey,
                 document.getId(),
-                currentVersion.getId(),
-                currentVersion.getVersionKey(),
-                currentVersion.getOriginalFilename(),
-                currentVersion.getContentType(),
+                document.getFileToken(),
+                document.getOriginalFilename(),
+                document.getContentType(),
                 parserProfile,
                 chunkProfile,
                 autoPublish);
 
         String payloadJson = serializePayload(payload);
-        String idempotencyKey = "PARSE:" + currentVersion.getVersionKey();
+        String idempotencyKey = "PARSE:" + document.getFileToken();
 
         // 幂等创建任务
         var task = taskApplicationService.createTask(
                 workspace.getId(), knowledgeBase.getId(), document.getId(),
-                TaskType.PARSE, currentVersion.getVersionKey(),
+                TaskType.PARSE, document.getFileToken(),
                 idempotencyKey, payloadJson);
 
         // 更新解析状态为 QUEUED
@@ -305,16 +296,16 @@ public class ParseApplicationService {
 
     // ────────────────────────────── 辅助方法 ──────────────────────────────
 
-    private ChunkProfile resolveChunkProfile(KbKnowledgeBaseEntity knowledgeBase) {
+    private ParsingChunkProfile resolveParsingChunkProfile(KbKnowledgeBaseEntity knowledgeBase) {
         String json = knowledgeBase.getChunkProfileJson();
         if (json == null || json.isBlank()) {
-            return ChunkProfile.DEFAULT_RECURSIVE;
+            return ParsingChunkProfile.DEFAULT_RECURSIVE;
         }
         try {
-            return objectMapper.readValue(json, ChunkProfile.class);
+            return objectMapper.readValue(json, ParsingChunkProfile.class);
         } catch (IOException e) {
             log.warn("Failed to parse chunkProfileJson, using default: {}", json, e);
-            return ChunkProfile.DEFAULT_RECURSIVE;
+            return ParsingChunkProfile.DEFAULT_RECURSIVE;
         }
     }
 

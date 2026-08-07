@@ -1,27 +1,26 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.task;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fons.cloud.ai.rag2okf.application.model.ModelBusinessKeyGenerator;
+import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.application.publication.EmbeddingProjectionService;
-import com.fons.cloud.ai.rag2okf.application.publication.PublicationTaskPayload;
+import com.fons.cloud.ai.rag2okf.common.dto.PublicationTaskPayload;
 import com.fons.cloud.ai.rag2okf.application.task.OutboxApplicationService;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactContent;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactContent;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbPublicationRevisionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
-import com.fons.cloud.ai.rag2okf.domain.parsing.ChunkManifest;
-import com.fons.cloud.ai.rag2okf.domain.parsing.ChunkProfile;
-import com.fons.cloud.ai.rag2okf.domain.publication.PublicationProjectionPort;
-import com.fons.cloud.ai.rag2okf.domain.publication.PublicationProjectionPort.ProjectionResult;
+import com.fons.cloud.ai.rag2okf.common.dto.ChunkManifest;
+import com.fons.cloud.ai.rag2okf.common.dto.ParsingChunkProfile;
+import com.fons.cloud.ai.rag2okf.common.dto.PublicationProjectionPort;
+import com.fons.cloud.ai.rag2okf.common.dto.PublicationProjectionPort.ProjectionResult;
 import com.fons.cloud.ai.rag2okf.domain.service.KbChunkRevisionDomainService;
-import com.fons.cloud.ai.rag2okf.domain.service.KbDocumentVersionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbParseRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbPublicationRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbSourceDocumentDomainService;
-import com.fons.cloud.ai.rag2okf.domain.task.ProcessingTask;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskExecutionResult;
+import com.fons.cloud.ai.rag2okf.common.dto.ProcessingTask;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskExecutionResult;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbProcessingTaskEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -55,7 +54,6 @@ class PublicationTaskExecutorTest {
     @Mock private KbSourceDocumentDomainService sourceDocumentDomainService;
     @Mock private KbParseRevisionDomainService parseRevisionDomainService;
     @Mock private KbChunkRevisionDomainService chunkRevisionDomainService;
-    @Mock private KbDocumentVersionDomainService documentVersionDomainService;
     @Mock private KbPublicationRevisionDomainService publicationRevisionDomainService;
     @Mock private TaskApplicationService taskApplicationService;
     @Mock private OutboxApplicationService outboxApplicationService;
@@ -75,7 +73,7 @@ class PublicationTaskExecutorTest {
         executor = new PublicationTaskExecutor(
                 documentArtifactStore, projectionPort,
                 sourceDocumentDomainService, parseRevisionDomainService,
-                chunkRevisionDomainService, documentVersionDomainService,
+                chunkRevisionDomainService,
                 publicationRevisionDomainService, taskApplicationService,
                 outboxApplicationService, keyGenerator, objectMapper,
                 embeddingProjectionService);
@@ -92,11 +90,11 @@ class PublicationTaskExecutorTest {
         selfField.set(executor, spyExecutor);
 
         payload = new PublicationTaskPayload(
-                "01J_WS", "01J_KB", "01J_DOC", 3L, 4L, "01J_VER",
+                "01J_WS", "01J_KB", "01J_DOC", 3L, "01J_FILE_TOKEN",
                 5L, "01J_PARSE", 6L, "01J_CHUNK", "MANUAL");
 
         chunkManifest = new ChunkManifest(
-                "01J_CHUNK", "01J_PARSE", ChunkProfile.DEFAULT_RECURSIVE,
+                "01J_CHUNK", "01J_PARSE", ParsingChunkProfile.DEFAULT_RECURSIVE,
                 1, 2,
                 List.of(
                         new ChunkManifest.Chunk(0, "parent content", null, true, Map.of()),
@@ -168,7 +166,7 @@ class PublicationTaskExecutorTest {
     void execute_emptyChunks_rejected() throws Exception {
         ProcessingTask task = buildTask(payload);
         ChunkManifest emptyManifest = new ChunkManifest(
-                "01J_CHUNK", "01J_PARSE", ChunkProfile.DEFAULT_RECURSIVE,
+                "01J_CHUNK", "01J_PARSE", ParsingChunkProfile.DEFAULT_RECURSIVE,
                 0, 0, List.of(), "sha256:empty");
         setupArtifactRead(emptyManifest);
 

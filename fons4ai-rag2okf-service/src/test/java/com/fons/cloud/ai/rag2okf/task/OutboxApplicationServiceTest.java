@@ -1,11 +1,11 @@
 package com.fons.cloud.ai.rag2okf.task;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
-import com.fons.cloud.ai.rag2okf.application.model.ModelBusinessKeyGenerator;
+import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.application.task.OutboxApplicationService;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbOutboxEventEntity;
 import com.fons.cloud.ai.rag2okf.domain.service.KbOutboxEventDomainService;
-import com.fons.cloud.ai.rag2okf.domain.task.OutboxEventStatus;
+import com.fons.cloud.ai.rag2okf.common.dto.OutboxEventStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

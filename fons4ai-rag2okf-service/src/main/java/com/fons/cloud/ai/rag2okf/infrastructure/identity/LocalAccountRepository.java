@@ -42,4 +42,20 @@ public interface LocalAccountRepository {
      * @param user 用户资料快照，不包含密码摘要更新
      */
     void updateProfile(KbUserEntity user);
+
+    /**
+     * 判断规范化邮箱是否已被注册。
+     *
+     * @param normalizedEmail trim 且小写后的邮箱
+     * @return 已存在时为 true
+     */
+    boolean existsByNormalizedEmail(String normalizedEmail);
+
+    /**
+     * 持久化新的本地账号。
+     *
+     * @param user 已填充必要字段的新用户实体
+     * @return 保存后的实体，包含数据库生成的主键
+     */
+    KbUserEntity save(KbUserEntity user);
 }

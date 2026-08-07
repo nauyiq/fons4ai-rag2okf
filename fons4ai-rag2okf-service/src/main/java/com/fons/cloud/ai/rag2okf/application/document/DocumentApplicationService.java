@@ -2,8 +2,9 @@ package com.fons.cloud.ai.rag2okf.application.document;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fons.cloud.ai.rag2okf.application.model.CurrentUserContext;
-import com.fons.cloud.ai.rag2okf.application.model.ModelBusinessKeyGenerator;
+import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
+import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
+import com.fons.cloud.ai.rag2okf.common.dto.FileValidationPolicy;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.common.constants.WorkspaceRole;
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
@@ -14,20 +15,18 @@ import com.fons.cloud.ai.rag2okf.common.response.DocumentSummaryResponse;
 import com.fons.cloud.ai.rag2okf.common.response.DocumentTaskSummaryResponse;
 import com.fons.cloud.ai.rag2okf.common.response.DocumentUploadResponse;
 import com.fons.cloud.ai.rag2okf.common.response.PageResponse;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactContent;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactReference;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactScope;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactType;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.OriginalArtifactRequest;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.StoredArtifact;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbDocumentVersionEntity;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactContent;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactReference;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactScope;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactType;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.OriginalArtifactRequest;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.StoredArtifact;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBaseEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbProcessingTaskEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
-import com.fons.cloud.ai.rag2okf.domain.service.KbDocumentVersionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbSourceDocumentDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbWorkspaceDomainService;
@@ -43,8 +42,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -71,7 +68,6 @@ public class DocumentApplicationService {
     private final WorkspaceAccessPolicy workspaceAccessPolicy;
     private final KbKnowledgeBaseDomainService knowledgeBaseDomainService;
     private final KbSourceDocumentDomainService sourceDocumentDomainService;
-    private final KbDocumentVersionDomainService documentVersionDomainService;
     private final KbWorkspaceDomainService workspaceDomainService;
     private final DocumentArtifactStore documentArtifactStore;
     private final FileValidationPolicy fileValidationPolicy;
@@ -91,9 +87,10 @@ public class DocumentApplicationService {
      * @param knowledgeBaseKey 知识库业务标识
      * @param file 上传文件
      * @param parseMode 解析模式：DEFAULT、PARSE 或 SKIP
+     * @param folderPath 文件夹路径，null 或空时默认为根级 /
      * @return 上传受理响应
      */
-    public DocumentUploadResponse uploadDocument(String knowledgeBaseKey, MultipartFile file, String parseMode) {
+    public DocumentUploadResponse uploadDocument(String knowledgeBaseKey, MultipartFile file, String parseMode, String folderPath) {
         KbUserEntity user = currentUserContext.requireCurrentUser();
         KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBaseAccess(
                 user.getUserKey(), knowledgeBaseKey, WorkspaceRole.ADMIN);
@@ -101,65 +98,56 @@ public class DocumentApplicationService {
 
         FileValidationPolicy.ValidatedFile validatedFile = validateFile(file);
         String documentKey = keyGenerator.nextKey();
-        String versionKey = keyGenerator.nextKey();
+        String fileToken = keyGenerator.nextKey();
         String fileExtension = extractExtension(validatedFile.safeFilename());
+        String safeFolderPath = sanitizeFolderPath(folderPath);
 
         // 上传到 MinIO（事务外，避免长事务占用数据库连接）
         ArtifactScope scope = new ArtifactScope(
                 workspace.getWorkspaceKey(), knowledgeBaseKey, documentKey);
         StoredArtifact storedArtifact = documentArtifactStore.storeOriginal(new OriginalArtifactRequest(
-                scope, versionKey, validatedFile.safeFilename(),
+                scope, validatedFile.safeFilename(),
                 validatedFile.contentType(), validatedFile.inputStream()));
 
-        // MySQL 事务创建 SourceDocument、DocumentVersion 并设置指针
+        // MySQL 事务创建 SourceDocument 并写入文件元数据
         try {
             return self.persistNewDocument(
-                    knowledgeBase, documentKey, versionKey, workspace.getId(), user.getId(),
-                    validatedFile, fileExtension, storedArtifact, scope);
+                    knowledgeBase, documentKey, fileToken, workspace.getId(), user.getId(),
+                    validatedFile, fileExtension, storedArtifact, scope, safeFolderPath);
         } catch (RuntimeException e) {
-            compensateDelete(scope, ArtifactType.ORIGINAL, versionKey);
+            compensateDelete(scope, ArtifactType.ORIGINAL, documentKey, validatedFile.safeFilename());
             throw e;
         }
     }
 
     /**
-     * 事务内创建 SourceDocument 和 DocumentVersion，并设置当前文件指针。
+     * 事务内创建 SourceDocument 并写入文件元数据。
      */
     @Transactional(rollbackFor = Exception.class)
     public DocumentUploadResponse persistNewDocument(
-            KbKnowledgeBaseEntity knowledgeBase, String documentKey, String versionKey,
+            KbKnowledgeBaseEntity knowledgeBase, String documentKey, String fileToken,
             Long workspaceId, Long uploadActorId,
             FileValidationPolicy.ValidatedFile validatedFile, String fileExtension,
-            StoredArtifact storedArtifact, ArtifactScope scope) {
+            StoredArtifact storedArtifact, ArtifactScope scope, String folderPath) {
 
         KbSourceDocumentEntity document = new KbSourceDocumentEntity();
         document.setDocumentKey(documentKey);
         document.setKnowledgeBaseId(knowledgeBase.getId());
         document.setDisplayName(validatedFile.safeFilename());
+        document.setFolderPath(folderPath);
+        document.setObjectKey(storedArtifact.objectKey());
+        document.setOriginalFilename(validatedFile.safeFilename());
+        document.setContentType(validatedFile.contentType());
+        document.setFileExtension(fileExtension);
+        document.setSizeBytes(storedArtifact.sizeBytes());
+        document.setSha256(storedArtifact.sha256());
+        document.setFileToken(fileToken);
+        document.setUploadActorId(uploadActorId);
         document.setParseStatus(PARSE_STATUS_NOT_STARTED);
         document.setPublishStatus(PUBLISH_STATUS_UNPUBLISHED);
         sourceDocumentDomainService.save(document);
 
-        KbDocumentVersionEntity version = new KbDocumentVersionEntity();
-        version.setVersionKey(versionKey);
-        version.setSourceDocumentId(document.getId());
-        version.setObjectKey(storedArtifact.objectKey());
-        version.setOriginalFilename(validatedFile.safeFilename());
-        version.setContentType(validatedFile.contentType());
-        version.setFileExtension(fileExtension);
-        version.setSizeBytes(storedArtifact.sizeBytes());
-        version.setSha256(storedArtifact.sha256());
-        version.setUploadActorId(uploadActorId);
-        documentVersionDomainService.save(version);
-
-        // 设置当前文件指针
-        document.setCurrentDocumentVersionId(version.getId());
-        boolean updated = sourceDocumentDomainService.updateById(document);
-        if (!updated) {
-            throw new KnowledgeBaseConflictException();
-        }
-
-        return toUploadResponse(document, version);
+        return toUploadResponse(document);
     }
 
     // ────────────────────────────── 更新文件 ──────────────────────────────
@@ -170,7 +158,7 @@ public class DocumentApplicationService {
      * @param documentKey 文档业务标识
      * @param file 新文件
      * @param parseMode 解析模式
-     * @param expectedCurrentVersionKey 调用方持有的当前版本 key，用于乐观控制
+     * @param expectedCurrentFileToken 调用方持有的当前文件 CAS 令牌，用于乐观控制
      * @return 更新受理响应
      */
     public DocumentUploadResponse updateDocumentFile(
@@ -181,59 +169,64 @@ public class DocumentApplicationService {
                 user.getUserKey(), document.getKnowledgeBaseId(), WorkspaceRole.ADMIN, documentKey);
         KbWorkspaceEntity workspace = requireWorkspace(knowledgeBase.getWorkspaceId());
 
-        // 校验 expectedCurrentVersionKey 与当前指针（CAS 前置校验）
-        KbDocumentVersionEntity currentVersion = documentVersionDomainService.getById(
-                document.getCurrentDocumentVersionId());
-        if (currentVersion == null || !currentVersion.getVersionKey().equals(expectedCurrentFileToken)) {
+        // CAS 前置校验：比较 expectedCurrentFileToken 与 document.fileToken
+        if (document.getFileToken() == null || !document.getFileToken().equals(expectedCurrentFileToken)) {
             throw new KnowledgeBaseConflictException();
         }
 
         FileValidationPolicy.ValidatedFile validatedFile = validateFile(file);
-        String newVersionKey = keyGenerator.nextKey();
+        String newFileToken = keyGenerator.nextKey();
         String fileExtension = extractExtension(validatedFile.safeFilename());
 
-        // 上传新版本到 MinIO（事务外）
+        // 上传新文件到 MinIO（事务外）
         ArtifactScope scope = new ArtifactScope(
                 workspace.getWorkspaceKey(), knowledgeBase.getKnowledgeBaseKey(), documentKey);
         StoredArtifact storedArtifact = documentArtifactStore.storeOriginal(new OriginalArtifactRequest(
-                scope, newVersionKey, validatedFile.safeFilename(),
+                scope, validatedFile.safeFilename(),
                 validatedFile.contentType(), validatedFile.inputStream()));
 
-        // MySQL 事务内 CAS 切换指针
+        // 记录旧 objectKey 和旧文件名，事务成功后删除旧对象
+        String oldObjectKey = document.getObjectKey();
+        String oldOriginalFilename = document.getOriginalFilename();
+
+        // MySQL 事务内 CAS 更新文件元数据
         try {
-            return self.persistUpdatedDocument(
-                    document, newVersionKey, user.getId(),
+            DocumentUploadResponse response = self.persistUpdatedDocument(
+                    document, newFileToken, user.getId(),
                     validatedFile, fileExtension, storedArtifact);
+            // 事务成功后删除旧 MinIO 对象（新旧 objectKey 不同时才删除）
+            if (oldObjectKey != null && !oldObjectKey.equals(storedArtifact.objectKey())) {
+                compensateDelete(scope, ArtifactType.ORIGINAL, documentKey, oldOriginalFilename);
+            }
+            return response;
         } catch (RuntimeException e) {
-            compensateDelete(scope, ArtifactType.ORIGINAL, newVersionKey);
+            // 事务失败，补偿删除刚上传的新对象（新旧 objectKey 不同时才删除）
+            if (oldObjectKey == null || !oldObjectKey.equals(storedArtifact.objectKey())) {
+                compensateDelete(scope, ArtifactType.ORIGINAL, documentKey, validatedFile.safeFilename());
+            }
             throw e;
         }
     }
 
     /**
-     * 事务内创建新 DocumentVersion 并 CAS 切换当前文件指针。
+     * 事务内直接覆盖 document 上的文件元数据并 CAS 更新。
      * 不修改 activePublicationRevisionId，旧发布内容继续可用（技术设计 §5.3 第 4 步）。
      */
     @Transactional(rollbackFor = Exception.class)
     public DocumentUploadResponse persistUpdatedDocument(
-            KbSourceDocumentEntity document, String newVersionKey, Long uploadActorId,
+            KbSourceDocumentEntity document, String newFileToken, Long uploadActorId,
             FileValidationPolicy.ValidatedFile validatedFile, String fileExtension,
             StoredArtifact storedArtifact) {
 
-        KbDocumentVersionEntity newVersion = new KbDocumentVersionEntity();
-        newVersion.setVersionKey(newVersionKey);
-        newVersion.setSourceDocumentId(document.getId());
-        newVersion.setObjectKey(storedArtifact.objectKey());
-        newVersion.setOriginalFilename(validatedFile.safeFilename());
-        newVersion.setContentType(validatedFile.contentType());
-        newVersion.setFileExtension(fileExtension);
-        newVersion.setSizeBytes(storedArtifact.sizeBytes());
-        newVersion.setSha256(storedArtifact.sha256());
-        newVersion.setUploadActorId(uploadActorId);
-        documentVersionDomainService.save(newVersion);
-
-        // CAS 切换：使用乐观锁 version
-        document.setCurrentDocumentVersionId(newVersion.getId());
+        // 直接覆盖文件字段
+        document.setObjectKey(storedArtifact.objectKey());
+        document.setOriginalFilename(validatedFile.safeFilename());
+        document.setContentType(validatedFile.contentType());
+        document.setFileExtension(fileExtension);
+        document.setSizeBytes(storedArtifact.sizeBytes());
+        document.setSha256(storedArtifact.sha256());
+        document.setFileToken(newFileToken);
+        document.setUploadActorId(uploadActorId);
         document.setDisplayName(validatedFile.safeFilename());
         // 更新文件时清空解析和分块指针，设置新处理状态
         document.setCurrentParseRevisionId(null);
@@ -246,29 +239,39 @@ public class DocumentApplicationService {
             throw new KnowledgeBaseConflictException();
         }
 
-        return toUploadResponse(document, newVersion);
+        return toUploadResponse(document);
     }
 
     // ────────────────────────────── 文档列表与详情 ──────────────────────────────
 
-    /** 分页查询知识库下的当前文档视图，不返回历史版本。 */
-    public PageResponse<DocumentSummaryResponse> listDocuments(String knowledgeBaseKey, int page, int size) {
+    /**
+     * 分页查询知识库下的当前文档视图，不返回历史版本。
+     *
+     * @param knowledgeBaseKey 知识库业务标识
+     * @param page 页码（从 0 开始）
+     * @param size 每页条数
+     * @param folderPath 文件夹路径筛选，null 时不按文件夹过滤
+     */
+    public PageResponse<DocumentSummaryResponse> listDocuments(
+            String knowledgeBaseKey, int page, int size, String folderPath) {
         KbUserEntity user = currentUserContext.requireCurrentUser();
         KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBaseAccess(
                 user.getUserKey(), knowledgeBaseKey, WorkspaceRole.KNOWLEDGE_USER);
         int safePage = Math.max(0, page);
         int safeSize = Math.min(100, Math.max(1, size));
         Page<KbSourceDocumentEntity> result = new Page<>(safePage + 1L, safeSize);
-        sourceDocumentDomainService.page(result,
-                Wrappers.<KbSourceDocumentEntity>lambdaQuery()
-                        .eq(KbSourceDocumentEntity::getKnowledgeBaseId, knowledgeBase.getId())
-                        .orderByDesc(KbSourceDocumentEntity::getUpdated));
+        var query = Wrappers.<KbSourceDocumentEntity>lambdaQuery()
+                .eq(KbSourceDocumentEntity::getKnowledgeBaseId, knowledgeBase.getId());
+        if (folderPath != null && !folderPath.isBlank()) {
+            query.eq(KbSourceDocumentEntity::getFolderPath, folderPath);
+        }
+        query.orderByDesc(KbSourceDocumentEntity::getUpdated);
+        sourceDocumentDomainService.page(result, query);
         List<KbSourceDocumentEntity> documents = result.getRecords();
-        Map<Long, KbDocumentVersionEntity> versions = currentVersions(documents);
         Map<Long, KbProcessingTaskEntity> latestTasks = taskApplicationService.findLatestByDocumentIds(
                 documents.stream().map(KbSourceDocumentEntity::getId).toList());
         return new PageResponse<>(documents.stream()
-                .map(document -> toSummaryResponse(document, versions.get(document.getCurrentDocumentVersionId()), latestTasks.get(document.getId())))
+                .map(document -> toSummaryResponse(document, latestTasks.get(document.getId())))
                 .toList(), result.getTotal(), safePage, safeSize);
     }
 
@@ -286,19 +289,18 @@ public class DocumentApplicationService {
         requireWorkspaceAccess(
                 user.getUserKey(), knowledgeBase.getWorkspaceId(), WorkspaceRole.KNOWLEDGE_USER);
 
-        KbDocumentVersionEntity currentVersion = documentVersionDomainService.getById(
-                document.getCurrentDocumentVersionId());
         KbProcessingTaskEntity latestTask = taskApplicationService.findLatestByDocumentIds(List.of(document.getId())).get(document.getId());
 
         return new DocumentDetailResponse(
                 document.getDocumentKey(),
                 knowledgeBase.getKnowledgeBaseKey(),
                 document.getDisplayName(),
+                document.getFolderPath(),
                 new DocumentDetailResponse.CurrentFileSummary(
-                        currentVersion.getOriginalFilename(),
-                        currentVersion.getContentType(),
-                        currentVersion.getSizeBytes()),
-                currentVersion.getVersionKey(),
+                        document.getOriginalFilename(),
+                        document.getContentType(),
+                        document.getSizeBytes()),
+                document.getFileToken(),
                 document.getParseStatus(),
                 document.getPublishStatus(),
                 document.getActivePublicationRevisionId() != null,
@@ -322,21 +324,16 @@ public class DocumentApplicationService {
                 document.getKnowledgeBaseId());
         KbWorkspaceEntity workspace = requireWorkspaceAccess(
                 user.getUserKey(), knowledgeBase.getWorkspaceId(), WorkspaceRole.KNOWLEDGE_USER);
-        KbDocumentVersionEntity currentVersion = documentVersionDomainService.getById(
-                document.getCurrentDocumentVersionId());
-        if (currentVersion == null) {
-            throw new DocumentArtifactException();
-        }
 
         ArtifactScope scope = new ArtifactScope(
                 workspace.getWorkspaceKey(), knowledgeBase.getKnowledgeBaseKey(), documentKey);
         ArtifactContent content = documentArtifactStore.open(new ArtifactReference(
-                scope, ArtifactType.ORIGINAL, currentVersion.getVersionKey()));
+                scope, ArtifactType.ORIGINAL, documentKey, document.getOriginalFilename()));
 
         return new DocumentFileContent(
-                currentVersion.getOriginalFilename(),
-                currentVersion.getContentType(),
-                currentVersion.getSizeBytes(),
+                document.getOriginalFilename(),
+                document.getContentType(),
+                document.getSizeBytes(),
                 content.inputStream());
     }
 
@@ -417,13 +414,96 @@ public class DocumentApplicationService {
         return workspace.getWorkspaceKey();
     }
 
-    private void compensateDelete(ArtifactScope scope, ArtifactType type, String revisionKey) {
+    private void compensateDelete(ArtifactScope scope, ArtifactType type, String revisionKey, String detail) {
         try {
-            documentArtifactStore.delete(new ArtifactReference(scope, type, revisionKey));
+            documentArtifactStore.delete(new ArtifactReference(scope, type, revisionKey, detail));
         } catch (Exception e) {
             // 补偿删除失败时记录日志，不抛出异常以避免掩盖原始错误
             log.warn("补偿删除对象存储失败 scope={} type={} revisionKey={}", scope, type, revisionKey, e);
         }
+    }
+
+    /**
+     * 规范化文件夹路径。null/空/blank 返回根级 "/"。
+     * 不允许包含 ".." 和 null 字符，防止路径穿越（CR-014 Quality）。
+     */
+    private String sanitizeFolderPath(String folderPath) {
+        if (folderPath == null || folderPath.isBlank()) {
+            return "/";
+        }
+        String trimmed = folderPath.trim();
+        if (trimmed.contains("..") || trimmed.indexOf('\0') >= 0) {
+            throw new DocumentArtifactException("非法文件夹路径");
+        }
+        if (!trimmed.startsWith("/")) {
+            trimmed = "/" + trimmed;
+        }
+        if (trimmed.length() > 512) {
+            throw new DocumentArtifactException("文件夹路径过长");
+        }
+        return trimmed;
+    }
+
+    // ────────────────────────────── 批量上传 ──────────────────────────────
+
+    /**
+     * 批量上传文档。每个文件独立处理，部分失败时已成功文件不回滚（CR-014）。
+     *
+     * @param knowledgeBaseKey 知识库业务标识
+     * @param files 上传文件列表
+     * @param relativePaths 每个文件的相对路径（用于推导 folderPath），可为 null
+     * @param parseMode 解析模式
+     * @return 每个文件的上传结果
+     */
+    public List<DocumentUploadResponse> batchUploadDocuments(
+            String knowledgeBaseKey, List<MultipartFile> files,
+            List<String> relativePaths, String parseMode) {
+        if (files == null || files.isEmpty()) {
+            throw new DocumentArtifactException("批量上传文件列表为空");
+        }
+        if (files.size() > 50) {
+            throw new DocumentArtifactException("批量上传单次最多 50 个文件");
+        }
+        long totalSize = 0;
+        for (MultipartFile file : files) {
+            totalSize += file.getSize();
+        }
+        if (totalSize > 200L * 1024 * 1024) {
+            throw new DocumentArtifactException("批量上传总大小超过 200MB 限制");
+        }
+
+        List<DocumentUploadResponse> results = new java.util.ArrayList<>();
+        for (int i = 0; i < files.size(); i++) {
+            MultipartFile file = files.get(i);
+            String folderPath = "/";
+            if (relativePaths != null && i < relativePaths.size() && relativePaths.get(i) != null) {
+                folderPath = deriveFolderPath(relativePaths.get(i));
+            }
+            try {
+                results.add(uploadDocument(knowledgeBaseKey, file, parseMode, folderPath));
+            } catch (RuntimeException e) {
+                log.warn("批量上传文件失败: filename={}, error={}", file.getOriginalFilename(), e.getMessage());
+                throw e;
+            }
+        }
+        return results;
+    }
+
+    /**
+     * 从相对路径推导文件夹路径。例如 "subdir/file.pdf" -> "/subdir"，
+     * "file.pdf" -> "/"，"a/b/c/file.pdf" -> "/a/b/c"。
+     */
+    private String deriveFolderPath(String relativePath) {
+        if (relativePath == null || relativePath.isBlank()) {
+            return "/";
+        }
+        String normalized = relativePath.replace('\\', '/');
+        int lastSlash = normalized.lastIndexOf('/');
+        if (lastSlash <= 0) {
+            return "/";
+        }
+        String dir = normalized.substring(0, lastSlash);
+        return sanitizeFolderPath(dir);
     }
 
     private String extractExtension(String filename) {
@@ -434,40 +514,27 @@ public class DocumentApplicationService {
         return filename.substring(separator + 1).toLowerCase(Locale.ROOT);
     }
 
-    private DocumentUploadResponse toUploadResponse(
-            KbSourceDocumentEntity document, KbDocumentVersionEntity version) {
+    private DocumentUploadResponse toUploadResponse(KbSourceDocumentEntity document) {
         return new DocumentUploadResponse(
                 document.getDocumentKey(),
                 document.getDisplayName(),
+                document.getFolderPath(),
                 new DocumentUploadResponse.CurrentFileSummary(
-                        version.getOriginalFilename(),
-                        version.getContentType(),
-                        version.getSizeBytes()),
-                version.getVersionKey(),
+                        document.getOriginalFilename(),
+                        document.getContentType(),
+                        document.getSizeBytes()),
+                document.getFileToken(),
                 null, // T009 不创建任务，taskKey 为 null
                 document.getParseStatus(),
                 document.getPublishStatus());
     }
 
-    private Map<Long, KbDocumentVersionEntity> currentVersions(Collection<KbSourceDocumentEntity> documents) {
-        List<Long> versionIds = documents.stream().map(KbSourceDocumentEntity::getCurrentDocumentVersionId)
-                .filter(java.util.Objects::nonNull).toList();
-        if (versionIds.isEmpty()) {
-            return Map.of();
-        }
-        Map<Long, KbDocumentVersionEntity> versions = new HashMap<>();
-        documentVersionDomainService.listByIds(versionIds).forEach(version -> versions.put(version.getId(), version));
-        return versions;
-    }
-
     private DocumentSummaryResponse toSummaryResponse(
-            KbSourceDocumentEntity document, KbDocumentVersionEntity version, KbProcessingTaskEntity latestTask) {
-        if (version == null) {
-            throw new DocumentArtifactException();
-        }
+            KbSourceDocumentEntity document, KbProcessingTaskEntity latestTask) {
         return new DocumentSummaryResponse(document.getDocumentKey(), document.getDisplayName(),
-                new DocumentSummaryResponse.CurrentFileSummary(version.getOriginalFilename(), version.getContentType(), version.getSizeBytes()),
-                version.getVersionKey(), document.getParseStatus(), document.getPublishStatus(),
+                document.getFolderPath(),
+                new DocumentSummaryResponse.CurrentFileSummary(document.getOriginalFilename(), document.getContentType(), document.getSizeBytes()),
+                document.getFileToken(), document.getParseStatus(), document.getPublishStatus(),
                 document.getActivePublicationRevisionId() != null, toTaskSummary(latestTask), document.getUpdated());
     }
 

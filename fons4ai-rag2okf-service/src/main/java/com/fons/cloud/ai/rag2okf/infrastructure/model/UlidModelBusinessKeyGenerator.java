@@ -1,6 +1,6 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.model;
 
-import com.fons.cloud.ai.rag2okf.application.model.ModelBusinessKeyGenerator;
+import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
 import org.springframework.stereotype.Component;
 
 import java.security.SecureRandom;

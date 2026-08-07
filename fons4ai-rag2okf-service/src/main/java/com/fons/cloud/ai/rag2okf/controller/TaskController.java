@@ -5,7 +5,7 @@ import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.common.exeception.TaskExecutionException;
 import com.fons.cloud.ai.rag2okf.common.response.TaskStatusResponse;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbProcessingTaskEntity;
-import com.fons.cloud.ai.rag2okf.domain.task.ProcessingTask;
+import com.fons.cloud.ai.rag2okf.common.dto.ProcessingTask;
 import com.fons.cloud.common.result.R;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;

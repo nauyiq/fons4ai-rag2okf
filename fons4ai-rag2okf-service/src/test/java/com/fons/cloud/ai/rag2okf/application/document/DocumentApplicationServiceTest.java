@@ -1,8 +1,9 @@
 package com.fons.cloud.ai.rag2okf.application.document;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fons.cloud.ai.rag2okf.application.model.CurrentUserContext;
-import com.fons.cloud.ai.rag2okf.application.model.ModelBusinessKeyGenerator;
+import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
+import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
+import com.fons.cloud.ai.rag2okf.common.dto.FileValidationPolicy;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.common.constants.WorkspaceRole;
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
@@ -10,16 +11,14 @@ import com.fons.cloud.ai.rag2okf.common.exeception.KnowledgeBaseConflictExceptio
 import com.fons.cloud.ai.rag2okf.common.exeception.WorkspaceAccessDeniedException;
 import com.fons.cloud.ai.rag2okf.common.response.DocumentUploadResponse;
 import com.fons.cloud.ai.rag2okf.common.response.DocumentSummaryResponse;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactContent;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.StoredArtifact;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbDocumentVersionEntity;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactContent;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.StoredArtifact;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBaseEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbProcessingTaskEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
-import com.fons.cloud.ai.rag2okf.domain.service.KbDocumentVersionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbSourceDocumentDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbWorkspaceDomainService;
@@ -62,7 +61,6 @@ class DocumentApplicationServiceTest {
     @Mock private WorkspaceAccessPolicy workspaceAccessPolicy;
     @Mock private KbKnowledgeBaseDomainService knowledgeBaseDomainService;
     @Mock private KbSourceDocumentDomainService sourceDocumentDomainService;
-    @Mock private KbDocumentVersionDomainService documentVersionDomainService;
     @Mock private KbWorkspaceDomainService workspaceDomainService;
     @Mock private DocumentArtifactStore documentArtifactStore;
     @Mock private FileValidationPolicy fileValidationPolicy;
@@ -91,6 +89,7 @@ class DocumentApplicationServiceTest {
         when(currentUserContext.requireCurrentUser()).thenReturn(user);
         when(knowledgeBaseDomainService.getOne(any())).thenReturn(kb);
         when(workspaceDomainService.getById(1L)).thenReturn(workspace);
+        // 每次上传消费两个 key：documentKey 与 fileToken
         when(keyGenerator.nextKey()).thenReturn("01J_DOC_1", "01J_VER_1", "01J_DOC_2", "01J_VER_2");
         FileValidationPolicy.ValidatedFile vf1 = mockValidatedFile("policy.md");
         when(fileValidationPolicy.validate(anyString(), anyString(), any(), anyLong()))
@@ -100,15 +99,10 @@ class DocumentApplicationServiceTest {
             ((KbSourceDocumentEntity) inv.getArgument(0)).setId(idSequence.incrementAndGet());
             return true;
         });
-        when(documentVersionDomainService.save(any())).thenAnswer(inv -> {
-            ((KbDocumentVersionEntity) inv.getArgument(0)).setId(idSequence.incrementAndGet());
-            return true;
-        });
-        when(sourceDocumentDomainService.updateById(any())).thenReturn(true);
 
         MultipartFile file = mockMultipartFile("policy.md");
-        DocumentUploadResponse response1 = service.uploadDocument("01J_KB_KEY", file, "SKIP");
-        DocumentUploadResponse response2 = service.uploadDocument("01J_KB_KEY", file, "SKIP");
+        DocumentUploadResponse response1 = service.uploadDocument("01J_KB_KEY", file, "SKIP", null);
+        DocumentUploadResponse response2 = service.uploadDocument("01J_KB_KEY", file, "SKIP", null);
 
         assertNotEquals(response1.documentKey(), response2.documentKey(),
                 "同名上传两次必须得到不同 documentKey");
@@ -127,6 +121,7 @@ class DocumentApplicationServiceTest {
         when(currentUserContext.requireCurrentUser()).thenReturn(user);
         when(knowledgeBaseDomainService.getOne(any())).thenReturn(kb);
         when(workspaceDomainService.getById(1L)).thenReturn(workspace);
+        // 消费两个 key：documentKey 与 fileToken
         when(keyGenerator.nextKey()).thenReturn("01J_DOC", "01J_VER");
         FileValidationPolicy.ValidatedFile vf2 = mockValidatedFile("guide.md");
         when(fileValidationPolicy.validate(anyString(), anyString(), any(), anyLong()))
@@ -136,14 +131,9 @@ class DocumentApplicationServiceTest {
             ((KbSourceDocumentEntity) inv.getArgument(0)).setId(idSequence.incrementAndGet());
             return true;
         });
-        when(documentVersionDomainService.save(any())).thenAnswer(inv -> {
-            ((KbDocumentVersionEntity) inv.getArgument(0)).setId(idSequence.incrementAndGet());
-            return true;
-        });
-        when(sourceDocumentDomainService.updateById(any())).thenReturn(true);
 
         DocumentUploadResponse response = service.uploadDocument(
-                "01J_KB_KEY", mockMultipartFile("guide.md"), "SKIP");
+                "01J_KB_KEY", mockMultipartFile("guide.md"), "SKIP", null);
 
         assertEquals("NOT_STARTED", response.parseStatus());
         assertEquals("UNPUBLISHED", response.publishStatus());
@@ -163,34 +153,27 @@ class DocumentApplicationServiceTest {
         document.setDocumentKey("01J_DOC");
         document.setKnowledgeBaseId(1L);
         document.setDisplayName("old.md");
-        document.setCurrentDocumentVersionId(60L);
+        document.setFileToken("01J_OLD_FILE_TOKEN");
         document.setParseStatus("SUCCEEDED");
         document.setPublishStatus("PUBLISHED");
         document.setVersion(0);
-
-        KbDocumentVersionEntity oldVersion = new KbDocumentVersionEntity();
-        oldVersion.setId(60L);
-        oldVersion.setVersionKey("01J_OLD_VER");
 
         when(currentUserContext.requireCurrentUser()).thenReturn(user);
         when(sourceDocumentDomainService.getOne(any())).thenReturn(document);
         when(knowledgeBaseDomainService.getById(1L)).thenReturn(kb);
         when(workspaceDomainService.getById(1L)).thenReturn(workspace);
-        when(documentVersionDomainService.getById(60L)).thenReturn(oldVersion);
+        // 更新文件只消费一个 key：新的 fileToken
         when(keyGenerator.nextKey()).thenReturn("01J_NEW_VER");
         // 必须先创建 ValidatedFile mock，再放入 when().thenReturn()，避免嵌套 stubbing
         FileValidationPolicy.ValidatedFile vfUpdate = mockValidatedFile("new.md");
         when(fileValidationPolicy.validate(anyString(), anyString(), any(), anyLong()))
                 .thenReturn(vfUpdate);
         when(documentArtifactStore.storeOriginal(any())).thenReturn(mockStoredArtifact());
-        when(documentVersionDomainService.save(any())).thenAnswer(inv -> {
-            ((KbDocumentVersionEntity) inv.getArgument(0)).setId(idSequence.incrementAndGet());
-            return true;
-        });
         when(sourceDocumentDomainService.updateById(any())).thenReturn(true);
 
+        // 第四个参数为调用方持有的当前文件 CAS 令牌
         DocumentUploadResponse response = service.updateDocumentFile(
-                "01J_DOC", mockMultipartFile("new.md"), "SKIP", "01J_OLD_VER");
+                "01J_DOC", mockMultipartFile("new.md"), "SKIP", "01J_OLD_FILE_TOKEN");
 
         assertEquals("01J_DOC", response.documentKey());
         assertEquals("new.md", response.displayName());
@@ -202,7 +185,7 @@ class DocumentApplicationServiceTest {
     // ────────────────────────────── AC-009：并发冲突保留旧指针 ──────────────────────────────
 
     @Test
-    @DisplayName("更新时 expectedCurrentVersionKey 不匹配抛出冲突")
+    @DisplayName("更新时 expectedCurrentFileToken 不匹配抛出冲突")
     void updateDocumentFile_invalidExpectedVersionKeyThrowsConflict() {
         KbUserEntity user = mockUser("01J_USER_KEY");
         KbKnowledgeBaseEntity kb = mockKnowledgeBase("01J_KB_KEY", 1L);
@@ -211,22 +194,17 @@ class DocumentApplicationServiceTest {
         document.setId(50L);
         document.setDocumentKey("01J_DOC");
         document.setKnowledgeBaseId(1L);
-        document.setCurrentDocumentVersionId(60L);
-
-        KbDocumentVersionEntity oldVersion = new KbDocumentVersionEntity();
-        oldVersion.setId(60L);
-        oldVersion.setVersionKey("01J_OLD_VER");
+        document.setFileToken("01J_OLD_FILE_TOKEN");
 
         when(currentUserContext.requireCurrentUser()).thenReturn(user);
         when(sourceDocumentDomainService.getOne(any())).thenReturn(document);
         when(knowledgeBaseDomainService.getById(1L)).thenReturn(kb);
         when(workspaceDomainService.getById(1L)).thenReturn(workspace);
-        when(documentVersionDomainService.getById(60L)).thenReturn(oldVersion);
 
-        // 版本 key 校验阶段即抛出异常，文件从未被访问，使用裸 mock 避免 UnnecessaryStubbing
+        // 文件令牌校验阶段即抛出异常，文件从未被访问，使用裸 mock 避免 UnnecessaryStubbing
         assertThrows(KnowledgeBaseConflictException.class, () ->
                 service.updateDocumentFile(
-                        "01J_DOC", mock(MultipartFile.class), "SKIP", "WRONG_VERSION_KEY"));
+                        "01J_DOC", mock(MultipartFile.class), "SKIP", "WRONG_FILE_TOKEN"));
     }
 
     @Test
@@ -239,33 +217,26 @@ class DocumentApplicationServiceTest {
         document.setId(50L);
         document.setDocumentKey("01J_DOC");
         document.setKnowledgeBaseId(1L);
-        document.setCurrentDocumentVersionId(60L);
+        document.setFileToken("01J_OLD_FILE_TOKEN");
         document.setVersion(0);
-
-        KbDocumentVersionEntity oldVersion = new KbDocumentVersionEntity();
-        oldVersion.setId(60L);
-        oldVersion.setVersionKey("01J_OLD_VER");
 
         when(currentUserContext.requireCurrentUser()).thenReturn(user);
         when(sourceDocumentDomainService.getOne(any())).thenReturn(document);
         when(knowledgeBaseDomainService.getById(1L)).thenReturn(kb);
         when(workspaceDomainService.getById(1L)).thenReturn(workspace);
-        when(documentVersionDomainService.getById(60L)).thenReturn(oldVersion);
+        // 更新文件只消费一个 key：新的 fileToken
         when(keyGenerator.nextKey()).thenReturn("01J_NEW_VER");
         // 必须先创建 ValidatedFile mock，再放入 when().thenReturn()，避免嵌套 stubbing
         FileValidationPolicy.ValidatedFile vfCas = mockValidatedFile("new.md");
         when(fileValidationPolicy.validate(anyString(), anyString(), any(), anyLong()))
                 .thenReturn(vfCas);
         when(documentArtifactStore.storeOriginal(any())).thenReturn(mockStoredArtifact());
-        when(documentVersionDomainService.save(any())).thenAnswer(inv -> {
-            ((KbDocumentVersionEntity) inv.getArgument(0)).setId(idSequence.incrementAndGet());
-            return true;
-        });
         // 模拟乐观锁冲突：updateById 返回 false
         when(sourceDocumentDomainService.updateById(any())).thenReturn(false);
 
+        // 第四个参数为调用方持有的当前文件 CAS 令牌
         assertThrows(KnowledgeBaseConflictException.class, () ->
-                service.updateDocumentFile("01J_DOC", mockMultipartFile("new.md"), "SKIP", "01J_OLD_VER"));
+                service.updateDocumentFile("01J_DOC", mockMultipartFile("new.md"), "SKIP", "01J_OLD_FILE_TOKEN"));
 
         // 验证补偿删除被调用
         verify(documentArtifactStore).delete(any());
@@ -282,6 +253,7 @@ class DocumentApplicationServiceTest {
         when(currentUserContext.requireCurrentUser()).thenReturn(user);
         when(knowledgeBaseDomainService.getOne(any())).thenReturn(kb);
         when(workspaceDomainService.getById(1L)).thenReturn(workspace);
+        // 消费两个 key：documentKey 与 fileToken
         when(keyGenerator.nextKey()).thenReturn("01J_DOC", "01J_VER");
         FileValidationPolicy.ValidatedFile vf5 = mockValidatedFile("report.md");
         when(fileValidationPolicy.validate(anyString(), anyString(), any(), anyLong()))
@@ -291,14 +263,9 @@ class DocumentApplicationServiceTest {
             ((KbSourceDocumentEntity) inv.getArgument(0)).setId(idSequence.incrementAndGet());
             return true;
         });
-        when(documentVersionDomainService.save(any())).thenAnswer(inv -> {
-            ((KbDocumentVersionEntity) inv.getArgument(0)).setId(idSequence.incrementAndGet());
-            return true;
-        });
-        when(sourceDocumentDomainService.updateById(any())).thenReturn(true);
 
         DocumentUploadResponse response = service.uploadDocument(
-                "01J_KB_KEY", mockMultipartFile("report.md"), "SKIP");
+                "01J_KB_KEY", mockMultipartFile("report.md"), "SKIP", null);
 
         // 响应只有 documentKey、displayName、currentFile、taskKey、parseStatus、publishStatus
         // 不包含版本列表、版本序号或回退操作
@@ -318,24 +285,19 @@ class DocumentApplicationServiceTest {
         KbUserEntity user = mockUser("01J_USER_KEY");
         KbKnowledgeBaseEntity kb = mockKnowledgeBase("01J_KB_KEY", 1L);
         KbWorkspaceEntity workspace = mockWorkspace("01J_WS_KEY", 1L);
+        // 文件元数据直接存储在 document 上
         KbSourceDocumentEntity document = new KbSourceDocumentEntity();
         document.setId(50L);
         document.setDocumentKey("01J_DOC");
         document.setKnowledgeBaseId(1L);
-        document.setCurrentDocumentVersionId(60L);
-
-        KbDocumentVersionEntity version = new KbDocumentVersionEntity();
-        version.setId(60L);
-        version.setVersionKey("01J_VER");
-        version.setOriginalFilename("download.md");
-        version.setContentType("text/markdown");
-        version.setSizeBytes(100L);
+        document.setOriginalFilename("download.md");
+        document.setContentType("text/markdown");
+        document.setSizeBytes(100L);
 
         when(currentUserContext.requireCurrentUser()).thenReturn(user);
         when(sourceDocumentDomainService.getOne(any())).thenReturn(document);
         when(knowledgeBaseDomainService.getById(1L)).thenReturn(kb);
         when(workspaceDomainService.getById(1L)).thenReturn(workspace);
-        when(documentVersionDomainService.getById(60L)).thenReturn(version);
         when(documentArtifactStore.open(any())).thenReturn(new ArtifactContent(
                 new ByteArrayInputStream("content".getBytes())));
 
@@ -355,7 +317,6 @@ class DocumentApplicationServiceTest {
         document.setId(50L);
         document.setDocumentKey("01J_DOC");
         document.setKnowledgeBaseId(1L);
-        document.setCurrentDocumentVersionId(60L);
 
         when(currentUserContext.requireCurrentUser()).thenReturn(user);
         when(sourceDocumentDomainService.getOne(any())).thenReturn(document);
@@ -381,7 +342,7 @@ class DocumentApplicationServiceTest {
         when(emptyFile.isEmpty()).thenReturn(true);
 
         assertThrows(DocumentArtifactException.class, () ->
-                service.uploadDocument("01J_KB_KEY", emptyFile, "SKIP"));
+                service.uploadDocument("01J_KB_KEY", emptyFile, "SKIP", null));
     }
 
     @Test
@@ -390,21 +351,19 @@ class DocumentApplicationServiceTest {
         KbUserEntity user = mockUser("01J_USER_KEY");
         KbKnowledgeBaseEntity kb = mockKnowledgeBase("01J_KB_KEY", 1L);
         KbWorkspaceEntity workspace = mockWorkspace("01J_WS_KEY", 1L);
+        // 文件元数据直接存储在 document 上
         KbSourceDocumentEntity document = new KbSourceDocumentEntity();
         document.setId(50L);
         document.setDocumentKey("01J_DOC");
         document.setDisplayName("policy.md");
         document.setKnowledgeBaseId(1L);
-        document.setCurrentDocumentVersionId(60L);
+        document.setFileToken("01J_FILE_TOKEN");
+        document.setOriginalFilename("policy.md");
+        document.setContentType("text/markdown");
+        document.setSizeBytes(1024L);
         document.setParseStatus("SUCCEEDED");
         document.setPublishStatus("PUBLISH_FAILED");
         document.setActivePublicationRevisionId(70L);
-        KbDocumentVersionEntity version = new KbDocumentVersionEntity();
-        version.setId(60L);
-        version.setVersionKey("01J_FILE_TOKEN");
-        version.setOriginalFilename("policy.md");
-        version.setContentType("text/markdown");
-        version.setSizeBytes(1024L);
         KbProcessingTaskEntity task = new KbProcessingTaskEntity();
         task.setTaskKey("01J_TASK");
         task.setTaskType("PUBLISH");
@@ -425,10 +384,9 @@ class DocumentApplicationServiceTest {
             result.setTotal(1L);
             return result;
         });
-        when(documentVersionDomainService.listByIds(List.of(60L))).thenReturn(List.of(version));
         when(taskApplicationService.findLatestByDocumentIds(List.of(50L))).thenReturn(Map.of(50L, task));
 
-        var response = service.listDocuments("01J_KB_KEY", 0, 20);
+        var response = service.listDocuments("01J_KB_KEY", 0, 20, null);
 
         assertEquals(1L, response.total());
         DocumentSummaryResponse item = response.records().getFirst();

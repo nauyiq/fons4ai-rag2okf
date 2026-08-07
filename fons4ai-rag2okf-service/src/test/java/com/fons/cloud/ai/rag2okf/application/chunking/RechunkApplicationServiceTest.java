@@ -1,8 +1,8 @@
 package com.fons.cloud.ai.rag2okf.application.chunking;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fons.cloud.ai.rag2okf.application.model.CurrentUserContext;
-import com.fons.cloud.ai.rag2okf.application.model.ModelBusinessKeyGenerator;
+import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
+import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.common.exeception.KnowledgeBaseConflictException;
 import com.fons.cloud.ai.rag2okf.common.exeception.TaskExecutionException;
@@ -14,14 +14,14 @@ import com.fons.cloud.ai.rag2okf.domain.entity.KbProcessingTaskEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
-import com.fons.cloud.ai.rag2okf.domain.parsing.ChunkProfile;
+import com.fons.cloud.ai.rag2okf.common.dto.ParsingChunkProfile;
 import com.fons.cloud.ai.rag2okf.domain.service.KbChunkRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbParseRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbSourceDocumentDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbWorkspaceDomainService;
-import com.fons.cloud.ai.rag2okf.domain.task.ProcessingTask;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskType;
+import com.fons.cloud.ai.rag2okf.common.dto.ProcessingTask;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskType;
 import com.fons.cloud.ai.rag2okf.infrastructure.identity.WorkspaceAccessPolicy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -103,7 +103,7 @@ class RechunkApplicationServiceTest {
     void triggerRechunk_notConfirmed_throwsException() {
         TaskExecutionException ex = assertThrows(TaskExecutionException.class,
                 () -> service.triggerRechunk("01J_DOC", false, "01J_CHUNK_OLD",
-                        ChunkProfile.DEFAULT_RECURSIVE));
+                        ParsingChunkProfile.DEFAULT_RECURSIVE));
         assertEquals("RECHUNK_CONFIRMATION_REQUIRED", ex.getMessage());
         verifyNoInteractions(taskApplicationService);
     }
@@ -116,7 +116,7 @@ class RechunkApplicationServiceTest {
 
         TaskExecutionException ex = assertThrows(TaskExecutionException.class,
                 () -> service.triggerRechunk("01J_DOC", true, "01J_CHUNK_OLD",
-                        ChunkProfile.DEFAULT_RECURSIVE));
+                        ParsingChunkProfile.DEFAULT_RECURSIVE));
         assertEquals("PARSE_NOT_SUCCEEDED", ex.getMessage());
     }
 
@@ -129,7 +129,7 @@ class RechunkApplicationServiceTest {
         // 传入错误的 expectedChunkRevisionKey
         assertThrows(KnowledgeBaseConflictException.class,
                 () -> service.triggerRechunk("01J_DOC", true, "01J_WRONG_KEY",
-                        ChunkProfile.DEFAULT_RECURSIVE));
+                        ParsingChunkProfile.DEFAULT_RECURSIVE));
     }
 
     @Test
@@ -146,7 +146,7 @@ class RechunkApplicationServiceTest {
                 .thenReturn(new ProcessingTask(taskEntity));
 
         RechunkResponse response = service.triggerRechunk(
-                "01J_DOC", true, "01J_CHUNK_OLD", ChunkProfile.DEFAULT_RECURSIVE);
+                "01J_DOC", true, "01J_CHUNK_OLD", ParsingChunkProfile.DEFAULT_RECURSIVE);
 
         assertEquals("01J_DOC", response.documentKey());
         assertEquals("01J_RECHUNK_TASK", response.taskKey());

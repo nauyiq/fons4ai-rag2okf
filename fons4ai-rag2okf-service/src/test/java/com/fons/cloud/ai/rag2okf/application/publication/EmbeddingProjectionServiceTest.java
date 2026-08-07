@@ -1,19 +1,19 @@
 package com.fons.cloud.ai.rag2okf.application.publication;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.fons.cloud.ai.rag2okf.application.model.CredentialCipher;
-import com.fons.cloud.ai.rag2okf.application.model.EncryptedCredential;
-import com.fons.cloud.ai.rag2okf.application.model.ModelClientFactory;
-import com.fons.cloud.ai.rag2okf.application.model.ResolvedModelDescriptor;
-import com.fons.cloud.ai.rag2okf.application.model.ResolvedUserModel;
-import com.fons.cloud.ai.rag2okf.application.model.UserModelResolver;
+import com.fons.cloud.ai.rag2okf.common.dto.CredentialCipher;
+import com.fons.cloud.ai.rag2okf.common.dto.EncryptedCredential;
+import com.fons.cloud.ai.rag2okf.common.dto.ModelClientFactory;
+import com.fons.cloud.ai.rag2okf.common.dto.ResolvedModelDescriptor;
+import com.fons.cloud.ai.rag2okf.common.dto.ResolvedUserModel;
+import com.fons.cloud.ai.rag2okf.common.dto.UserModelResolver;
 import com.fons.cloud.ai.rag2okf.common.constants.ModelProfileStatus;
 import com.fons.cloud.ai.rag2okf.common.constants.ModelUsageType;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBaseEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbModelBindingEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbModelConnectionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbModelProfileEntity;
-import com.fons.cloud.ai.rag2okf.domain.publication.PublicationProjectionPort.ChunkProjection;
+import com.fons.cloud.ai.rag2okf.common.dto.PublicationProjectionPort.ChunkProjection;
 import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbModelBindingDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbModelProfileDomainService;

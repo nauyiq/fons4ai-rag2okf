@@ -2,7 +2,7 @@ package com.fons.cloud.ai.rag2okf.model;
 
 import com.fons.cloud.ai.rag2okf.common.constants.ModelType;
 import com.fons.cloud.ai.rag2okf.common.constants.ModelUsageType;
-import com.fons.cloud.ai.rag2okf.domain.service.ModelUsagePolicy;
+import com.fons.cloud.ai.rag2okf.common.dto.ModelUsagePolicy;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

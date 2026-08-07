@@ -2,7 +2,7 @@ package com.fons.cloud.ai.rag2okf.infrastructure.model;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.fons.cloud.ai.rag2okf.application.model.CurrentUserContext;
+import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
 import com.fons.cloud.ai.rag2okf.common.constants.UserStatus;
 import com.fons.cloud.ai.rag2okf.common.exeception.ModelAccessDeniedException;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;

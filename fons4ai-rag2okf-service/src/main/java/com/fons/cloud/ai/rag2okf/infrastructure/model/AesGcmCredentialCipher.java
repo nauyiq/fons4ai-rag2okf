@@ -1,8 +1,8 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.model;
 
 import com.fons.cloud.ai.rag2okf.common.exeception.ModelConfigurationException;
-import com.fons.cloud.ai.rag2okf.application.model.CredentialCipher;
-import com.fons.cloud.ai.rag2okf.application.model.EncryptedCredential;
+import com.fons.cloud.ai.rag2okf.common.dto.CredentialCipher;
+import com.fons.cloud.ai.rag2okf.common.dto.EncryptedCredential;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 

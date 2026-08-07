@@ -32,9 +32,6 @@ public class KbParseRevisionEntity extends CommonEntity {
     /** 源文档数据库主键。 */
     private Long sourceDocumentId;
 
-    /** 被解析的不可变文件版本数据库主键。 */
-    private Long documentVersionId;
-
     /** 解析器 Profile 输入 JSON 快照。 */
     private String parserProfileJson;
 

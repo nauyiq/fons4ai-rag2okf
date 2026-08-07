@@ -1,6 +1,6 @@
 package com.fons.cloud.ai.rag2okf.parsing;
 
-import com.fons.cloud.ai.rag2okf.domain.parsing.SourceAnchor;
+import com.fons.cloud.ai.rag2okf.common.dto.SourceAnchor;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

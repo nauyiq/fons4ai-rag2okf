@@ -4,6 +4,7 @@ import cn.dev33.satoken.stp.SaLoginModel;
 import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.lang.Validator;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
+import com.fons.cloud.ai.rag2okf.common.dto.LoginCommand;
 import com.fons.cloud.ai.rag2okf.common.exeception.AuthenticationDeniedException;
 import com.fons.cloud.ai.rag2okf.infrastructure.identity.AuthenticationRateLimiter;
 import com.fons.cloud.ai.rag2okf.infrastructure.identity.LocalAccountRepository;

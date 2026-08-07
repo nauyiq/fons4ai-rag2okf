@@ -38,7 +38,6 @@ class KnowledgeSchemaContractTest {
             "kb_workspace_member",
             "kb_knowledge_base",
             "kb_source_document",
-            "kb_document_version",
             "kb_parse_revision",
             "kb_chunk_revision",
             "kb_publication_revision",
@@ -50,7 +49,7 @@ class KnowledgeSchemaContractTest {
         );
 
     @Test
-    void initialSchemaShouldContainExactlyFourteenTablesAndSecurityBoundaries() throws IOException {
+    void initialSchemaShouldContainExactlyThirteenTablesAndSecurityBoundaries() throws IOException {
         String sql = readInitialSchema();
 
         assertThat(REQUIRED_TABLES)

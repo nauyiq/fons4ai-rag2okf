@@ -2,7 +2,8 @@ package com.fons.cloud.ai.rag2okf.application.publication;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fons.cloud.ai.rag2okf.application.model.CurrentUserContext;
+import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
+import com.fons.cloud.ai.rag2okf.common.dto.PublicationTaskPayload;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.common.constants.WorkspaceRole;
 import com.fons.cloud.ai.rag2okf.common.exeception.KnowledgeBaseConflictException;
@@ -10,23 +11,21 @@ import com.fons.cloud.ai.rag2okf.common.exeception.TaskExecutionException;
 import com.fons.cloud.ai.rag2okf.common.exeception.WorkspaceAccessDeniedException;
 import com.fons.cloud.ai.rag2okf.common.response.PublicationResponse;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbChunkRevisionEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbDocumentVersionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBaseEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbProcessingTaskEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbPublicationRevisionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
-import com.fons.cloud.ai.rag2okf.domain.publication.PublicationManifest;
+import com.fons.cloud.ai.rag2okf.common.dto.PublicationManifest;
 import com.fons.cloud.ai.rag2okf.domain.service.KbChunkRevisionDomainService;
-import com.fons.cloud.ai.rag2okf.domain.service.KbDocumentVersionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbProcessingTaskDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbPublicationRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbSourceDocumentDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbWorkspaceDomainService;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskStatus;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskType;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskStatus;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskType;
 import com.fons.cloud.ai.rag2okf.infrastructure.identity.WorkspaceAccessPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -71,7 +70,6 @@ public class PublicationApplicationService {
     private final KbSourceDocumentDomainService sourceDocumentDomainService;
     private final KbKnowledgeBaseDomainService knowledgeBaseDomainService;
     private final KbWorkspaceDomainService workspaceDomainService;
-    private final KbDocumentVersionDomainService documentVersionDomainService;
     private final KbChunkRevisionDomainService chunkRevisionDomainService;
     private final KbPublicationRevisionDomainService publicationRevisionDomainService;
     private final KbProcessingTaskDomainService processingTaskDomainService;
@@ -107,12 +105,6 @@ public class PublicationApplicationService {
             throw new TaskExecutionException("PUBLISH_CHUNK_NOT_SUCCEEDED");
         }
 
-        KbDocumentVersionEntity currentVersion = documentVersionDomainService.getById(
-                document.getCurrentDocumentVersionId());
-        if (currentVersion == null) {
-            throw new TaskExecutionException("PUBLISH_VERSION_MISSING");
-        }
-
         // §5.6 第 1 步：同一文档存在 RUNNING 发布任务时拒绝重复触发
         if (hasRunningPublishTask(document.getId())) {
             throw new KnowledgeBaseConflictException();
@@ -124,8 +116,7 @@ public class PublicationApplicationService {
                 knowledgeBase.getKnowledgeBaseKey(),
                 documentKey,
                 document.getId(),
-                currentVersion.getId(),
-                currentVersion.getVersionKey(),
+                document.getFileToken(),
                 document.getCurrentParseRevisionId(),
                 null,
                 chunkRevision.getId(),

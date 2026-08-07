@@ -2,17 +2,17 @@ package com.fons.cloud.ai.rag2okf.infrastructure.parsing;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactContent;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactReference;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactType;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ManifestArtifactRequest;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.StoredArtifact;
-import com.fons.cloud.ai.rag2okf.domain.parsing.ChunkManifest;
-import com.fons.cloud.ai.rag2okf.domain.parsing.ChunkManifest.Chunk;
-import com.fons.cloud.ai.rag2okf.domain.parsing.ChunkProfile;
-import com.fons.cloud.ai.rag2okf.domain.parsing.DocumentChunkerPort;
-import com.fons.cloud.ai.rag2okf.domain.parsing.ParseManifest;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactContent;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactReference;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactType;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ManifestArtifactRequest;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.StoredArtifact;
+import com.fons.cloud.ai.rag2okf.common.dto.ChunkManifest;
+import com.fons.cloud.ai.rag2okf.common.dto.ChunkManifest.Chunk;
+import com.fons.cloud.ai.rag2okf.common.dto.ParsingChunkProfile;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentChunkerPort;
+import com.fons.cloud.ai.rag2okf.common.dto.ParseManifest;
 import com.fons.cloud.ai.rag.langchain.document.LangChain4jDocumentSplitter;
 import dev.langchain4j.data.document.Document;
 import dev.langchain4j.data.segment.TextSegment;
@@ -123,15 +123,15 @@ public class LangChain4jChunkerAdapter implements DocumentChunkerPort {
         return Document.from(text.toString(), dev.langchain4j.data.document.Metadata.from(metadata));
     }
 
-    private LangChain4jDocumentSplitter createSplitter(ChunkProfile profile) {
+    private LangChain4jDocumentSplitter createSplitter(ParsingChunkProfile profile) {
         if (profile == null) {
             return new LangChain4jDocumentSplitter(
-                    ChunkProfile.DEFAULT_RECURSIVE.chunkSize(),
-                    ChunkProfile.DEFAULT_RECURSIVE.overlap());
+                    ParsingChunkProfile.DEFAULT_RECURSIVE.chunkSize(),
+                    ParsingChunkProfile.DEFAULT_RECURSIVE.overlap());
         }
-        if (ChunkProfile.MARKDOWN_HEADER.equals(profile.strategy())) {
+        if (ParsingChunkProfile.MARKDOWN_HEADER.equals(profile.strategy())) {
             return new LangChain4jDocumentSplitter(
-                    ChunkProfile.MARKDOWN_HEADER,
+                    ParsingChunkProfile.MARKDOWN_HEADER,
                     profile.chunkSize(),
                     profile.overlap(),
                     3);

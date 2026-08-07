@@ -21,7 +21,7 @@ import co.elastic.clients.elasticsearch.indices.IndexSettings;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fons.cloud.ai.rag2okf.domain.publication.PublicationProjectionPort;
+import com.fons.cloud.ai.rag2okf.common.dto.PublicationProjectionPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
@@ -279,7 +279,6 @@ public class ElasticsearchPublicationProjection implements PublicationProjection
         doc.put("knowledgeBaseKey", request.knowledgeBaseKey());
         doc.put("documentKey", request.documentKey());
         doc.put("publicationRevisionKey", request.publicationRevisionKey());
-        doc.put("documentVersionKey", request.documentVersionKey());
         doc.put("parseRevisionKey", request.parseRevisionKey());
         doc.put("chunkRevisionKey", request.chunkRevisionKey());
         doc.put("parentChunkKey", chunk.parentChunkKey());

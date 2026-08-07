@@ -2,10 +2,10 @@ package com.fons.cloud.ai.rag2okf.parsing;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore;
-import com.fons.cloud.ai.rag2okf.domain.parsing.DocumentParserPort;
-import com.fons.cloud.ai.rag2okf.domain.parsing.ParseManifest;
-import com.fons.cloud.ai.rag2okf.domain.parsing.SourceAnchor;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentParserPort;
+import com.fons.cloud.ai.rag2okf.common.dto.ParseManifest;
+import com.fons.cloud.ai.rag2okf.common.dto.SourceAnchor;
 import com.fons.cloud.ai.rag2okf.infrastructure.parsing.Fons4AiDocumentParserAdapter;
 import com.fons.cloud.ai.rag.common.document.DocumentParseResult;
 import com.fons.cloud.ai.rag.common.document.ParseTrace;
@@ -79,14 +79,14 @@ class Fons4AiDocumentParserAdapterTest {
                 new DocumentArtifactStore.StoredArtifact("parsed/key", "abc123", 100L, Map.of()));
 
         DocumentParserPort.ParseRequest request = new DocumentParserPort.ParseRequest(
-                scope, "01J_VER", "01J_PARSE", "test.md", "text/markdown", "NATIVE_TIKA");
+                scope, "01J_DOC", "01J_PARSE", "test.md", "text/markdown", "NATIVE_TIKA");
 
         DocumentParserPort.ParseResult result = adapter.parse(request);
 
         assertNotNull(result);
         ParseManifest manifest = result.manifest();
         assertEquals("01J_PARSE", manifest.parseRevisionKey());
-        assertEquals("01J_VER", manifest.documentVersionKey());
+        assertEquals("01J_DOC", manifest.documentKey());
         assertEquals("NATIVE_TIKA", manifest.parserProfile());
         assertTrue(manifest.blockCount() > 0, "块数量必须大于 0");
 
@@ -119,7 +119,7 @@ class Fons4AiDocumentParserAdapterTest {
         when(parserFacade.parseWithTrace(any())).thenReturn(parseResult);
 
         DocumentParserPort.ParseRequest request = new DocumentParserPort.ParseRequest(
-                scope, "01J_VER", "01J_PARSE", "empty.txt", "text/plain", "NATIVE_TIKA");
+                scope, "01J_DOC", "01J_PARSE", "empty.txt", "text/plain", "NATIVE_TIKA");
 
         // AC-014：空产物拒绝，不伪造
         assertThrows(DocumentArtifactException.class, () -> adapter.parse(request));
@@ -144,7 +144,7 @@ class Fons4AiDocumentParserAdapterTest {
                 new DocumentArtifactStore.StoredArtifact("parsed/key", "abc123", 100L, Map.of()));
 
         DocumentParserPort.ParseRequest request = new DocumentParserPort.ParseRequest(
-                scope, "01J_VER", "01J_PARSE", "doc.pdf", "application/pdf", "MINERU_LAYOUT");
+                scope, "01J_DOC", "01J_PARSE", "doc.pdf", "application/pdf", "MINERU_LAYOUT");
 
         DocumentParserPort.ParseResult result = adapter.parse(request);
 

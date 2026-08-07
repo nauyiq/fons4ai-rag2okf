@@ -2,7 +2,7 @@ package com.fons.cloud.ai.rag2okf.infrastructure.task;
 
 import com.fons.cloud.ai.rag2okf.application.task.OutboxApplicationService;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbOutboxEventEntity;
-import com.fons.cloud.ai.rag2okf.domain.task.OutboxEventPort;
+import com.fons.cloud.ai.rag2okf.common.dto.OutboxEventPort;
 import com.fons.cloud.lock.annotation.DistributeLock;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

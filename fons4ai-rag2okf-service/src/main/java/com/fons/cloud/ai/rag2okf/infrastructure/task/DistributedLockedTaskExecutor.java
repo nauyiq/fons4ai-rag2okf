@@ -2,10 +2,10 @@ package com.fons.cloud.ai.rag2okf.infrastructure.task;
 
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.common.exeception.TaskExecutionException;
-import com.fons.cloud.ai.rag2okf.domain.task.ProcessingTask;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskExecutionPort;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskExecutionResult;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskType;
+import com.fons.cloud.ai.rag2okf.common.dto.ProcessingTask;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskExecutionPort;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskExecutionResult;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskType;
 import com.fons.cloud.lock.annotation.DistributeLock;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

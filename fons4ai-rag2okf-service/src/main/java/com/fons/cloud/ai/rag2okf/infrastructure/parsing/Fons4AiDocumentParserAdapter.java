@@ -2,17 +2,17 @@ package com.fons.cloud.ai.rag2okf.infrastructure.parsing;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactContent;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactReference;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactType;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ManifestArtifactRequest;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.StoredArtifact;
-import com.fons.cloud.ai.rag2okf.domain.parsing.DocumentParserPort;
-import com.fons.cloud.ai.rag2okf.domain.parsing.ParseManifest;
-import com.fons.cloud.ai.rag2okf.domain.parsing.ParseManifest.ParsedBlock;
-import com.fons.cloud.ai.rag2okf.domain.parsing.ParserTrace;
-import com.fons.cloud.ai.rag2okf.domain.parsing.SourceAnchor;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactContent;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactReference;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactType;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ManifestArtifactRequest;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.StoredArtifact;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentParserPort;
+import com.fons.cloud.ai.rag2okf.common.dto.ParseManifest;
+import com.fons.cloud.ai.rag2okf.common.dto.ParseManifest.ParsedBlock;
+import com.fons.cloud.ai.rag2okf.common.dto.ParserTrace;
+import com.fons.cloud.ai.rag2okf.common.dto.SourceAnchor;
 import com.fons.cloud.ai.rag.common.constants.DocumentType;
 import com.fons.cloud.ai.rag.common.document.DocumentParseRequest;
 import com.fons.cloud.ai.rag.common.document.DocumentParseResult;
@@ -57,7 +57,7 @@ public class Fons4AiDocumentParserAdapter implements DocumentParserPort {
     public ParseResult parse(ParseRequest request) {
         // 1. 从 MinIO 读取原文件
         ArtifactReference originalRef = new ArtifactReference(
-                request.scope(), ArtifactType.ORIGINAL, request.documentVersionKey());
+                request.scope(), ArtifactType.ORIGINAL, request.documentKey(), request.originalFilename());
         ArtifactContent originalContent = artifactStore.open(originalRef);
         InputStream originalStream = originalContent.inputStream();
 
@@ -83,7 +83,7 @@ public class Fons4AiDocumentParserAdapter implements DocumentParserPort {
 
             if (manifest.blockCount() == 0) {
                 throw new DocumentArtifactException(
-                        "解析产物为空: " + request.documentVersionKey());
+                        "解析产物为空: " + request.documentKey());
             }
 
             // 5. 写入 ParseManifest 到 MinIO
@@ -95,8 +95,8 @@ public class Fons4AiDocumentParserAdapter implements DocumentParserPort {
             StoredArtifact sourceAnchorArtifact = writeSourceAnchors(
                     request.scope(), request.parseRevisionKey(), manifest.blocks());
 
-            log.info("Parse completed: versionKey={}, parseRevisionKey={}, blocks={}",
-                    request.documentVersionKey(), request.parseRevisionKey(), manifest.blockCount());
+            log.info("Parse completed: documentKey={}, parseRevisionKey={}, blocks={}",
+                    request.documentKey(), request.parseRevisionKey(), manifest.blockCount());
 
             return new ParseResult(manifest, manifestArtifact, sourceAnchorArtifact);
 
@@ -129,7 +129,7 @@ public class Fons4AiDocumentParserAdapter implements DocumentParserPort {
 
         return new ParseManifest(
                 request.parseRevisionKey(),
-                request.documentVersionKey(),
+                request.documentKey(),
                 request.parserProfile(),
                 trace,
                 blocks,

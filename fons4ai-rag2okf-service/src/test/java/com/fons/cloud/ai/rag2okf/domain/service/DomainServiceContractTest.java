@@ -36,7 +36,6 @@ class DomainServiceContractTest {
             "KbWorkspaceMember",
             "KbKnowledgeBase",
             "KbSourceDocument",
-            "KbDocumentVersion",
             "KbParseRevision",
             "KbChunkRevision",
             "KbPublicationRevision",

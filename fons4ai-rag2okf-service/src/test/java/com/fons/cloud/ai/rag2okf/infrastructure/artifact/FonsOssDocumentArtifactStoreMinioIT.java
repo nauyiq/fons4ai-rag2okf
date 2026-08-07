@@ -1,6 +1,6 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.artifact;
 
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore;
 import com.fons.cloud.file.api.OssStoreService;
 import com.fons.cloud.file.common.CloudSecret;
 import com.fons.cloud.file.common.constants.ServerProvider;
@@ -75,7 +75,6 @@ class FonsOssDocumentArtifactStoreMinioIT {
         DocumentArtifactStore.StoredArtifact original = artifactStore.storeOriginal(
                 new DocumentArtifactStore.OriginalArtifactRequest(
                         scope,
-                        "01J00000000000000000000003",
                         "policy.txt",
                         "text/plain",
                         new ByteArrayInputStream("private policy".getBytes(StandardCharsets.UTF_8))
@@ -130,7 +129,6 @@ class FonsOssDocumentArtifactStoreMinioIT {
 
         assertThatThrownBy(() -> artifactStore.storeOriginal(new DocumentArtifactStore.OriginalArtifactRequest(
                 scope,
-                "01J00000000000000000000005",
                 "failed.txt",
                 "text/plain",
                 failingStream()

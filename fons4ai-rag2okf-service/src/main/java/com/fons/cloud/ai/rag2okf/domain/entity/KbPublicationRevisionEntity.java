@@ -33,9 +33,6 @@ public class KbPublicationRevisionEntity extends CommonEntity {
     /** 源文档数据库主键。 */
     private Long sourceDocumentId;
 
-    /** 发布快照文件版本数据库主键。 */
-    private Long documentVersionId;
-
     /** 发布快照解析 Revision 数据库主键。 */
     private Long parseRevisionId;
 

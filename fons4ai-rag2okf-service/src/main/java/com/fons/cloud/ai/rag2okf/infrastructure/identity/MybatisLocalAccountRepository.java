@@ -49,4 +49,17 @@ public class MybatisLocalAccountRepository implements LocalAccountRepository {
                 .set(KbUserEntity::getAvatarUrl, user.getAvatarUrl())
                 .set(KbUserEntity::getPreferenceJson, user.getPreferenceJson()));
     }
+
+    @Override
+    public boolean existsByNormalizedEmail(String normalizedEmail) {
+        return userDomainService.count(
+                Wrappers.<KbUserEntity>lambdaQuery().eq(KbUserEntity::getEmail, normalizedEmail)
+        ) > 0;
+    }
+
+    @Override
+    public KbUserEntity save(KbUserEntity user) {
+        userDomainService.save(user);
+        return user;
+    }
 }

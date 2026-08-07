@@ -1,25 +1,25 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.task;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fons.cloud.ai.rag2okf.application.parsing.ParseTaskPayload;
+import com.fons.cloud.ai.rag2okf.common.dto.ParseTaskPayload;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
-import com.fons.cloud.ai.rag2okf.domain.artifact.DocumentArtifactStore.ArtifactScope;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactScope;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbChunkRevisionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbParseRevisionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
-import com.fons.cloud.ai.rag2okf.domain.parsing.ChunkManifest;
-import com.fons.cloud.ai.rag2okf.domain.parsing.DocumentChunkerPort;
-import com.fons.cloud.ai.rag2okf.domain.parsing.DocumentParserPort;
-import com.fons.cloud.ai.rag2okf.domain.parsing.ParseManifest;
+import com.fons.cloud.ai.rag2okf.common.dto.ChunkManifest;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentChunkerPort;
+import com.fons.cloud.ai.rag2okf.common.dto.DocumentParserPort;
+import com.fons.cloud.ai.rag2okf.common.dto.ParseManifest;
 import com.fons.cloud.ai.rag2okf.domain.service.KbChunkRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbParseRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbSourceDocumentDomainService;
-import com.fons.cloud.ai.rag2okf.domain.task.ProcessingTask;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskExecutionPort;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskExecutionResult;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskType;
-import com.fons.cloud.ai.rag2okf.application.model.ModelBusinessKeyGenerator;
+import com.fons.cloud.ai.rag2okf.common.dto.ProcessingTask;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskExecutionPort;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskExecutionResult;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskType;
+import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
@@ -101,11 +101,11 @@ public class ParseTaskExecutor implements TaskExecutionPort {
 
         try {
             // 1. 解析文件
-            log.info("Parse started: taskKey={}, versionKey={}, parserProfile={}",
-                    task.taskKey(), payload.versionKey(), payload.parserProfile());
+            log.info("Parse started: taskKey={}, fileToken={}, parserProfile={}",
+                    task.taskKey(), payload.fileToken(), payload.parserProfile());
 
             DocumentParserPort.ParseRequest parseRequest = new DocumentParserPort.ParseRequest(
-                    scope, payload.versionKey(), parseRevisionKey,
+                    scope, payload.documentKey(), parseRevisionKey,
                     payload.originalFilename(), payload.contentType(), payload.parserProfile());
             DocumentParserPort.ParseResult parseResult = documentParserPort.parse(parseRequest);
 
@@ -158,8 +158,13 @@ public class ParseTaskExecutor implements TaskExecutionPort {
         KbParseRevisionEntity parseRevision = new KbParseRevisionEntity();
         parseRevision.setParseRevisionKey(parseRevisionKey);
         parseRevision.setSourceDocumentId(payload.sourceDocumentId());
-        parseRevision.setDocumentVersionId(payload.documentVersionId());
-        parseRevision.setParserProfileJson(payload.parserProfile());
+        // parserProfile 是字符串枚举值，MySQL JSON 列要求合法 JSON 文本，包装为 JSON 对象
+        try {
+            parseRevision.setParserProfileJson(
+                    objectMapper.writeValueAsString(java.util.Map.of("profile", payload.parserProfile())));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            parseRevision.setParserProfileJson("{\"profile\":null}");
+        }
         try {
             parseRevision.setParserTraceJson(
                     objectMapper.writeValueAsString(parseResult.manifest().parserTrace()));

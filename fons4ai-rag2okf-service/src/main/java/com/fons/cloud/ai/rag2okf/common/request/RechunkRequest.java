@@ -1,6 +1,6 @@
 package com.fons.cloud.ai.rag2okf.common.request;
 
-import com.fons.cloud.ai.rag2okf.domain.parsing.ChunkProfile;
+import com.fons.cloud.ai.rag2okf.common.dto.ParsingChunkProfile;
 
 /**
  * 重新分块请求体（技术设计 §3.4）。
@@ -13,6 +13,6 @@ import com.fons.cloud.ai.rag2okf.domain.parsing.ChunkProfile;
 public record RechunkRequest(
         boolean confirmed,
         String expectedChunkRevisionKey,
-        ChunkProfile chunkProfile
+        ParsingChunkProfile chunkProfile
 ) {
 }

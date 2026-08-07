@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 /**
  * 文档上传、更新文件、详情查询与原文件下载的 HTTP 接口。
@@ -37,13 +38,14 @@ public class DocumentController {
 
     private final DocumentApplicationService documentApplicationService;
 
-    /** 查询知识库下的文档当前视图，不返回历史版本。 */
+    /** 查询知识库下的文档当前视图，不返回历史版本。支持按 folderPath 精确筛选。 */
     @GetMapping("/knowledge-bases/{knowledgeBaseKey}/documents")
     public R<PageResponse<DocumentSummaryResponse>> listDocuments(
             @PathVariable String knowledgeBaseKey,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return R.ok(documentApplicationService.listDocuments(knowledgeBaseKey, page, size));
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(value = "folderPath", required = false) String folderPath) {
+        return R.ok(documentApplicationService.listDocuments(knowledgeBaseKey, page, size, folderPath));
     }
 
     /**
@@ -52,24 +54,48 @@ public class DocumentController {
      * @param knowledgeBaseKey 知识库标识
      * @param file 上传文件
      * @param parseMode 解析模式：DEFAULT、PARSE 或 SKIP
+     * @param folderPath 目标文件夹路径，不传时默认为根级 /
      * @return 上传受理响应
      */
     @PostMapping("/knowledge-bases/{knowledgeBaseKey}/documents")
     public R<DocumentUploadResponse> uploadDocument(
             @PathVariable String knowledgeBaseKey,
             @RequestPart("file") MultipartFile file,
-            @RequestPart(value = "parseMode", required = false) String parseMode) {
+            @RequestPart(value = "parseMode", required = false) String parseMode,
+            @RequestPart(value = "folderPath", required = false) String folderPath) {
         return R.ok(documentApplicationService.uploadDocument(
-                knowledgeBaseKey, file, parseMode != null ? parseMode : "DEFAULT"));
+                knowledgeBaseKey, file,
+                parseMode != null ? parseMode : "DEFAULT",
+                folderPath));
     }
 
     /**
-     * 更新文档的当前文件。使用 expectedCurrentVersionKey 做乐观控制。
+     * 批量上传文档。单次最多 50 文件/200MB，部分失败时已成功文件不回滚（CR-014）。
+     *
+     * @param knowledgeBaseKey 知识库标识
+     * @param files 上传文件列表
+     * @param parseMode 解析模式
+     * @param relativePaths 每个文件的相对路径（用于推导 folderPath），可选
+     * @return 每个文件的上传结果
+     */
+    @PostMapping("/knowledge-bases/{knowledgeBaseKey}/documents/batch")
+    public R<List<DocumentUploadResponse>> batchUploadDocuments(
+            @PathVariable String knowledgeBaseKey,
+            @RequestPart("files") List<MultipartFile> files,
+            @RequestPart(value = "parseMode", required = false) String parseMode,
+            @RequestParam(value = "relativePaths", required = false) List<String> relativePaths) {
+        return R.ok(documentApplicationService.batchUploadDocuments(
+                knowledgeBaseKey, files, relativePaths,
+                parseMode != null ? parseMode : "DEFAULT"));
+    }
+
+    /**
+     * 更新文档的当前文件。使用 expectedCurrentFileToken 做乐观控制。
      *
      * @param documentKey 文档标识
      * @param file 新文件
      * @param parseMode 解析模式
-     * @param expectedCurrentVersionKey 调用方持有的当前版本 key
+     * @param expectedCurrentFileToken 调用方持有的当前文件 CAS 令牌
      * @return 更新受理响应
      */
     @PostMapping("/documents/{documentKey}/files")

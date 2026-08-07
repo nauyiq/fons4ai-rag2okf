@@ -26,9 +26,6 @@
       "publicationRevisionKey": {
         "type": "keyword"
       },
-      "documentVersionKey": {
-        "type": "keyword"
-      },
       "parseRevisionKey": {
         "type": "keyword"
       },

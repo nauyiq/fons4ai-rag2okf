@@ -2,8 +2,9 @@ package com.fons.cloud.ai.rag2okf.application.chunking;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fons.cloud.ai.rag2okf.application.model.CurrentUserContext;
-import com.fons.cloud.ai.rag2okf.application.model.ModelBusinessKeyGenerator;
+import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
+import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
+import com.fons.cloud.ai.rag2okf.common.dto.RechunkTaskPayload;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.common.constants.WorkspaceRole;
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
@@ -17,13 +18,13 @@ import com.fons.cloud.ai.rag2okf.domain.entity.KbParseRevisionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
-import com.fons.cloud.ai.rag2okf.domain.parsing.ChunkProfile;
+import com.fons.cloud.ai.rag2okf.common.dto.ParsingChunkProfile;
 import com.fons.cloud.ai.rag2okf.domain.service.KbChunkRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbParseRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbSourceDocumentDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbWorkspaceDomainService;
-import com.fons.cloud.ai.rag2okf.domain.task.TaskType;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskType;
 import com.fons.cloud.ai.rag2okf.infrastructure.identity.WorkspaceAccessPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -71,7 +72,7 @@ public class RechunkApplicationService {
      */
     public RechunkResponse triggerRechunk(
             String documentKey, boolean confirmed,
-            String expectedChunkRevisionKey, ChunkProfile chunkProfile) {
+            String expectedChunkRevisionKey, ParsingChunkProfile chunkProfile) {
 
         // AC-019：confirmed 非 true 直接拒绝
         if (!confirmed) {
@@ -119,7 +120,7 @@ public class RechunkApplicationService {
                 parseRevision.getId(),
                 parseRevision.getParseRevisionKey(),
                 expectedChunkRevisionKey,
-                chunkProfile != null ? chunkProfile : ChunkProfile.DEFAULT_RECURSIVE);
+                chunkProfile != null ? chunkProfile : ParsingChunkProfile.DEFAULT_RECURSIVE);
 
         String payloadJson;
         try {

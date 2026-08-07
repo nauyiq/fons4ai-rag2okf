@@ -1,7 +1,7 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.model;
 
 import com.fons.cloud.ai.rag2okf.common.constants.ModelType;
-import com.fons.cloud.ai.rag2okf.application.model.ResolvedModelDescriptor;
+import com.fons.cloud.ai.rag2okf.common.dto.ResolvedModelDescriptor;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
 import org.junit.jupiter.api.Test;
