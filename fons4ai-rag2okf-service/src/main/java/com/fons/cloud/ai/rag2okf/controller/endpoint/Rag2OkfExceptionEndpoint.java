@@ -11,6 +11,7 @@ import com.fons.cloud.ai.rag2okf.common.exeception.ModelConfigurationException;
 import com.fons.cloud.ai.rag2okf.common.exeception.WorkspaceAccessDeniedException;
 import com.fons.cloud.common.result.R;
 import com.fons.cloud.common.result.ResultCode;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  *
  * @author hongqy
  */
+@Slf4j
 @Order(Ordered.HIGHEST_PRECEDENCE)
 @RestControllerAdvice
 public class Rag2OkfExceptionEndpoint {
@@ -112,6 +114,7 @@ public class Rag2OkfExceptionEndpoint {
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     @ExceptionHandler(RuntimeException.class)
     public R<Void> handleSystemFailure(RuntimeException exception) {
+        log.error("系统内部错误（T031 PATCH 诊断）", exception);
         return R.failed(ResultCode.SYSTEM_INTERVAL_ERROR);
     }
 }

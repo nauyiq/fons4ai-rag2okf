@@ -310,6 +310,11 @@ function pickFiles(event: Event): void {
   uploadResults.value = []
 }
 
+function onUploadMenuClick({ key }: { key: string }): void {
+  if (key === 'folder') folderInput.value?.click()
+  else fileInput.value?.click()
+}
+
 function removeFile(index: number): void {
   selectedFiles.value.splice(index, 1)
 }
@@ -469,7 +474,7 @@ onBeforeUnmount(() => {
         <h1>文档工作台</h1>
         <p>文件名相同也会创建新文档；这里始终只呈现每个文档的当前文件。</p>
       </div>
-      <button v-if="workspaceStore.canManage" class="primary-action" type="button" @click="openUpload">＋ 上传</button>
+      <a-button v-if="workspaceStore.canManage" type="primary" data-test="upload-btn" @click="openUpload">＋ 上传</a-button>
     </header>
 
     <div class="document-layout">
@@ -513,17 +518,19 @@ onBeforeUnmount(() => {
             ＋ 新建文件夹
           </button>
           <div v-else class="folder-input-group">
-            <input
-              v-model="newFolderName"
-              type="text"
+            <a-input
+              v-model:value="newFolderName"
               placeholder="如：合规材料/2024年报"
-              maxlength="512"
+              :maxlength="512"
+              size="small"
               data-test="new-folder-input"
               @keyup.enter="addFolder"
               @keyup.esc="showNewFolderInput = false"
             />
-            <button class="secondary-action" type="button" data-test="new-folder-confirm" @click="addFolder">确定</button>
-            <button class="text-button" type="button" @click="showNewFolderInput = false">取消</button>
+            <div class="folder-input-actions">
+              <a-button size="small" type="primary" data-test="new-folder-confirm" @click="addFolder">确定</a-button>
+              <a-button size="small" type="link" @click="showNewFolderInput = false">取消</a-button>
+            </div>
           </div>
         </template>
       </aside>
@@ -571,14 +578,9 @@ onBeforeUnmount(() => {
           <span>{{ filteredDocuments.length }} 个文档</span>
           <template v-if="workspaceStore.canManage && selectedCount > 0">
             <span class="selected-count">已选 {{ selectedCount }} 个</span>
-            <button
-              class="danger-action"
-              type="button"
-              data-test="batch-delete-btn"
-              @click="confirmDeleteBatch"
-            >批量删除</button>
+            <a-button danger size="small" data-test="batch-delete-btn" @click="confirmDeleteBatch">批量删除</a-button>
           </template>
-          <button class="text-button" :disabled="loading" type="button" @click="loadDocuments">↻ 刷新</button>
+          <a-button type="link" class="text-button" :disabled="loading" @click="loadDocuments">↻ 刷新</a-button>
         </section>
 
         <!-- 删除操作反馈（归属到操作区，不冻结整页） -->
@@ -587,14 +589,14 @@ onBeforeUnmount(() => {
 
         <p v-if="errorMessage" class="inline-error" role="alert">
           {{ errorMessage }}
-          <button type="button" @click="loadDocuments">重试</button>
+          <a-button type="link" size="small" @click="loadDocuments">重试</a-button>
         </p>
         <div v-else-if="loading" class="state-panel">正在读取文档…</div>
         <div v-else-if="filteredDocuments.length === 0" class="empty-panel">
           <span>▣</span>
           <strong>当前文件夹暂无文档</strong>
           <p>上传后可选择立即解析，或先仅保留原文件供查看。</p>
-          <button v-if="workspaceStore.canManage" class="primary-action" type="button" @click="openUpload">上传文件</button>
+          <a-button v-if="workspaceStore.canManage" type="primary" @click="openUpload">上传文件</a-button>
         </div>
         <div v-else class="document-list">
           <div
@@ -649,39 +651,41 @@ onBeforeUnmount(() => {
 
     <!-- 合并上传弹窗（居中模态，替代原右侧抽屉） -->
     <AppDialog v-model="showUpload" title="上传文档" size="md">
-      <header class="dialog-header">
-        <p class="eyebrow">UPLOAD</p>
-        <h2 id="dialog-title">上传文档</h2>
-        <p class="dialog-description">选择文件上传单个文档，或选择文件夹批量上传并保留目录结构。单次最多 50 文件 / 200MB。</p>
-      </header>
-      <form class="upload-form" @submit.prevent="submitUpload">
-        <label class="upload-target">目标文件夹
-          <select v-model="targetFolderPath">
-            <option value="/">全部文件（根级）</option>
-            <option v-for="f in folderOptions" :key="f" :value="f">{{ f }}</option>
-          </select>
-        </label>
+      <p class="dialog-description">选择文件上传单个文档，或选择文件夹批量上传并保留目录结构。单次最多 50 文件 / 200MB。</p>
+      <a-form class="upload-form" layout="vertical" @submit.prevent="submitUpload">
+        <a-form-item label="目标文件夹">
+          <a-select v-model:value="targetFolderPath" data-test="upload-target-folder">
+            <a-select-option value="/">全部文件（根级）</a-select-option>
+            <a-select-option v-for="f in folderOptions" :key="f" :value="f">{{ f }}</a-select-option>
+          </a-select>
+        </a-form-item>
 
-        <div class="upload-choices">
-          <button class="secondary-action" type="button" @click="fileInput?.click()">选择文件</button>
-          <button class="secondary-action" type="button" @click="folderInput?.click()">选择文件夹</button>
-        </div>
-        <input
-          ref="fileInput"
-          type="file"
-          data-test="document-file"
-          class="hidden-input"
-          @change="pickFiles"
-        />
-        <input
-          ref="folderInput"
-          type="file"
-          data-test="document-folder"
-          class="hidden-input"
-          multiple
-          webkitdirectory
-          @change="pickFiles"
-        />
+        <a-form-item label="选择文件">
+          <a-dropdown-button @click="fileInput?.click()">
+            添加文件
+            <template #overlay>
+              <a-menu @click="onUploadMenuClick">
+                <a-menu-item key="folder" data-test="document-folder">从文件夹添加</a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown-button>
+          <input
+            ref="fileInput"
+            type="file"
+            data-test="document-file"
+            style="display: none"
+            @change="pickFiles"
+          />
+          <input
+            ref="folderInput"
+            type="file"
+            data-test="document-folder"
+            style="display: none"
+            multiple
+            webkitdirectory
+            @change="pickFiles"
+          />
+        </a-form-item>
 
         <div v-if="selectedFiles.length > 0" class="file-list-section">
           <p class="file-list-heading">
@@ -691,33 +695,33 @@ onBeforeUnmount(() => {
             <li v-for="(f, i) in selectedFiles" :key="i" class="file-list-item">
               <span class="file-list-name">{{ f.name }}</span>
               <span class="file-list-meta">{{ formatBytes(f.size) }}</span>
-              <button class="text-button" type="button" @click="removeFile(i)">移除</button>
+              <a-button type="link" size="small" @click="removeFile(i)">移除</a-button>
             </li>
           </ul>
-          <p v-if="exceedsLimit" class="inline-error" role="alert">
-            超过 50 文件 / 200MB 限制，请分批上传。
-          </p>
+          <a-alert v-if="exceedsLimit" type="error" message="超过 50 文件 / 200MB 限制，请分批上传。" show-icon />
         </div>
 
-        <fieldset>
-          <legend>上传后的处理</legend>
-          <label><input v-model="parseMode" value="DEFAULT" type="radio" />使用知识库默认策略</label>
-          <label><input v-model="parseMode" value="PARSE" type="radio" />立即解析</label>
-          <label><input v-model="parseMode" value="SKIP" type="radio" />仅保留原文件</label>
-        </fieldset>
+        <a-form-item label="上传后的处理">
+          <a-radio-group v-model:value="parseMode" data-test="parse-mode">
+            <a-radio value="DEFAULT">使用知识库默认策略</a-radio>
+            <a-radio value="PARSE">立即解析</a-radio>
+            <a-radio value="SKIP">仅保留原文件</a-radio>
+          </a-radio-group>
+        </a-form-item>
 
-        <p v-if="uploadError" class="inline-error" role="alert">{{ uploadError }}</p>
+        <a-alert v-if="uploadError" type="error" :message="uploadError" show-icon />
 
         <footer class="dialog-actions">
-          <button class="secondary-action" type="button" @click="showUpload = false">取消</button>
-          <button
-            class="primary-action"
+          <a-button @click="showUpload = false">取消</a-button>
+          <a-button
+            type="primary"
+            html-type="submit"
             data-test="submit-upload"
-            :disabled="selectedFiles.length === 0 || exceedsLimit || uploading"
-            type="submit"
-          >{{ uploading ? '上传中…' : '确认上传' }}</button>
+            :disabled="selectedFiles.length === 0 || exceedsLimit"
+            :loading="uploading"
+          >确认上传</a-button>
         </footer>
-      </form>
+      </a-form>
     </AppDialog>
 
     <!-- 删除二次确认弹窗（danger + persistent，遵循 AC-024） -->
@@ -807,6 +811,7 @@ onBeforeUnmount(() => {
   color: var(--ink);
   font-size: 12px;
 }
+.folder-input-actions { display: flex; gap: 6px; align-items: center; }
 
 /* 右键上下文菜单 */
 .context-menu {

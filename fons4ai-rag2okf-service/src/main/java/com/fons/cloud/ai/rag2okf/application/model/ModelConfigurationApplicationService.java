@@ -101,13 +101,15 @@ public class ModelConfigurationApplicationService {
     @Transactional(rollbackFor = Exception.class)
     public ModelConnectionResponse createConnection(CreateModelConnectionRequest request) {
         KbUserEntity user = currentUserContext.requireCurrentUser();
-        validateConnectionRequest(request.templateCode(), request.providerName(), request.displayName(), request.baseUrl());
+        // providerCode 为字符串：匹配已知模板时复用模板信息，否则按自定义处理使用传入的 providerName 和 baseUrl
+        String providerCode = validateProviderCode(request.providerCode());
+        validateConnectionRequest(request.providerName(), request.displayName(), request.baseUrl());
         endpointPolicy.validate(request.baseUrl());
         EncryptedCredential credential = credentialCipher.encrypt(request.apiKey());
         KbModelConnectionEntity connection = new KbModelConnectionEntity();
         connection.setConnectionKey(keyGenerator.nextKey());
         connection.setOwnerUserId(user.getId());
-        connection.setProviderCode(request.templateCode().name());
+        connection.setProviderCode(providerCode);
         connection.setProviderName(requiredText(request.providerName(), 80));
         connection.setDisplayName(requiredText(request.displayName(), 80));
         connection.setProtocolType(ModelProtocolType.OPENAI_COMPATIBLE);
@@ -157,16 +159,70 @@ public class ModelConfigurationApplicationService {
     }
 
     /**
+     * 独立替换当前用户 Provider 连接的 API Key。
+     *
+     * <p>复用与创建相同的加密逻辑，更新密文、nonce、keyVersion 和掩码，不触碰其他字段。</p>
+     *
+     * @param connectionKey 连接业务标识
+     * @param apiKey 新的 API Key 明文
+     * @return 更新后的连接响应
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ModelConnectionResponse replaceApiKey(String connectionKey, String apiKey) {
+        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbModelConnectionEntity connection = requireOwnedConnection(connectionKey, user.getId());
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new ModelConfigurationException();
+        }
+        EncryptedCredential credential = credentialCipher.encrypt(apiKey);
+        connection.setApiKeyCiphertext(credential.ciphertext());
+        connection.setApiKeyNonce(credential.nonce());
+        connection.setKeyVersion(credential.keyVersion());
+        connection.setApiKeyMask(mask(apiKey));
+        connectionDomainService.updateById(connection);
+        return toConnectionResponse(connection);
+    }
+
+    /**
+     * 软删除当前用户的 Provider 连接及其下所有档案。
+     *
+     * <p>校验连接存在且属于当前用户；删除仅置 deleted=1，先删档案再删连接。</p>
+     *
+     * @param connectionKey 连接业务标识
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteConnection(String connectionKey) {
+        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbModelConnectionEntity connection = requireOwnedConnection(connectionKey, user.getId());
+        // 先软删除该连接下的所有档案
+        profileDomainService.remove(Wrappers.<KbModelProfileEntity>lambdaQuery()
+                .eq(KbModelProfileEntity::getConnectionId, connection.getId()));
+        // 再软删除连接
+        connectionDomainService.removeById(connection.getId());
+    }
+
+    /**
      * 查询当前用户的模型档案。
      *
+     * @param connectionKey 可选的连接业务标识，非空时只返回该连接下的档案
      * @return 当前用户拥有的档案列表
      */
-    public List<ModelProfileResponse> listProfiles() {
+    public List<ModelProfileResponse> listProfiles(String connectionKey) {
         KbUserEntity user = currentUserContext.requireCurrentUser();
-        return profileDomainService.list(Wrappers.<KbModelProfileEntity>lambdaQuery()
-                        .eq(KbModelProfileEntity::getOwnerUserId, user.getId())
-                        .orderByDesc(KbModelProfileEntity::getUpdated))
-                .stream()
+        List<KbModelProfileEntity> profiles;
+        if (connectionKey != null && !connectionKey.isBlank()) {
+            // connectionKey 非空时按所属连接过滤
+            KbModelConnectionEntity connection = requireOwnedConnection(connectionKey, user.getId());
+            profiles = profileDomainService.list(Wrappers.<KbModelProfileEntity>lambdaQuery()
+                    .eq(KbModelProfileEntity::getOwnerUserId, user.getId())
+                    .eq(KbModelProfileEntity::getConnectionId, connection.getId())
+                    .orderByDesc(KbModelProfileEntity::getUpdated));
+        } else {
+            profiles = profileDomainService.list(Wrappers.<KbModelProfileEntity>lambdaQuery()
+                    .eq(KbModelProfileEntity::getOwnerUserId, user.getId())
+                    .orderByDesc(KbModelProfileEntity::getUpdated));
+        }
+        return profiles.stream()
                 .map(profile -> toProfileResponse(profile, requireOwnedConnectionById(profile.getConnectionId(), user.getId())))
                 .toList();
     }
@@ -184,7 +240,8 @@ public class ModelConfigurationApplicationService {
         if (connection.getStatus() != ModelConnectionStatus.ACTIVE || request.modelType() == null) {
             throw new ModelConfigurationException();
         }
-        validateProfileInput(request.modelType(), request.modelName(), request.dimensions(), request.timeoutSeconds(), request.temperature());
+        validateProfileInput(request.modelType(), request.modelName(), request.dimensions(),
+                request.contextWindowLength(), request.timeoutSeconds(), request.temperature());
         KbModelProfileEntity profile = new KbModelProfileEntity();
         profile.setProfileKey(keyGenerator.nextKey());
         profile.setOwnerUserId(user.getId());
@@ -192,7 +249,8 @@ public class ModelConfigurationApplicationService {
         profile.setModelType(request.modelType());
         profile.setModelName(requiredText(request.modelName(), 160));
         profile.setDimensions(request.dimensions());
-        profile.setParametersJson(parameterCodec.encode(request.timeoutSeconds(), request.temperature()));
+        profile.setContextWindowLength(request.contextWindowLength());
+        profile.setParametersJson(parameterCodec.encode(request.timeoutSeconds(), request.temperature(), request.contextWindowLength()));
         profile.setStatus(ModelProfileStatus.ACTIVE);
         profileDomainService.save(profile);
         return toProfileResponse(profile, connection);
@@ -212,20 +270,36 @@ public class ModelConfigurationApplicationService {
         KbModelConnectionEntity connection = requireOwnedConnectionById(profile.getConnectionId(), user.getId());
         Integer dimensions = request.dimensions() == null ? profile.getDimensions() : request.dimensions();
         ModelParameterCodec.ModelParameters currentParameters = parameterCodec.decode(profile.getParametersJson());
+        Integer contextWindowLength = request.contextWindowLength() == null ? profile.getContextWindowLength() : request.contextWindowLength();
         Integer timeout = request.timeoutSeconds() == null ? currentParameters.timeoutSeconds() : request.timeoutSeconds();
         Double temperature = request.temperature() == null ? currentParameters.temperature() : request.temperature();
         validateProfileInput(profile.getModelType(), request.modelName() == null ? profile.getModelName() : request.modelName(),
-                dimensions, timeout, temperature);
+                dimensions, contextWindowLength, timeout, temperature);
         if (request.modelName() != null) {
             profile.setModelName(requiredText(request.modelName(), 160));
         }
         profile.setDimensions(dimensions);
-        profile.setParametersJson(parameterCodec.encode(timeout, temperature));
+        profile.setContextWindowLength(contextWindowLength);
+        profile.setParametersJson(parameterCodec.encode(timeout, temperature, contextWindowLength));
         if (request.status() != null) {
             profile.setStatus(request.status());
         }
         profileDomainService.updateById(profile);
         return toProfileResponse(profile, connection);
+    }
+
+    /**
+     * 软删除当前用户的模型档案。
+     *
+     * <p>校验档案存在且属于当前用户；删除仅置 deleted=1。</p>
+     *
+     * @param profileKey 档案业务标识
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteProfile(String profileKey) {
+        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbModelProfileEntity profile = requireOwnedProfile(profileKey, user.getId());
+        profileDomainService.removeById(profile.getId());
     }
 
     /**
@@ -253,7 +327,9 @@ public class ModelConfigurationApplicationService {
     }
 
     private Integer invokeMinimalProbe(ResolvedModelDescriptor descriptor, String apiKey) {
-        if (descriptor.modelType() == ModelType.CHAT) {
+        // 读取时兼容旧值 CHAT：归一为 LLM 走对话探活。
+        String type = ModelType.normalize(descriptor.modelType().getValue());
+        if ("LLM".equals(type)) {
             modelClientFactory.createChatModel(descriptor, apiKey).chat("health check");
             return null;
         }
@@ -304,22 +380,34 @@ public class ModelConfigurationApplicationService {
         return profile;
     }
 
-    private void validateConnectionRequest(ModelProviderTemplate templateCode, String providerName,
-                                           String displayName, String baseUrl) {
-        if (templateCode == null) {
-            throw new ModelConfigurationException();
-        }
+    private void validateConnectionRequest(String providerName, String displayName, String baseUrl) {
         requiredText(providerName, 80);
         requiredText(displayName, 80);
         requiredText(baseUrl, 512);
     }
 
+    /**
+     * 校验 providerCode：非空且长度不超过数据库列长度，匹配已知模板或自定义代码。
+     *
+     * @param providerCode 前端传入的厂商代码
+     * @return 规整后的 providerCode
+     */
+    private String validateProviderCode(String providerCode) {
+        return requiredText(providerCode, 40);
+    }
+
     private void validateProfileInput(ModelType modelType, String modelName, Integer dimensions,
-                                      Integer timeoutSeconds, Double temperature) {
+                                      Integer contextWindowLength, Integer timeoutSeconds, Double temperature) {
         requiredText(modelName, 160);
-        parameterCodec.encode(timeoutSeconds, temperature);
-        if (modelType == ModelType.CHAT && dimensions != null || modelType == ModelType.EMBEDDING && temperature != null
-                || modelType == ModelType.EMBEDDING && dimensions != null && dimensions < 1) {
+        parameterCodec.encode(timeoutSeconds, temperature, contextWindowLength);
+        // 仅允许 7 白名单内的模型类型写入，旧值 CHAT 已废弃。
+        if (modelType == null || !ModelType.isValid(modelType.getValue())) {
+            throw new ModelConfigurationException();
+        }
+        String type = ModelType.normalize(modelType.getValue());
+        if ("LLM".equals(type) && dimensions != null
+                || "EMBEDDING".equals(type) && temperature != null
+                || "EMBEDDING".equals(type) && dimensions != null && dimensions < 1) {
             throw new ModelConfigurationException();
         }
     }
@@ -339,16 +427,28 @@ public class ModelConfigurationApplicationService {
     }
 
     private ModelConnectionResponse toConnectionResponse(KbModelConnectionEntity connection) {
+        boolean apiKeyConfigured = connection.getApiKeyMask() != null && !connection.getApiKeyMask().isBlank();
         return new ModelConnectionResponse(connection.getConnectionKey(), connection.getProviderCode(),
                 connection.getProviderName(), connection.getDisplayName(), connection.getProtocolType(),
                 connection.getBaseUrl(), connection.getApiKeyMask(), connection.getStatus(),
-                connection.getLastTestStatus(), connection.getLastTestAt());
+                connection.getLastTestStatus(), connection.getLastTestAt(), apiKeyConfigured, connection.getUpdated());
     }
 
     private ModelProfileResponse toProfileResponse(KbModelProfileEntity profile, KbModelConnectionEntity connection) {
         ModelParameterCodec.ModelParameters parameters = parameterCodec.decode(profile.getParametersJson());
-        return new ModelProfileResponse(profile.getProfileKey(), connection.getConnectionKey(), profile.getModelType(),
+        // 读取别名兼容：旧数据 model_type=CHAT 读取时归一为 LLM 返回。
+        ModelType responseType = normalizeResponseType(profile.getModelType());
+        return new ModelProfileResponse(profile.getProfileKey(), connection.getConnectionKey(), responseType,
                 profile.getModelName(), profile.getDimensions(), parameters.timeoutSeconds(), parameters.temperature(),
-                profile.getStatus(), profile.getLastTestStatus(), profile.getLastTestAt());
+                profile.getStatus(), profile.getLastTestStatus(), profile.getLastTestAt(),
+                profile.getContextWindowLength(), profile.getUpdated());
+    }
+
+    private ModelType normalizeResponseType(ModelType modelType) {
+        if (modelType == null) {
+            return null;
+        }
+        String normalized = ModelType.normalize(modelType.getValue());
+        return "LLM".equals(normalized) ? ModelType.LLM : modelType;
     }
 }

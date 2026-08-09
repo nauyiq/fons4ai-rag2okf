@@ -50,6 +50,9 @@ public class KbModelProfileEntity extends CommonEntity {
     /** Embedding 输出维度提示。 */
     private Integer dimensions;
 
+    /** 上下文窗口长度，暂由前端维护，未设置时为 null。 */
+    private Integer contextWindowLength;
+
     /** 温度、超时和重试等受控参数 JSON 快照。 */
     private String parametersJson;
 

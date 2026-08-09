@@ -2,12 +2,12 @@
 /**
  * 确认弹窗组件，用于破坏性操作的二次确认。
  *
- * <p>基于 AppDialog 实现，默认启用 danger 样式和 persistent（不允许误点遮罩关闭）。
- * 确认按钮触发 confirm 事件并关闭；取消按钮触发 cancel 事件并关闭。
+ * <p>基于 ant-design-vue a-modal 实现，默认启用 danger 样式和 persistent
+ * （不允许误点遮罩/Esc 关闭）。确认按钮触发 confirm 事件并关闭；
+ * 取消按钮或遮罩/Esc（非 persistent 时）触发 cancel 事件并关闭。
  * 遵循 AC-007：删除等破坏性操作必须二次确认。
  */
 import { computed } from 'vue'
-import AppDialog from './AppDialog.vue'
 
 const props = withDefaults(defineProps<{
   /** 是否显示 */
@@ -37,9 +37,10 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-const visible = computed({
-  get: () => props.modelValue,
-  set: (value: boolean) => emit('update:modelValue', value),
+const wrapClassName = computed(() => {
+  const classes = ['app-dialog-wrap']
+  if (props.danger) classes.push('app-dialog-danger')
+  return classes.join(' ')
 })
 
 /** 确认操作：触发 confirm 并关闭弹窗 */
@@ -48,30 +49,44 @@ function handleConfirm(): void {
   emit('update:modelValue', false)
 }
 
-/** 取消操作：触发 cancel 并关闭弹窗 */
-function handleCancel(): void {
+/** 取消按钮点击：始终触发 cancel 并关闭（不受 persistent 影响） */
+function handleCancelClick(): void {
+  emit('cancel')
+  emit('update:modelValue', false)
+}
+
+/**
+ * a-modal 取消回调（遮罩点击 / Esc）。
+ * persistent 时 maskClosable 与 keyboard 已屏蔽，此处保留 guard 作为安全网。
+ */
+function handleModalCancel(): void {
+  if (props.persistent) return
   emit('cancel')
   emit('update:modelValue', false)
 }
 </script>
 
 <template>
-  <AppDialog
-    v-model="visible"
+  <a-modal
+    :open="modelValue"
     :title="title"
-    :danger="danger"
-    :persistent="persistent"
+    :width="560"
+    :centered="true"
+    :closable="false"
+    :mask-closable="!persistent"
+    :keyboard="!persistent"
+    :footer="null"
+    :wrap-class-name="wrapClassName"
+    :destroy-on-close="true"
+    @cancel="handleModalCancel"
   >
-    <header>
-      <h2 id="dialog-title">{{ title }}</h2>
-      <p v-if="description" class="confirm-description">{{ description }}</p>
-    </header>
+    <p v-if="description" class="confirm-description">{{ description }}</p>
     <footer class="confirm-actions">
       <button
         type="button"
         class="secondary-action"
         data-testid="cancel-btn"
-        @click="handleCancel"
+        @click="handleCancelClick"
       >
         {{ cancelText }}
       </button>
@@ -84,7 +99,7 @@ function handleCancel(): void {
         {{ confirmText }}
       </button>
     </footer>
-  </AppDialog>
+  </a-modal>
 </template>
 
 <style scoped>

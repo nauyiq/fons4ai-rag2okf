@@ -19,6 +19,8 @@ import java.util.Date;
  * @param status 档案启用状态
  * @param lastTestStatus 最近测试状态
  * @param lastTestAt 最近测试时间
+ * @param contextWindowLength 上下文窗口长度，暂未持久化时为 null
+ * @param updated 最近更新时间
  * @author hongqy
  */
 public record ModelProfileResponse(
@@ -31,6 +33,8 @@ public record ModelProfileResponse(
         Double temperature,
         ModelProfileStatus status,
         ModelTestStatus lastTestStatus,
-        Date lastTestAt
+        Date lastTestAt,
+        Integer contextWindowLength,
+        Date updated
 ) {
 }

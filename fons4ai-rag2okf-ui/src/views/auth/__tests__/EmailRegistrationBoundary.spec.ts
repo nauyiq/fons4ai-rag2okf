@@ -1,6 +1,8 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
+import { Checkbox } from 'ant-design-vue'
 
 import LoginView from '../LoginView.vue'
 import RegisterView from '../RegisterView.vue'
@@ -40,6 +42,12 @@ describe('邮箱注册边界（T029）', () => {
       workspaceRole: 'ADMIN',
     })
   })
+
+  /** a-checkbox 通过 v-model:checked 绑定，直接 emit update:checked 确保表单模型更新 */
+  async function checkTerms(wrapper: ReturnType<typeof mount>): Promise<void> {
+    wrapper.findComponent(Checkbox).vm.$emit('update:checked', true)
+    await nextTick()
+  }
 
   describe('零邮箱验证残留', () => {
     it('注册页不展示邮箱验证状态', () => {
@@ -101,7 +109,7 @@ describe('邮箱注册边界（T029）', () => {
       await inputs[0].setValue('Existing@Example.com')
       await inputs[1].setValue('secure-pass')
       await inputs[2].setValue('secure-pass')
-      await inputs[4].setValue(true)
+      await checkTerms(wrapper)
       await wrapper.get('form').trigger('submit')
       await flushPromises()
 
@@ -143,7 +151,7 @@ describe('邮箱注册边界（T029）', () => {
       await inputs[1].setValue('secure-pass')
       await inputs[2].setValue('secure-pass')
       await inputs[3].setValue('新用户')
-      await inputs[4].setValue(true)
+      await checkTerms(wrapper)
       await wrapper.get('form').trigger('submit')
       await flushPromises()
 

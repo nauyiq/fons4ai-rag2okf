@@ -43,7 +43,8 @@ public class LangChain4jModelClientFactory implements ModelClientFactory {
 
     @Override
     public ChatModel createChatModel(ResolvedModelDescriptor descriptor, String apiKey) {
-        if (descriptor.modelType() != ModelType.CHAT) {
+        // 读取别名兼容：旧值 CHAT 归一为 LLM 走对话客户端。
+        if (!"LLM".equals(ModelType.normalize(descriptor.modelType().getValue()))) {
             throw new ModelConfigurationException();
         }
         validateInvocationInput(descriptor, apiKey);
@@ -64,7 +65,7 @@ public class LangChain4jModelClientFactory implements ModelClientFactory {
 
     @Override
     public EmbeddingModel createEmbeddingModel(ResolvedModelDescriptor descriptor, String apiKey) {
-        if (descriptor.modelType() != ModelType.EMBEDDING) {
+        if (!"EMBEDDING".equals(ModelType.normalize(descriptor.modelType().getValue()))) {
             throw new ModelConfigurationException();
         }
         validateInvocationInput(descriptor, apiKey);

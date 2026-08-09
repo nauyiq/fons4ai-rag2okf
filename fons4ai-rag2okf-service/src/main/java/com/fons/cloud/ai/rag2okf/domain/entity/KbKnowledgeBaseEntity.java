@@ -32,6 +32,9 @@ public class KbKnowledgeBaseEntity extends CommonEntity {
     /** 所属工作空间数据库主键。 */
     private Long workspaceId;
 
+    /** 知识库创建者本地用户主键，用于删除鉴权与列表 canDelete 计算。 */
+    private Long ownerUserId;
+
     /** 知识库名称。 */
     private String name;
 

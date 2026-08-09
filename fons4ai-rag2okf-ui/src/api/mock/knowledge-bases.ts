@@ -23,8 +23,8 @@ const knowledgeBases: KnowledgeBase[] = [
     parserProfile: 'DEFAULT',
     chunkProfile: { strategy: 'fixed', chunkSize: 512, overlap: 64, titleLevel: null },
     modelBindings: [
-      { usageType: 'CHAT', modelConfigKey: 'mc-demo-001' },
-      { usageType: 'EMBEDDING', modelConfigKey: 'mc-demo-002' },
+      { usageType: 'ANSWER_GENERATION', profileKey: 'prof-demo-001' },
+      { usageType: 'EMBEDDING', profileKey: 'prof-demo-002' },
     ],
     revision: 3,
   },
@@ -41,8 +41,8 @@ const knowledgeBases: KnowledgeBase[] = [
     parserProfile: 'DEFAULT',
     chunkProfile: { strategy: 'fixed', chunkSize: 768, overlap: 128, titleLevel: 2 },
     modelBindings: [
-      { usageType: 'CHAT', modelConfigKey: 'mc-demo-001' },
-      { usageType: 'EMBEDDING', modelConfigKey: 'mc-demo-002' },
+      { usageType: 'ANSWER_GENERATION', profileKey: 'prof-demo-001' },
+      { usageType: 'EMBEDDING', profileKey: 'prof-demo-002' },
     ],
     revision: 5,
   },

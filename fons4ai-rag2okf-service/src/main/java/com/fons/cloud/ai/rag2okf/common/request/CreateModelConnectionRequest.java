@@ -1,11 +1,9 @@
 package com.fons.cloud.ai.rag2okf.common.request;
 
-import com.fons.cloud.ai.rag2okf.common.constants.ModelProviderTemplate;
-
 /**
  * 创建用户 Provider 连接的请求。
  *
- * @param templateCode 内置模板或 CUSTOM
+ * @param providerCode 厂商代码，对应 ModelProviderTemplate 名称（如 ALIYUN_DASHSCOPE）或自定义代码
  * @param providerName 用户可识别的厂商名称
  * @param displayName 当前用户下唯一的连接展示名称
  * @param baseUrl 模型 API 根地址，必须为安全的 HTTPS 公网地址
@@ -13,7 +11,7 @@ import com.fons.cloud.ai.rag2okf.common.constants.ModelProviderTemplate;
  * @author hongqy
  */
 public record CreateModelConnectionRequest(
-        ModelProviderTemplate templateCode,
+        String providerCode,
         String providerName,
         String displayName,
         String baseUrl,

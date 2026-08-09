@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
  *
  * 验证点：
  * - KnowledgeBaseSummary 含 ownerUserKey 和 canDelete 字段
- * - ModelBinding 使用 modelConfigKey 字段（合并后对齐）
+ * - ModelBinding 使用 profileKey 字段（两步式对齐）
  * - demo 模式下走 mock 数据，不发起网络请求
  * - real 模式下走 http.request，路径和方法匹配技术设计说明书 §3.2
  * - deleteKnowledgeBase 在 demo 模式下尊重 canDelete 权限
@@ -80,13 +80,13 @@ describe('knowledge-bases API - demo 模式走 mock 数据', () => {
     expect(mockedRequest).not.toHaveBeenCalled()
   })
 
-  it('getKnowledgeBase 返回详情含 modelConfigKey 绑定', async () => {
+  it('getKnowledgeBase 返回详情含 profileKey 绑定', async () => {
     const { getKnowledgeBase } = await import('../knowledge-bases')
     const kb = await getKnowledgeBase('kb-demo-001')
     expect(kb).toBeDefined()
     expect(kb!.modelBindings.length).toBeGreaterThan(0)
-    expect(kb!.modelBindings[0]).toHaveProperty('modelConfigKey')
-    expect(kb!.modelBindings[0]).not.toHaveProperty('modelProfileKey')
+    expect(kb!.modelBindings[0]).toHaveProperty('profileKey')
+    expect(kb!.modelBindings[0]).not.toHaveProperty('modelConfigKey')
     expect(mockedRequest).not.toHaveBeenCalled()
   })
 

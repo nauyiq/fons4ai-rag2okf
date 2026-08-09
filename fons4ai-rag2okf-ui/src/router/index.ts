@@ -6,8 +6,9 @@ import DocumentsView from '../views/documents/DocumentsView.vue'
 import DocumentDetailView from '../views/documents/DocumentDetailView.vue'
 import LoginView from '../views/auth/LoginView.vue'
 import RegisterView from '../views/auth/RegisterView.vue'
-import ProfileView from '../views/profile/ProfileView.vue'
-import ModelSettingsView from '../views/settings/ModelSettingsView.vue'
+import SettingsCenterView from '../views/settings/SettingsCenterView.vue'
+import ProfileTab from '../views/settings/ProfileTab.vue'
+import ModelSettingsTab from '../views/settings/ModelSettingsTab.vue'
 import { hasRuntimeSession } from '../stores/session'
 
 export const router = createRouter({
@@ -16,8 +17,21 @@ export const router = createRouter({
     { path: '/', redirect: { name: 'knowledge-bases' } },
     { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
     { path: '/register', name: 'register', component: RegisterView, meta: { public: true } },
-    { path: '/profile', name: 'profile', component: ProfileView, meta: { requiresAuth: true, sectionLabel: '个人中心' } },
-    { path: '/settings/models', name: 'model-settings', component: ModelSettingsView, meta: { requiresAuth: true, sectionLabel: '模型设置' } },
+    { path: '/profile', redirect: '/settings/profile' },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: SettingsCenterView,
+      meta: { requiresAuth: true, sectionLabel: '设置' },
+      children: [
+        {
+          path: '',
+          redirect: { name: 'settings-profile' },
+        },
+        { path: 'profile', name: 'settings-profile', component: ProfileTab, meta: { sectionLabel: '设置 / 个人信息' } },
+        { path: 'models', name: 'settings-models', component: ModelSettingsTab, meta: { sectionLabel: '设置 / 模型设置' } },
+      ],
+    },
     { path: '/knowledge-bases', name: 'knowledge-bases', component: KnowledgeBaseListView, meta: { requiresAuth: true, sectionLabel: '全部知识库' } },
     { path: '/knowledge-bases/:knowledgeBaseKey/settings', name: 'knowledge-base-settings', component: KnowledgeBaseSettingsView, meta: { requiresAuth: true, sectionLabel: '知识库设置' } },
     { path: '/knowledge-bases/:knowledgeBaseKey/documents', name: 'documents', component: DocumentsView, meta: { requiresAuth: true, sectionLabel: '文档工作台' } },

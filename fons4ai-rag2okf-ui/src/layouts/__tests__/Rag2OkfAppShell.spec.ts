@@ -120,15 +120,13 @@ describe('Rag2OkfAppShell - 顶部导航重塑（T007）', () => {
     expect(wrapper.find('[data-test="theme-toggle"]').exists()).toBe(true)
   })
 
-  it('账号菜单存在且无个人偏好入口', async () => {
+  it('账号菜单存在且点击头像直接进入设置个人信息页', async () => {
     const wrapper = mountShell()
     expect(wrapper.find('[data-test="account-menu"]').exists()).toBe(true)
     await wrapper.find('.avatar').trigger('click')
-    const popoverText = wrapper.text()
-    expect(popoverText).toContain('个人中心')
-    expect(popoverText).toContain('模型设置')
-    expect(popoverText).toContain('退出登录')
-    expect(popoverText).not.toMatch(/个人偏好/)
+    expect(mockPush).toHaveBeenCalledWith({ name: 'settings-profile' })
+    expect(wrapper.find('.account-popover').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('退出登录')
   })
 
   it('面包屑反映当前路由 sectionLabel', async () => {

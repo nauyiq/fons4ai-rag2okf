@@ -1,6 +1,7 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, DOMWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
 
 import KnowledgeBaseListView from '../KnowledgeBaseListView.vue'
 import {
@@ -20,6 +21,9 @@ vi.mock('../../../api/knowledge-bases', () => ({
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 
 const mountView = () => mount(KnowledgeBaseListView, { attachTo: document.body })
+
+/** AppDialog 内容 Teleport 到 body，通过 DOMWrapper 检索 */
+const body = () => new DOMWrapper(document.body)
 
 /**
  * KnowledgeBaseListView 测试。
@@ -93,9 +97,10 @@ describe('KnowledgeBaseListView', () => {
 
     expect(wrapper.text()).toContain('贷款政策资料库')
     await wrapper.get('[data-test="create-knowledge-base"]').trigger('click')
-    await wrapper.get('[data-test="knowledge-base-name"]').setValue('风险策略研究库')
-    await wrapper.get('[data-test="knowledge-base-description"]').setValue('风险研究材料。')
-    await wrapper.get('form').trigger('submit')
+    await nextTick()
+    await body().get('[data-test="knowledge-base-name"]').setValue('风险策略研究库')
+    await body().get('[data-test="knowledge-base-description"]').setValue('风险研究材料。')
+    await body().get('form').trigger('submit')
     await flushPromises()
 
     expect(createKnowledgeBase).toHaveBeenCalledWith('personal-space', expect.objectContaining({
@@ -175,12 +180,13 @@ describe('KnowledgeBaseListView', () => {
 
     await wrapper.get('[data-test="card-menu-trigger-loan-policy"]').trigger('click')
     await wrapper.get('[data-test="rename-action-loan-policy"]').trigger('click')
+    await nextTick()
 
-    // 重命名弹窗出现
-    const renameInput = wrapper.get('[data-test="rename-input"]')
+    // 重命名弹窗出现（AppDialog Teleport 到 body）
+    const renameInput = body().get('[data-test="rename-input"]')
     expect((renameInput.element as HTMLInputElement).value).toBe('贷款政策资料库')
     await renameInput.setValue('贷款政策库（新版）')
-    await wrapper.get('[data-test="rename-submit"]').trigger('click')
+    await body().get('[data-test="rename-submit"]').trigger('click')
     await flushPromises()
 
     expect(updateKnowledgeBase).toHaveBeenCalledWith('loan-policy', expect.objectContaining({
@@ -197,12 +203,13 @@ describe('KnowledgeBaseListView', () => {
 
     await wrapper.get('[data-test="card-menu-trigger-loan-policy"]').trigger('click')
     await wrapper.get('[data-test="rename-action-loan-policy"]').trigger('click')
-    await wrapper.get('[data-test="rename-input"]').setValue('   ')
-    await wrapper.get('[data-test="rename-submit"]').trigger('click')
+    await nextTick()
+    await body().get('[data-test="rename-input"]').setValue('   ')
+    await body().get('[data-test="rename-submit"]').trigger('click')
     await flushPromises()
 
     expect(updateKnowledgeBase).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('请输入知识库名称')
+    expect(body().text()).toContain('请输入知识库名称')
   })
 
   it('删除弹出确认弹窗，输入名称匹配后调用 deleteKnowledgeBase 并从列表移除', async () => {
@@ -213,11 +220,12 @@ describe('KnowledgeBaseListView', () => {
 
     await wrapper.get('[data-test="card-menu-trigger-loan-policy"]').trigger('click')
     await wrapper.get('[data-test="delete-action-loan-policy"]').trigger('click')
+    await nextTick()
 
     // 删除确认弹窗出现，需输入名称匹配
-    const confirmInput = wrapper.get('[data-test="delete-confirm-input"]')
+    const confirmInput = body().get('[data-test="delete-confirm-input"]')
     await confirmInput.setValue('贷款政策资料库')
-    await wrapper.get('[data-test="delete-confirm-submit"]').trigger('click')
+    await body().get('[data-test="delete-confirm-submit"]').trigger('click')
     await flushPromises()
 
     expect(deleteKnowledgeBase).toHaveBeenCalledWith('loan-policy')
@@ -230,12 +238,13 @@ describe('KnowledgeBaseListView', () => {
 
     await wrapper.get('[data-test="card-menu-trigger-loan-policy"]').trigger('click')
     await wrapper.get('[data-test="delete-action-loan-policy"]').trigger('click')
-    await wrapper.get('[data-test="delete-confirm-input"]').setValue('错误的名称')
-    await wrapper.get('[data-test="delete-confirm-submit"]').trigger('click')
+    await nextTick()
+    await body().get('[data-test="delete-confirm-input"]').setValue('错误的名称')
+    await body().get('[data-test="delete-confirm-submit"]').trigger('click')
     await flushPromises()
 
     expect(deleteKnowledgeBase).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('不匹配')
+    expect(body().text()).toContain('不匹配')
     // 列表仍包含该知识库
     expect(wrapper.text()).toContain('贷款政策资料库')
   })
@@ -246,7 +255,8 @@ describe('KnowledgeBaseListView', () => {
 
     await wrapper.get('[data-test="card-menu-trigger-loan-policy"]').trigger('click')
     await wrapper.get('[data-test="delete-action-loan-policy"]').trigger('click')
-    await wrapper.get('[data-test="delete-cancel"]').trigger('click')
+    await nextTick()
+    await body().get('[data-test="delete-cancel"]').trigger('click')
 
     expect(deleteKnowledgeBase).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('贷款政策资料库')
@@ -260,11 +270,13 @@ describe('KnowledgeBaseListView', () => {
 
     await wrapper.get('[data-test="card-menu-trigger-loan-policy"]').trigger('click')
     await wrapper.get('[data-test="delete-action-loan-policy"]').trigger('click')
-    await wrapper.get('[data-test="delete-confirm-input"]').setValue('贷款政策资料库')
-    await wrapper.get('[data-test="delete-confirm-submit"]').trigger('click')
+    await nextTick()
+    await body().get('[data-test="delete-confirm-input"]').setValue('贷款政策资料库')
+    await body().get('[data-test="delete-confirm-submit"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('删除失败')
+    // 删除失败错误显示在弹窗内（Teleport 到 body）
+    expect(body().text()).toContain('删除失败')
     expect(wrapper.text()).toContain('贷款政策资料库')
   })
 })

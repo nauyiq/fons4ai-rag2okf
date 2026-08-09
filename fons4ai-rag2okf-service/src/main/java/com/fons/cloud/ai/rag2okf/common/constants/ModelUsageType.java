@@ -9,7 +9,7 @@ import com.baomidou.mybatisplus.annotation.EnumValue;
  */
 public enum ModelUsageType {
     /** 知识库回答生成。 */
-    ANSWER_GENERATION("ANSWER_GENERATION", ModelType.CHAT),
+    ANSWER_GENERATION("ANSWER_GENERATION", ModelType.LLM),
     /** 知识库内容向量化。 */
     EMBEDDING("EMBEDDING", ModelType.EMBEDDING);
 

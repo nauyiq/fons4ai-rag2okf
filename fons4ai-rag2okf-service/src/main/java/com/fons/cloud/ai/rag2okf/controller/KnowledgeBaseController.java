@@ -10,6 +10,7 @@ import com.fons.cloud.ai.rag2okf.common.response.ModelBindingResponse;
 import com.fons.cloud.ai.rag2okf.common.response.PageResponse;
 import com.fons.cloud.common.result.R;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -87,6 +88,20 @@ public class KnowledgeBaseController {
             @PathVariable String knowledgeBaseKey,
             @RequestBody UpdateKnowledgeBaseRequest request) {
         return R.ok(knowledgeBaseApplicationService.updateKnowledgeBase(knowledgeBaseKey, request));
+    }
+
+    /**
+     * 删除知识库（软删除）。
+     *
+     * <p>仅创建者可删除。命中已删除或不存在的知识库时幂等返回成功。</p>
+     *
+     * @param knowledgeBaseKey 知识库标识
+     * @return 统一响应包装
+     */
+    @DeleteMapping("/knowledge-bases/{knowledgeBaseKey}")
+    public R<Void> deleteKnowledgeBase(@PathVariable String knowledgeBaseKey) {
+        knowledgeBaseApplicationService.deleteKnowledgeBase(knowledgeBaseKey);
+        return R.ok(null);
     }
 
     /**

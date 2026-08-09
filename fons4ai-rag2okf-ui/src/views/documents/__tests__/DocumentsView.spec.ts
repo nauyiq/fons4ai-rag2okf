@@ -1,6 +1,7 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, DOMWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
 
 import DocumentsView from '../DocumentsView.vue'
 import { listDocuments, uploadDocument, batchUploadDocuments, deleteDocument, batchDeleteDocuments } from '../../../api/documents'
@@ -85,33 +86,38 @@ describe('DocumentsView', () => {
     expect(folderButton).toBeTruthy()
   })
 
+  /** AppDialog / ConfirmDialog 内容 Teleport 到 body，通过 DOMWrapper 检索 */
+  const body = () => new DOMWrapper(document.body)
+
   it('uploads a single file via the merged upload entry', async () => {
     vi.mocked(uploadDocument).mockResolvedValue({ documentKey: 'doc-2' })
-    const wrapper = mount(DocumentsView)
+    const wrapper = mount(DocumentsView, { attachTo: document.body })
     await flushPromises()
     expect(wrapper.text()).toContain('policy.md')
 
-    await wrapper.get('button.primary-action').trigger('click')
-    expect(wrapper.find('.upload-form').exists()).toBe(true)
+    await wrapper.get('[data-test="upload-btn"]').trigger('click')
+    await nextTick()
+    expect(body().find('.upload-form').exists()).toBe(true)
 
     const file = new File(['content'], 'policy.md', { type: 'text/markdown' })
-    const input = wrapper.get('[data-test="document-file"]')
+    const input = body().get('[data-test="document-file"]')
     Object.defineProperty(input.element, 'files', { value: [file] })
     await input.trigger('change')
-    await wrapper.get('.upload-form').trigger('submit')
+    await body().get('.upload-form').trigger('submit')
     await flushPromises()
 
     expect(uploadDocument).toHaveBeenCalledWith('loan-policy', file, 'DEFAULT', undefined)
   })
 
   it('shows batch upload interface with folder selection', async () => {
-    const wrapper = mount(DocumentsView)
+    const wrapper = mount(DocumentsView, { attachTo: document.body })
     await flushPromises()
-    await wrapper.get('button.primary-action').trigger('click')
+    await wrapper.get('[data-test="upload-btn"]').trigger('click')
+    await nextTick()
 
-    expect(wrapper.find('[data-test="document-folder"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('选择文件')
-    expect(wrapper.text()).toContain('选择文件夹')
+    expect(body().find('[data-test="document-folder"]').exists()).toBe(true)
+    expect(body().text()).toContain('选择文件')
+    expect(body().text()).toContain('选择文件夹')
   })
 
   it('creates a new folder stored in localStorage', async () => {
@@ -273,20 +279,21 @@ describe('DocumentsView', () => {
       total: 1, page: 0, size: 20,
     })
     vi.mocked(deleteDocument).mockResolvedValue(undefined)
-    const wrapper = mount(DocumentsView)
+    const wrapper = mount(DocumentsView, { attachTo: document.body })
     await flushPromises()
 
     // 点击单行操作菜单触发器
     await wrapper.get('[data-test="row-menu-trigger"]').trigger('click')
     // 点击删除
     await wrapper.get('[data-test="row-delete"]').trigger('click')
+    await nextTick()
 
-    // 出现确认弹窗
-    expect(wrapper.text()).toContain('删除文档')
-    expect(wrapper.text()).toContain('a.md')
+    // 出现确认弹窗（ConfirmDialog Teleport 到 body）
+    expect(body().text()).toContain('删除文档')
+    expect(body().text()).toContain('a.md')
 
     // 确认删除
-    await wrapper.get('[data-testid="confirm-btn"]').trigger('click')
+    await body().get('[data-testid="confirm-btn"]').trigger('click')
     await flushPromises()
 
     expect(deleteDocument).toHaveBeenCalledWith('doc-1')
@@ -301,20 +308,21 @@ describe('DocumentsView', () => {
       total: 2, page: 0, size: 20,
     })
     vi.mocked(batchDeleteDocuments).mockResolvedValue({ deleted: ['doc-1', 'doc-2'], failed: [] })
-    const wrapper = mount(DocumentsView)
+    const wrapper = mount(DocumentsView, { attachTo: document.body })
     await flushPromises()
 
     // 全选
     await wrapper.get('[data-test="select-all"]').setValue(true)
     // 点击批量删除
     await wrapper.get('[data-test="batch-delete-btn"]').trigger('click')
+    await nextTick()
 
-    // 出现确认弹窗
-    expect(wrapper.text()).toContain('批量删除文档')
-    expect(wrapper.text()).toContain('选中的 2 个文档')
+    // 出现确认弹窗（ConfirmDialog Teleport 到 body）
+    expect(body().text()).toContain('批量删除文档')
+    expect(body().text()).toContain('选中的 2 个文档')
 
     // 确认删除
-    await wrapper.get('[data-testid="confirm-btn"]').trigger('click')
+    await body().get('[data-testid="confirm-btn"]').trigger('click')
     await flushPromises()
 
     expect(batchDeleteDocuments).toHaveBeenCalledWith(['doc-1', 'doc-2'])
@@ -332,15 +340,16 @@ describe('DocumentsView', () => {
       deleted: ['doc-1'],
       failed: [{ key: 'doc-2', error: '文档已被其他用户删除' }],
     })
-    const wrapper = mount(DocumentsView)
+    const wrapper = mount(DocumentsView, { attachTo: document.body })
     await flushPromises()
 
     await wrapper.get('[data-test="select-all"]').setValue(true)
     await wrapper.get('[data-test="batch-delete-btn"]').trigger('click')
-    await wrapper.get('[data-testid="confirm-btn"]').trigger('click')
+    await nextTick()
+    await body().get('[data-testid="confirm-btn"]').trigger('click')
     await flushPromises()
 
-    // 部分失败时显示失败信息
+    // 部分失败时显示失败信息（在主视图中，非弹窗内）
     expect(wrapper.text()).toContain('失败')
   })
 
@@ -351,14 +360,15 @@ describe('DocumentsView', () => {
       ],
       total: 1, page: 0, size: 20,
     })
-    const wrapper = mount(DocumentsView)
+    const wrapper = mount(DocumentsView, { attachTo: document.body })
     await flushPromises()
 
     await wrapper.get('[data-test="row-menu-trigger"]').trigger('click')
     await wrapper.get('[data-test="row-delete"]').trigger('click')
+    await nextTick()
 
-    // 取消删除
-    await wrapper.get('[data-testid="cancel-btn"]').trigger('click')
+    // 取消删除（按钮在 ConfirmDialog 内，Teleport 到 body）
+    await body().get('[data-testid="cancel-btn"]').trigger('click')
     await flushPromises()
 
     expect(deleteDocument).not.toHaveBeenCalled()

@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // mock markdown-it 避免动态 import 延迟和实际转换
 vi.mock('markdown-it', () => ({
@@ -60,10 +60,6 @@ describe('SourceFilePreview', () => {
   beforeEach(() => {
     mockUrlApis()
     mockFetchText('')
-  })
-
-  afterEach(() => {
-    vi.restoreAllMocks()
   })
 
   describe('图片渲染', () => {

@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
 
 import LoginView from '../LoginView.vue'
 import { getCurrentUser, login } from '../../../api/auth'
@@ -20,8 +21,10 @@ describe('LoginView', () => {
   it('uses email/password login and does not persist its token in browser storage', async () => {
     const wrapper = mount(LoginView)
     const inputs = wrapper.findAll('input')
-    await inputs[0].setValue(' Me@Example.com ')
+    // a-input 通过 v-model:value 绑定，直接 emit update:value 以确保表单模型更新
+    await inputs[0].setValue('Me@Example.com')
     await inputs[1].setValue('password')
+    await nextTick()
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(login).toHaveBeenCalledWith({ email: 'Me@Example.com', password: 'password', rememberMe: false })

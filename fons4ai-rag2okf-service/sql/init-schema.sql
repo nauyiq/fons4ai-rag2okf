@@ -58,6 +58,7 @@ CREATE TABLE kb_model_profile (
     model_type VARCHAR(24) NOT NULL COMMENT '模型调用类型：CHAT 或 EMBEDDING',
     model_name VARCHAR(160) NOT NULL COMMENT '厂商实际模型 ID',
     dimensions INT NULL COMMENT 'Embedding 输出维度提示，需由模型测试校验',
+    context_window_length INT NULL COMMENT '上下文窗口长度，暂由前端维护',
     parameters_json JSON NOT NULL DEFAULT (JSON_OBJECT()) COMMENT '温度、超时和重试等受控参数快照',
     status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' COMMENT '档案状态：ACTIVE 或 DISABLED',
     last_test_status VARCHAR(20) NULL COMMENT '最近一次模型能力测试状态',
@@ -127,6 +128,7 @@ CREATE TABLE kb_knowledge_base (
     id BIGINT NOT NULL AUTO_INCREMENT COMMENT '自增主键',
     knowledge_base_key CHAR(26) NOT NULL COMMENT '知识库业务标识',
     workspace_id BIGINT NOT NULL COMMENT '所属工作空间主键',
+    owner_user_id BIGINT NULL COMMENT '知识库创建者本地用户主键，用于删除鉴权与 canDelete 计算',
     name VARCHAR(128) NOT NULL COMMENT '知识库名称',
     description VARCHAR(1000) NULL COMMENT '知识库说明',
     auto_parse TINYINT(1) NOT NULL DEFAULT 0 COMMENT '上传后是否自动解析',
@@ -140,7 +142,8 @@ CREATE TABLE kb_knowledge_base (
     version INT NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
     PRIMARY KEY (id),
     UNIQUE KEY uk_kb_knowledge_base_key (knowledge_base_key),
-    KEY idx_kb_knowledge_base_workspace_status_updated (workspace_id, status, updated)
+    KEY idx_kb_knowledge_base_workspace_status_updated (workspace_id, status, updated),
+    KEY idx_kb_knowledge_base_owner (owner_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识库及默认处理策略';
 
 CREATE TABLE kb_source_document (

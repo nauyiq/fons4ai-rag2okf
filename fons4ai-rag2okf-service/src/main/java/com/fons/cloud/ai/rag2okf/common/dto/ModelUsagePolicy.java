@@ -20,6 +20,12 @@ public class ModelUsagePolicy {
      * @return 是否兼容
      */
     public boolean isCompatible(ModelUsageType usageType, ModelType modelType) {
-        return usageType != null && usageType.getRequiredModelType() == modelType;
+        if (usageType == null || modelType == null) {
+            return false;
+        }
+        // 读取别名兼容：旧值 CHAT 归一为 LLM 后再比较。
+        String required = ModelType.normalize(usageType.getRequiredModelType().getValue());
+        String actual = ModelType.normalize(modelType.getValue());
+        return required.equals(actual);
     }
 }

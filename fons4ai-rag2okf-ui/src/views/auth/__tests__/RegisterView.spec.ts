@@ -1,6 +1,8 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
+import { Checkbox } from 'ant-design-vue'
 
 import RegisterView from '../RegisterView.vue'
 import { getCurrentUser, register } from '../../../api/auth'
@@ -23,6 +25,12 @@ describe('RegisterView', () => {
     vi.mocked(getCurrentUser).mockResolvedValue({ userKey: 'u1', email: 'new@example.com', displayName: 'New', avatarUrl: '', preferenceJson: '{}', workspaceKey: 'ws-1', workspaceName: '个人工作空间', workspaceRole: 'ADMIN' })
   })
 
+  /** a-checkbox 通过 v-model:checked 绑定，直接 emit update:checked 确保表单模型更新 */
+  async function checkTerms(wrapper: ReturnType<typeof mount>): Promise<void> {
+    wrapper.findComponent(Checkbox).vm.$emit('update:checked', true)
+    await nextTick()
+  }
+
   it('使用邮箱密码注册成功后跳转到知识库且不持久化 token', async () => {
     const wrapper = mount(RegisterView)
     const inputs = wrapper.findAll('input')
@@ -30,7 +38,7 @@ describe('RegisterView', () => {
     await inputs[1].setValue('secure-pass')
     await inputs[2].setValue('secure-pass')
     await inputs[3].setValue('新用户')
-    await inputs[4].setValue(true)
+    await checkTerms(wrapper)
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(register).toHaveBeenCalledWith({
@@ -68,7 +76,7 @@ describe('RegisterView', () => {
     await inputs[0].setValue('existing@example.com')
     await inputs[1].setValue('secure-pass')
     await inputs[2].setValue('secure-pass')
-    await inputs[4].setValue(true)
+    await checkTerms(wrapper)
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(wrapper.text()).toContain('注册失败，请更换邮箱或密码后重试')
@@ -83,7 +91,7 @@ describe('RegisterView', () => {
     await inputs[0].setValue('new@example.com')
     await inputs[1].setValue('secure-pass')
     await inputs[2].setValue('secure-pass')
-    await inputs[4].setValue(true)
+    await checkTerms(wrapper)
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(wrapper.text()).toContain('注册请求过于频繁')

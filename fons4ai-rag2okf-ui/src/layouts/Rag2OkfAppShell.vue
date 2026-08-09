@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { useTheme } from '../composables/useTheme'
@@ -24,39 +24,6 @@ const activeNav = computed(() => {
   return ''
 })
 
-const menuOpen = ref(false)
-const accountMenuRef = ref<HTMLElement | null>(null)
-
-function toggleMenu(): void {
-  menuOpen.value = !menuOpen.value
-}
-
-function closeMenu(): void {
-  menuOpen.value = false
-}
-
-function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape' && menuOpen.value) {
-    closeMenu()
-  }
-}
-
-function onDocumentClick(event: MouseEvent): void {
-  if (menuOpen.value && accountMenuRef.value && !accountMenuRef.value.contains(event.target as Node)) {
-    closeMenu()
-  }
-}
-
-onMounted(() => {
-  document.addEventListener('click', onDocumentClick)
-  document.addEventListener('keydown', onKeydown)
-})
-
-onBeforeUnmount(() => {
-  document.removeEventListener('click', onDocumentClick)
-  document.removeEventListener('keydown', onKeydown)
-})
-
 /** 主题循环切换：light → dark → system → light。 */
 function chooseTheme(): void {
   const sequence = { light: 'dark', dark: 'system', system: 'light' } as const
@@ -70,11 +37,6 @@ function goHome(): void {
 
 function profileInitial(): string {
   return (sessionStore.profile?.displayName || sessionStore.profile?.email || 'U').slice(0, 1).toUpperCase()
-}
-
-async function signOut(): Promise<void> {
-  await sessionStore.signOut()
-  await router.replace({ name: 'login' })
 }
 </script>
 
@@ -95,15 +57,8 @@ async function signOut(): Promise<void> {
         <div class="topbar-actions">
           <div class="breadcrumb" data-test="breadcrumb"><span class="slash">/</span><strong>{{ sectionLabel }}</strong></div>
           <button class="icon-button" type="button" data-test="theme-toggle" :title="`当前主题：${mode}`" :aria-label="`切换主题，当前：${mode}`" @click="chooseTheme">◐</button>
-          <div ref="accountMenuRef" class="account-menu" data-test="account-menu">
-            <button class="avatar" type="button" aria-label="打开个人中心" aria-haspopup="true" :aria-expanded="menuOpen" @click="toggleMenu">{{ profileInitial() }}<i></i></button>
-            <div v-if="menuOpen" class="account-popover" role="menu">
-              <strong>{{ sessionStore.profile?.displayName || '我的账号' }}</strong>
-              <span>{{ sessionStore.profile?.email || '本地知识空间' }}</span>
-              <button type="button" role="menuitem" @click="closeMenu(); router.push({ name: 'profile' })">个人中心</button>
-              <button type="button" role="menuitem" @click="closeMenu(); router.push({ name: 'model-settings' })">模型设置</button>
-              <button type="button" role="menuitem" @click="closeMenu(); signOut()">退出登录</button>
-            </div>
+          <div class="account-menu" data-test="account-menu">
+            <button class="avatar" type="button" aria-label="打开个人中心" @click="router.push({ name: 'settings-profile' })">{{ profileInitial() }}</button>
           </div>
         </div>
       </header>
@@ -111,7 +66,3 @@ async function signOut(): Promise<void> {
     </div>
   </div>
 </template>
-
-<style scoped>
-.account-popover { display: grid; gap: 6px; }
-</style>

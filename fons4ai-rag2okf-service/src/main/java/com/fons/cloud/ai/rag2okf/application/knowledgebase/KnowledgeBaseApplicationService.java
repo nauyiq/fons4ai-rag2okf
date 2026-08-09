@@ -31,6 +31,7 @@ import com.fons.cloud.ai.rag2okf.common.dto.ChunkProfile;
 import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbModelBindingDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbModelProfileDomainService;
+import com.fons.cloud.ai.rag2okf.domain.service.KbUserDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbWorkspaceDomainService;
 import com.fons.cloud.ai.rag2okf.common.dto.ModelUsagePolicy;
 import com.fons.cloud.ai.rag2okf.infrastructure.identity.WorkspaceAccessPolicy;
@@ -42,7 +43,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 知识库创建、列表、详情、设置编辑与模型用途绑定的应用服务。
@@ -70,6 +75,7 @@ public class KnowledgeBaseApplicationService {
     private final KbKnowledgeBaseDomainService knowledgeBaseDomainService;
     private final KbModelBindingDomainService modelBindingDomainService;
     private final KbModelProfileDomainService modelProfileDomainService;
+    private final KbUserDomainService userDomainService;
     private final ModelBusinessKeyGenerator keyGenerator;
     private final ModelUsagePolicy modelUsagePolicy;
     private final ObjectMapper objectMapper;
@@ -99,6 +105,7 @@ public class KnowledgeBaseApplicationService {
         KbKnowledgeBaseEntity entity = new KbKnowledgeBaseEntity();
         entity.setKnowledgeBaseKey(keyGenerator.nextKey());
         entity.setWorkspaceId(workspace.getId());
+        entity.setOwnerUserId(user.getId());
         entity.setName(name);
         entity.setDescription(description);
         entity.setAutoParse(request.autoParse());
@@ -135,8 +142,10 @@ public class KnowledgeBaseApplicationService {
                 Wrappers.<KbKnowledgeBaseEntity>lambdaQuery()
                         .eq(KbKnowledgeBaseEntity::getWorkspaceId, workspace.getId())
                         .orderByDesc(KbKnowledgeBaseEntity::getUpdated));
+        // 批量查询知识库创建者，避免逐条 N+1 查 kb_user
+        Map<Long, KbUserEntity> ownerMap = loadOwnerUserMap(result.getRecords());
         List<KnowledgeBaseSummaryResponse> records = result.getRecords().stream()
-                .map(this::toSummaryResponse)
+                .map(entity -> toSummaryResponse(entity, user.getId(), ownerMap))
                 .toList();
         return new PageResponse<>(records, result.getTotal(), page, size);
     }
@@ -254,6 +263,31 @@ public class KnowledgeBaseApplicationService {
         List<ModelBindingResponse> bindings = saveBindings(entity.getId(), workspace.getOwnerUserId(),
                 request.modelBindings() != null ? request.modelBindings() : List.of());
         return bindings;
+    }
+
+    /**
+     * 删除知识库（软删除）。
+     *
+     * <p>仅创建者（owner_user_id 等于当前会话用户主键）可删除。命中已删除或不存在的知识库时
+     * 视为幂等成功直接返回，不抛异常。删除仅置 deleted=1，不物理删除关联文档或 ES 投影。</p>
+     *
+     * @param knowledgeBaseKey 知识库业务标识
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteKnowledgeBase(String knowledgeBaseKey) {
+        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbKnowledgeBaseEntity entity = knowledgeBaseDomainService.getOne(
+                Wrappers.<KbKnowledgeBaseEntity>lambdaQuery()
+                        .eq(KbKnowledgeBaseEntity::getKnowledgeBaseKey, knowledgeBaseKey));
+        // 不存在或已被软删除：幂等返回成功，避免泄露存在性与删除状态
+        if (entity == null) {
+            return;
+        }
+        // 仅创建者可删除，不匹配统一返回 403
+        if (entity.getOwnerUserId() == null || !entity.getOwnerUserId().equals(user.getId())) {
+            throw new WorkspaceAccessDeniedException();
+        }
+        knowledgeBaseDomainService.removeById(entity.getId());
     }
 
     private List<ModelBindingResponse> saveBindings(
@@ -419,10 +453,39 @@ public class KnowledgeBaseApplicationService {
                 entity.getVersion() != null ? entity.getVersion() : 0, entity.getUpdated());
     }
 
-    private KnowledgeBaseSummaryResponse toSummaryResponse(KbKnowledgeBaseEntity entity) {
+    private KnowledgeBaseSummaryResponse toSummaryResponse(
+            KbKnowledgeBaseEntity entity, Long currentUserId, Map<Long, KbUserEntity> ownerMap) {
+        String ownerUserKey = null;
+        if (entity.getOwnerUserId() != null) {
+            KbUserEntity owner = ownerMap.get(entity.getOwnerUserId());
+            if (owner != null) {
+                ownerUserKey = owner.getUserKey();
+            }
+        }
+        // canDelete 仅创建者可删除：owner_user_id 等于当前会话用户主键
+        boolean canDelete = entity.getOwnerUserId() != null
+                && entity.getOwnerUserId().equals(currentUserId);
         return new KnowledgeBaseSummaryResponse(
                 entity.getKnowledgeBaseKey(), entity.getName(), entity.getDescription(),
                 Boolean.TRUE.equals(entity.getAutoParse()), Boolean.TRUE.equals(entity.getAutoPublish()),
-                entity.getUpdated());
+                ownerUserKey, canDelete, entity.getUpdated());
+    }
+
+    /**
+     * 批量加载知识库创建者用户，构造 ownerUserId -> KbUserEntity 映射，避免逐条 N+1 查询。
+     *
+     * @param knowledgeBases 当前页知识库实体
+     * @return ownerUserId 到用户实体的映射，无创建者时返回空映射
+     */
+    private Map<Long, KbUserEntity> loadOwnerUserMap(List<KbKnowledgeBaseEntity> knowledgeBases) {
+        Set<Long> ownerUserIds = knowledgeBases.stream()
+                .map(KbKnowledgeBaseEntity::getOwnerUserId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (ownerUserIds.isEmpty()) {
+            return Map.of();
+        }
+        return userDomainService.listByIds(ownerUserIds).stream()
+                .collect(Collectors.toMap(KbUserEntity::getId, Function.identity()));
     }
 }

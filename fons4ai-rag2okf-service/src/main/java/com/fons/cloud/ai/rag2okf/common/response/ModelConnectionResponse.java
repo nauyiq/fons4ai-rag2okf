@@ -19,6 +19,8 @@ import java.util.Date;
  * @param status 连接启用状态
  * @param lastTestStatus 最近测试状态
  * @param lastTestAt 最近测试时间
+ * @param apiKeyConfigured 是否已配置 API Key（apiKeyMask 非空时为 true）
+ * @param updated 最近更新时间
  * @author hongqy
  */
 public record ModelConnectionResponse(
@@ -31,6 +33,8 @@ public record ModelConnectionResponse(
         String apiKeyMask,
         ModelConnectionStatus status,
         ModelTestStatus lastTestStatus,
-        Date lastTestAt
+        Date lastTestAt,
+        Boolean apiKeyConfigured,
+        Date updated
 ) {
 }

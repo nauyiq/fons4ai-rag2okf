@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { message } from 'ant-design-vue'
+import type { FormInstance, Rule } from 'ant-design-vue/es/form'
 
 import { ApiRequestError } from '../../api/http'
 import { useSessionStore } from '../../stores/session'
@@ -8,21 +10,34 @@ import { useSessionStore } from '../../stores/session'
 const router = useRouter()
 const sessionStore = useSessionStore()
 const submitting = ref(false)
-const errorMessage = ref('')
+const formRef = ref<FormInstance>()
 const form = reactive({ email: '', password: '', confirmPassword: '', displayName: '', termsAccepted: false })
 
+const rules: Record<string, Rule[]> = {
+  email: [
+    { required: true, message: '请输入邮箱。', trigger: 'change' },
+    { type: 'email', message: '请输入有效的邮箱地址。', trigger: 'change' },
+  ],
+  password: [{ required: true, message: '请输入密码。', trigger: 'change' }],
+  confirmPassword: [
+    { required: true, message: '请再次输入密码。', trigger: 'change' },
+    {
+      validator: (_rule, value) => (value === form.password ? Promise.resolve() : Promise.reject('两次输入的密码不一致。')),
+      trigger: 'change',
+    },
+  ],
+  termsAccepted: [
+    {
+      validator: (_rule, value) => (value ? Promise.resolve() : Promise.reject('请阅读并同意服务条款后再创建账号。')),
+      trigger: 'change',
+    },
+  ],
+}
+
 async function submit(): Promise<void> {
-  errorMessage.value = ''
-  if (!form.email.trim() || !form.password) {
-    errorMessage.value = '请输入邮箱和密码。'
-    return
-  }
-  if (form.password !== form.confirmPassword) {
-    errorMessage.value = '两次输入的密码不一致。'
-    return
-  }
-  if (!form.termsAccepted) {
-    errorMessage.value = '请阅读并同意服务条款后再创建账号。'
+  try {
+    await formRef.value?.validate()
+  } catch {
     return
   }
   submitting.value = true
@@ -34,11 +49,12 @@ async function submit(): Promise<void> {
       displayName: form.displayName.trim(),
       termsAccepted: form.termsAccepted,
     })
+    message.success('账号创建成功，正在进入知识空间…')
     await router.replace('/knowledge-bases')
   } catch (error) {
-    errorMessage.value = error instanceof ApiRequestError && error.status === 429
+    message.error(error instanceof ApiRequestError && error.status === 429
       ? '注册请求过于频繁，请稍后再试。'
-      : '注册失败，请更换邮箱或密码后重试。'
+      : '注册失败，请更换邮箱或密码后重试。')
   } finally {
     submitting.value = false
     form.password = ''
@@ -62,17 +78,63 @@ async function submit(): Promise<void> {
     </section>
 
     <section class="login-panel">
-      <form class="login-card" @submit.prevent="submit">
-        <p class="eyebrow">CREATE ACCOUNT</p><h2>注册你的知识空间</h2><p class="login-lead">使用邮箱与密码创建本地账号，立即拥有个人知识空间。</p>
-        <label>邮箱<input v-model="form.email" type="email" inputmode="email" autocomplete="email" maxlength="254" placeholder="name@example.com" /></label>
-        <label>密码<input v-model="form.password" type="password" autocomplete="new-password" placeholder="8～64 位密码" /></label>
-        <label>确认密码<input v-model="form.confirmPassword" type="password" autocomplete="new-password" placeholder="再次输入密码" /></label>
-        <label>展示名称（可选）<input v-model="form.displayName" maxlength="80" autocomplete="nickname" placeholder="输入你的展示名称" /></label>
-        <label class="terms-row"><input v-model="form.termsAccepted" type="checkbox" name="terms" />我已阅读并同意服务条款</label>
-        <p v-if="errorMessage" class="inline-error" role="alert">{{ errorMessage }}</p>
-        <button class="primary-action login-submit" type="submit" :disabled="submitting">{{ submitting ? '正在创建…' : '创建账号' }}</button>
+      <a-form
+        ref="formRef"
+        class="login-card"
+        layout="vertical"
+        :model="form"
+        :rules="rules"
+        @submit.prevent="submit"
+      >
+        <p class="eyebrow">CREATE ACCOUNT</p>
+        <h2>注册你的知识空间</h2>
+        <p class="login-lead">使用邮箱与密码创建本地账号，立即拥有个人知识空间。</p>
+        <a-form-item label="邮箱" name="email">
+          <a-input
+            v-model:value="form.email"
+            type="email"
+            inputmode="email"
+            autocomplete="email"
+            :maxlength="254"
+            placeholder="name@example.com"
+          />
+        </a-form-item>
+        <a-form-item label="密码" name="password">
+          <a-input-password
+            v-model:value="form.password"
+            autocomplete="new-password"
+            placeholder="8～64 位密码"
+          />
+        </a-form-item>
+        <a-form-item label="确认密码" name="confirmPassword" :dependencies="['password']">
+          <a-input-password
+            v-model:value="form.confirmPassword"
+            autocomplete="new-password"
+            placeholder="再次输入密码"
+          />
+        </a-form-item>
+        <a-form-item label="展示名称（可选）" name="displayName">
+          <a-input
+            v-model:value="form.displayName"
+            :maxlength="80"
+            autocomplete="nickname"
+            placeholder="输入你的展示名称"
+          />
+        </a-form-item>
+        <a-form-item name="termsAccepted">
+          <a-checkbox v-model:checked="form.termsAccepted">我已阅读并同意服务条款</a-checkbox>
+        </a-form-item>
+        <a-button type="primary" html-type="submit" class="login-submit" :loading="submitting">
+          创建账号
+        </a-button>
         <p class="login-footnote">已有账号？<router-link to="/login">返回登录</router-link></p>
-      </form>
+      </a-form>
     </section>
   </main>
 </template>
+
+<style scoped>
+:deep(.ant-form-item) {
+  margin-bottom: 0;
+}
+</style>

@@ -2,7 +2,6 @@ package com.fons.cloud.ai.rag2okf.application.model;
 
 import com.fons.cloud.ai.rag2okf.common.constants.ModelConnectionStatus;
 import com.fons.cloud.ai.rag2okf.common.constants.ModelProfileStatus;
-import com.fons.cloud.ai.rag2okf.common.constants.ModelProviderTemplate;
 import com.fons.cloud.ai.rag2okf.common.constants.ModelTestStatus;
 import com.fons.cloud.ai.rag2okf.common.constants.ModelType;
 import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
@@ -54,7 +53,7 @@ class ModelConfigurationApplicationServiceTest {
                 mock(KbModelProfileDomainService.class), mock(ModelClientFactory.class));
 
         var response = service.createConnection(new CreateModelConnectionRequest(
-                ModelProviderTemplate.CUSTOM, "Test Provider", "My connection", "https://8.8.8.8/v1", "secret-key-value"
+                "CUSTOM", "Test Provider", "My connection", "https://8.8.8.8/v1", "secret-key-value"
         ));
 
         ArgumentCaptor<KbModelConnectionEntity> saved = ArgumentCaptor.forClass(KbModelConnectionEntity.class);
@@ -76,7 +75,7 @@ class ModelConfigurationApplicationServiceTest {
                 mock(KbModelProfileDomainService.class), mock(ModelClientFactory.class));
 
         assertThatThrownBy(() -> service.createProfile(new CreateModelProfileRequest(
-                foreignConnection.getConnectionKey(), ModelType.CHAT, "chat-model", null, 30, 0.2D
+                foreignConnection.getConnectionKey(), ModelType.CHAT, "chat-model", null, null, 30, 0.2D
         ))).isInstanceOf(ModelAccessDeniedException.class);
     }
 
