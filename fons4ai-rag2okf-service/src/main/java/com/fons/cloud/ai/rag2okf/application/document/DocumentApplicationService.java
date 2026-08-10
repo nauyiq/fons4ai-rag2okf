@@ -6,6 +6,7 @@ import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
 import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.common.dto.FileValidationPolicy;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
+import com.fons.cloud.ai.rag2okf.application.parsing.ParseApplicationService;
 import com.fons.cloud.ai.rag2okf.common.constants.WorkspaceRole;
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
 import com.fons.cloud.ai.rag2okf.common.exeception.KnowledgeBaseConflictException;
@@ -15,6 +16,7 @@ import com.fons.cloud.ai.rag2okf.common.response.DocumentSummaryResponse;
 import com.fons.cloud.ai.rag2okf.common.response.DocumentTaskSummaryResponse;
 import com.fons.cloud.ai.rag2okf.common.response.DocumentUploadResponse;
 import com.fons.cloud.ai.rag2okf.common.response.PageResponse;
+import com.fons.cloud.ai.rag2okf.common.response.ParseTriggerResponse;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactContent;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactReference;
@@ -73,6 +75,7 @@ public class DocumentApplicationService {
     private final FileValidationPolicy fileValidationPolicy;
     private final ModelBusinessKeyGenerator keyGenerator;
     private final TaskApplicationService taskApplicationService;
+    private final ParseApplicationService parseApplicationService;
 
     /** 通过 @Lazy 自引用触发 Spring AOP 代理，使 @Transactional 在同类内部调用时生效。 */
     @Lazy
@@ -110,14 +113,16 @@ public class DocumentApplicationService {
                 validatedFile.contentType(), validatedFile.inputStream()));
 
         // MySQL 事务创建 SourceDocument 并写入文件元数据
+        DocumentUploadResponse response;
         try {
-            return self.persistNewDocument(
+            response = self.persistNewDocument(
                     knowledgeBase, documentKey, fileToken, workspace.getId(), user.getId(),
                     validatedFile, fileExtension, storedArtifact, scope, safeFolderPath);
         } catch (RuntimeException e) {
             compensateDelete(scope, ArtifactType.ORIGINAL, documentKey, validatedFile.safeFilename());
             throw e;
         }
+        return triggerParseAfterFileCommit(response, parseMode);
     }
 
     /**
@@ -190,15 +195,15 @@ public class DocumentApplicationService {
         String oldOriginalFilename = document.getOriginalFilename();
 
         // MySQL 事务内 CAS 更新文件元数据
+        DocumentUploadResponse response;
         try {
-            DocumentUploadResponse response = self.persistUpdatedDocument(
+            response = self.persistUpdatedDocument(
                     document, newFileToken, user.getId(),
                     validatedFile, fileExtension, storedArtifact);
             // 事务成功后删除旧 MinIO 对象（新旧 objectKey 不同时才删除）
             if (oldObjectKey != null && !oldObjectKey.equals(storedArtifact.objectKey())) {
                 compensateDelete(scope, ArtifactType.ORIGINAL, documentKey, oldOriginalFilename);
             }
-            return response;
         } catch (RuntimeException e) {
             // 事务失败，补偿删除刚上传的新对象（新旧 objectKey 不同时才删除）
             if (oldObjectKey == null || !oldObjectKey.equals(storedArtifact.objectKey())) {
@@ -206,6 +211,7 @@ public class DocumentApplicationService {
             }
             throw e;
         }
+        return triggerParseAfterFileCommit(response, parseMode);
     }
 
     /**
@@ -536,6 +542,22 @@ public class DocumentApplicationService {
                 new DocumentSummaryResponse.CurrentFileSummary(document.getOriginalFilename(), document.getContentType(), document.getSizeBytes()),
                 document.getFileToken(), document.getParseStatus(), document.getPublishStatus(),
                 document.getActivePublicationRevisionId() != null, toTaskSummary(latestTask), document.getUpdated());
+    }
+
+    /**
+     * 文件元数据事务提交后再编排解析，避免解析失败触发对象存储补偿并破坏已提交文档。
+     */
+    private DocumentUploadResponse triggerParseAfterFileCommit(
+            DocumentUploadResponse response, String parseMode) {
+        if ("SKIP".equalsIgnoreCase(parseMode)) {
+            return response;
+        }
+        ParseTriggerResponse parse = parseApplicationService.triggerParse(
+                response.documentKey(), parseMode != null ? parseMode : "DEFAULT");
+        return new DocumentUploadResponse(
+                response.documentKey(), response.displayName(), response.folderPath(),
+                response.currentFile(), response.currentFileToken(), parse.taskKey(),
+                parse.parseStatus(), parse.publishStatus());
     }
 
     private DocumentTaskSummaryResponse toTaskSummary(KbProcessingTaskEntity task) {

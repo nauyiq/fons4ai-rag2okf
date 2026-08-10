@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
-import { Checkbox } from 'ant-design-vue'
+import { Input, InputPassword, message } from 'ant-design-vue'
 
 import LoginView from '../LoginView.vue'
 import RegisterView from '../RegisterView.vue'
@@ -43,9 +43,18 @@ describe('邮箱注册边界（T029）', () => {
     })
   })
 
-  /** a-checkbox 通过 v-model:checked 绑定，直接 emit update:checked 确保表单模型更新 */
-  async function checkTerms(wrapper: ReturnType<typeof mount>): Promise<void> {
-    wrapper.findComponent(Checkbox).vm.$emit('update:checked', true)
+  async function fillRegistrationForm(
+    wrapper: ReturnType<typeof mount>,
+    values: { email: string; password: string; confirmPassword: string; displayName?: string },
+  ): Promise<void> {
+    const plainInputs = wrapper.findAllComponents(Input)
+    const passwordInputs = wrapper.findAllComponents(InputPassword)
+    plainInputs.find((input) => input.props('autocomplete') === 'email')?.vm.$emit('update:value', values.email)
+    passwordInputs[0].vm.$emit('update:value', values.password)
+    passwordInputs[1].vm.$emit('update:value', values.confirmPassword)
+    if (values.displayName !== undefined) {
+      plainInputs.find((input) => input.props('autocomplete') === 'nickname')?.vm.$emit('update:value', values.displayName)
+    }
     await nextTick()
   }
 
@@ -69,8 +78,9 @@ describe('邮箱注册边界（T029）', () => {
       expect(inputNames).not.toContain('verification-code')
       expect(inputNames).not.toContain('verify-code')
       expect(inputNames).not.toContain('sms-code')
-      // 注册页只有 5 个输入框：邮箱、密码、确认密码、展示名称、条款同意
-      expect(inputs).toHaveLength(5)
+      // 注册页只有 4 个输入框：邮箱、密码、确认密码、展示名称。
+      expect(inputs).toHaveLength(4)
+      expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false)
     })
   })
 
@@ -105,17 +115,17 @@ describe('邮箱注册边界（T029）', () => {
       const { ApiRequestError } = await import('../../../api/http')
       vi.mocked(register).mockRejectedValue(new ApiRequestError('参数错误', 400))
       const wrapper = mount(RegisterView)
-      const inputs = wrapper.findAll('input')
-      await inputs[0].setValue('Existing@Example.com')
-      await inputs[1].setValue('secure-pass')
-      await inputs[2].setValue('secure-pass')
-      await checkTerms(wrapper)
-      await wrapper.get('form').trigger('submit')
+      await fillRegistrationForm(wrapper, {
+        email: 'Existing@Example.com',
+        password: 'secure-pass',
+        confirmPassword: 'secure-pass',
+      })
+      await (wrapper.vm as unknown as { submit: () => Promise<void> }).submit()
       await flushPromises()
 
       const errorText = wrapper.text()
       // 安全化错误提示
-      expect(errorText).toContain('注册失败')
+      expect(message.error).toHaveBeenCalledWith('注册失败，请更换邮箱或密码后重试。')
       // 不暴露输入的邮箱地址
       expect(errorText).not.toContain('Existing@Example.com')
       expect(errorText).not.toContain('existing@example.com')
@@ -132,7 +142,7 @@ describe('邮箱注册边界（T029）', () => {
       const inputs = wrapper.findAll('input')
       await inputs[0].setValue('unknown@example.com')
       await inputs[1].setValue('any-pass')
-      await wrapper.get('form').trigger('submit')
+      await (wrapper.vm as unknown as { submit: () => Promise<void> }).submit()
       await flushPromises()
 
       const errorText = wrapper.text()
@@ -146,13 +156,13 @@ describe('邮箱注册边界（T029）', () => {
   describe('敏感信息不进入浏览器存储', () => {
     it('注册成功后 token 持久化到 localStorage，密码不存储', async () => {
       const wrapper = mount(RegisterView)
-      const inputs = wrapper.findAll('input')
-      await inputs[0].setValue('new@example.com')
-      await inputs[1].setValue('secure-pass')
-      await inputs[2].setValue('secure-pass')
-      await inputs[3].setValue('新用户')
-      await checkTerms(wrapper)
-      await wrapper.get('form').trigger('submit')
+      await fillRegistrationForm(wrapper, {
+        email: 'new@example.com',
+        password: 'secure-pass',
+        confirmPassword: 'secure-pass',
+        displayName: '新用户',
+      })
+      await (wrapper.vm as unknown as { submit: () => Promise<void> }).submit()
       await flushPromises()
 
       // token 持久化到 localStorage 以支持刷新页面保持登录

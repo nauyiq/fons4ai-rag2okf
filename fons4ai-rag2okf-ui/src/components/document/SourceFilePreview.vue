@@ -292,7 +292,7 @@ onBeforeUnmount(() => {
 
 .preview-unsupported a,
 .preview-error a {
-  color: var(--violet, #7565e8);
+  color: var(--violet, #262626);
   text-decoration: underline;
   cursor: pointer;
 }

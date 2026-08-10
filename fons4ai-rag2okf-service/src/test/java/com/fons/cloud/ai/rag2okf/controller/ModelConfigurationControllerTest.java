@@ -23,7 +23,7 @@ class ModelConfigurationControllerTest {
     void shouldWrapProviderTemplatesInTheFons4CloudResponseEnvelope() {
         ModelConfigurationApplicationService applicationService = mock(ModelConfigurationApplicationService.class);
         when(applicationService.listTemplates()).thenReturn(List.of(
-                new ModelProviderTemplateResponse(ModelProviderTemplate.CUSTOM, "自定义", null)
+                new ModelProviderTemplateResponse(ModelProviderTemplate.CUSTOM, "自定义", null, null)
         ));
         ModelConfigurationController controller = new ModelConfigurationController(applicationService);
 

@@ -14,7 +14,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { getKnowledgeBase, updateKnowledgeBase, type KnowledgeBase, type ModelBinding, type SaveKnowledgeBaseInput } from '../../api/knowledge-bases'
 import { ApiRequestError } from '../../api/http'
-import { listProfiles, type ModelProfile } from '../../api/models'
+import { getDefaultModels, listProfiles, type DefaultModelSettings, type ModelProfile } from '../../api/models'
 import { useWorkspaceStore } from '../../stores/workspace'
 import AppDialog from '../../components/ui/AppDialog.vue'
 
@@ -30,6 +30,8 @@ const loadError = ref('')
 const settings = ref<KnowledgeBase | null>(null)
 /** 可用模型档案（仅 ACTIVE），用于模型绑定下拉与名称解析 */
 const modelProfiles = ref<ModelProfile[]>([])
+/** 当前用户的全局默认模型，仅用于空 binding 打开编辑弹窗时预填。 */
+const defaultModels = ref<DefaultModelSettings>({ defaults: {} })
 
 /** 三处编辑入口各自独立的弹窗显隐，同一时间最多打开一个 */
 const showAutomationDialog = ref(false)
@@ -94,13 +96,19 @@ async function loadSettings(): Promise<void> {
   loading.value = true
   loadError.value = ''
   try {
-    const [knowledgeBase, profiles] = await Promise.all([getKnowledgeBase(String(route.params.knowledgeBaseKey)), listProfiles()])
+    const [knowledgeBase, profiles, userDefaults] = await Promise.all([
+      getKnowledgeBase(String(route.params.knowledgeBaseKey)),
+      listProfiles(),
+      // 个人默认偏好是预填增强项；读取失败不能阻断知识库自身设置页。
+      getDefaultModels().catch(() => ({ defaults: {} })),
+    ])
     if (!knowledgeBase) {
       loadError.value = '知识库不存在或已被删除。'
       return
     }
     settings.value = knowledgeBase
     modelProfiles.value = profiles.filter(item => item.status === 'ACTIVE')
+    defaultModels.value = userDefaults
   } catch (error) {
     loadError.value = error instanceof ApiRequestError ? error.message : '无法读取知识库设置。'
   } finally {
@@ -170,8 +178,13 @@ function openProcessing(): void {
 function openModelBinding(): void {
   const kb = settings.value
   if (!kb) return
+  const defaultLlmKey = defaultModels.value.defaults.LLM ?? ''
+  const defaultEmbeddingKey = defaultModels.value.defaults.EMBEDDING ?? ''
+  // 显式知识库 binding 优先；空槽只预填当前仍可用且类型匹配的个人默认模型。
   draft.answerProfileKey = answerBindingKey.value
+    || (chatModelProfiles.value.some(item => item.profileKey === defaultLlmKey) ? defaultLlmKey : '')
   draft.embeddingProfileKey = embeddingBindingKey.value
+    || (embeddingModelProfiles.value.some(item => item.profileKey === defaultEmbeddingKey) ? defaultEmbeddingKey : '')
   feedback.modelBinding.error = ''
   feedback.modelBinding.saved = ''
   showModelBindingDialog.value = true
@@ -339,7 +352,7 @@ onMounted(loadSettings)
 
     <!-- 模型绑定编辑弹窗 -->
     <AppDialog v-model="showModelBindingDialog" title="编辑知识库模型用途" size="md">
-      <p class="dialog-description">为回答生成与向量化选择模型配置；系统不会自动回退到全局默认。</p>
+      <p class="dialog-description">未显式绑定时预填个人默认模型；保存后成为知识库独立绑定，不再跟随全局默认。</p>
       <a-form layout="vertical" @submit.prevent="saveModelBinding">
         <p v-if="!modelProfiles.length" class="notice-panel">
           <b>未配置模型</b>

@@ -124,10 +124,13 @@ describe('knowledge-bases API - real 模式走 http.request', () => {
   })
 
   it('getKnowledgeBase 调用 GET /knowledge-bases/{key}', async () => {
-    mockedRequest.mockResolvedValueOnce({} as never)
+    mockedRequest.mockResolvedValueOnce({
+      modelBindings: [{ usageType: 'ANSWER_GENERATION', modelProfileKey: 'profile-001' }],
+    } as never)
     const { getKnowledgeBase } = await import('../knowledge-bases')
-    await getKnowledgeBase('kb-001')
+    const result = await getKnowledgeBase('kb-001')
     expect(mockedRequest).toHaveBeenCalledWith('/knowledge-bases/kb-001')
+    expect(result?.modelBindings).toEqual([{ bindingKey: undefined, usageType: 'ANSWER_GENERATION', profileKey: 'profile-001' }])
   })
 
   it('createKnowledgeBase 调用 POST /workspaces/{key}/knowledge-bases', async () => {
@@ -140,12 +143,19 @@ describe('knowledge-bases API - real 模式走 http.request', () => {
   })
 
   it('updateKnowledgeBase 调用 PATCH /knowledge-bases/{key}', async () => {
-    mockedRequest.mockResolvedValueOnce({} as never)
+    mockedRequest.mockResolvedValueOnce({ modelBindings: [] } as never)
     const { updateKnowledgeBase } = await import('../knowledge-bases')
-    await updateKnowledgeBase('kb-001', { name: '更新', revision: 2 })
+    await updateKnowledgeBase('kb-001', {
+      name: '更新',
+      revision: 2,
+      modelBindings: [{ usageType: 'ANSWER_GENERATION', profileKey: 'profile-001' }],
+    })
     const [path, init] = mockedRequest.mock.calls[0]
     expect(path).toBe('/knowledge-bases/kb-001')
     expect(init?.method).toBe('PATCH')
+    expect(JSON.parse(init?.body as string).modelBindings).toEqual([
+      { usageType: 'ANSWER_GENERATION', modelProfileKey: 'profile-001' },
+    ])
   })
 
   it('deleteKnowledgeBase 调用 DELETE /knowledge-bases/{key}', async () => {

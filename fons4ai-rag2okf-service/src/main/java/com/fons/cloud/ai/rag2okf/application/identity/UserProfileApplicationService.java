@@ -108,8 +108,13 @@ public class UserProfileApplicationService {
      */
     public KbUserEntity updateCurrentUser(String displayName, String avatarUrl, String preferenceJson) {
         KbUserEntity user = currentUser();
-        user.setDisplayName(normalizeDisplayName(displayName));
-        user.setAvatarUrl(normalizeOptional(avatarUrl, 512));
+        // PATCH 采用字段级部分更新：未提交的字段保持原值；空字符串仍可显式清空可选头像。
+        if (displayName != null) {
+            user.setDisplayName(normalizeDisplayName(displayName));
+        }
+        if (avatarUrl != null) {
+            user.setAvatarUrl(normalizeOptional(avatarUrl, 512));
+        }
         // preferenceJson 采用局部合并：只替换提交的顶层 key，保留其它已有偏好；
         // 空提交（null/空白/{}) 不清除现有偏好，保证幂等安全。
         String merged = mergePreferenceJson(user.getPreferenceJson(), preferenceJson);
@@ -148,8 +153,9 @@ public class UserProfileApplicationService {
      * <p>合并规则与容错：</p>
      * <ul>
      *   <li>patch 为 null 或空白 → 返回 existing（不清除现有偏好，保证幂等安全）</li>
-     *   <li>existing 为 null 或空白 → 返回 patch（首次设置）</li>
-     *   <li>两者都非空 → 解析为 JSON object 后按顶层 key 合并</li>
+     *   <li>patch 必须先成功解析为 JSON object；首次设置也不例外</li>
+     *   <li>existing 为 null 或空白 → 持久化规范化后的 patch object</li>
+     *   <li>两者都非空 → 按顶层 key 合并</li>
      *   <li>patch 为空对象 {} → 视为空提交，返回 existing 不变</li>
      *   <li>非法 JSON、超深嵌套或任一端非 JSON object → 回退返回 existing，不抛错</li>
      * </ul>
@@ -163,25 +169,26 @@ public class UserProfileApplicationService {
         if (patchJson == null || patchJson.isBlank()) {
             return existingJson;
         }
-        String patch = patchJson.trim();
-        // 首次设置：无现有偏好时直接采用 patch
-        if (existingJson == null || existingJson.isBlank()) {
-            return patch;
-        }
-        // 两者均非空：解析为 JSON object 后按顶层 key 局部合并
         try {
-            JsonNode existingNode = PREFERENCE_MAPPER.readTree(existingJson);
-            JsonNode patchNode = PREFERENCE_MAPPER.readTree(patch);
-            // 任一端非 object 时保守保留 existing，避免破坏既有数据
-            if (!existingNode.isObject() || !patchNode.isObject()) {
+            JsonNode patchNode = PREFERENCE_MAPPER.readTree(patchJson.trim());
+            // 首次设置也必须校验根节点，防止 []、null、字符串或坏 JSON 污染数据。
+            if (patchNode == null || !patchNode.isObject()) {
                 return existingJson;
             }
-            ObjectNode existingObj = (ObjectNode) existingNode;
             ObjectNode patchObj = (ObjectNode) patchNode;
             // 空对象 patch 视为空提交，不清除现有偏好
             if (patchObj.isEmpty()) {
                 return existingJson;
             }
+            if (existingJson == null || existingJson.isBlank()) {
+                return PREFERENCE_MAPPER.writeValueAsString(patchObj);
+            }
+            JsonNode existingNode = PREFERENCE_MAPPER.readTree(existingJson);
+            // 既有值非 object 时保守保留，避免用一次 PATCH 覆盖异常数据。
+            if (existingNode == null || !existingNode.isObject()) {
+                return existingJson;
+            }
+            ObjectNode existingObj = (ObjectNode) existingNode;
             // 浅合并：patch 中存在的顶层 key 整体替换 existing 中同名 key
             List<String> changedKeys = new ArrayList<>();
             patchObj.fields().forEachRemaining(entry -> {

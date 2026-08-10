@@ -10,6 +10,7 @@ import {
   getParsePreview,
   getSourceContent,
   rechunkDocument,
+  retryTask,
   triggerParse,
   triggerPublish,
 } from '../../../api/documents'
@@ -53,6 +54,7 @@ function makeSource() {
 
 describe('DocumentDetailView', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     setActivePinia(createPinia())
     useWorkspaceStore().setWorkspace({ key: 'personal', name: 'Personal', role: 'ADMIN' })
     vi.mocked(getDocument).mockResolvedValue(makeDoc())
@@ -126,5 +128,68 @@ describe('DocumentDetailView', () => {
     // 解析按钮不受发布操作影响
     const parseBtn = wrapper.find('[data-test="parse-button"]')
     expect(parseBtn.attributes('disabled')).toBeUndefined()
+  })
+
+  it('未生成成功分块时禁止发布，避免未解析文档进入检索', async () => {
+    vi.mocked(getDocument).mockResolvedValue(makeDoc({ parseStatus: 'NOT_STARTED' }))
+    vi.mocked(getChunkPreview).mockResolvedValue({ hasChunk: false, parentCount: 0, childCount: 0, total: 0 })
+
+    const wrapper = mount(DocumentDetailView)
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="publish-button"]').attributes('disabled')).toBeDefined()
+    expect(triggerPublish).not.toHaveBeenCalled()
+  })
+
+  it('最新发布失败时保留旧发布内容的可用提示', async () => {
+    vi.mocked(getDocument).mockResolvedValue(makeDoc({
+      publishStatus: 'PUBLISH_FAILED',
+      hasActivePublication: true,
+    }))
+
+    const wrapper = mount(DocumentDetailView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('此前已发布内容继续对检索可用')
+  })
+
+  it('确认重新分块时携带当前分块版本，取消路径不改变分块', async () => {
+    vi.mocked(rechunkDocument).mockResolvedValue({ taskKey: 'rechunk-1' })
+    const wrapper = mount(DocumentDetailView, { attachTo: document.body })
+    await flushPromises()
+
+    await wrapper.get('[data-test="rechunk-button"]').trigger('click')
+    await nextTick()
+    const body = new DOMWrapper(document.body)
+    await body.get('[data-test="confirm-rechunk"]').trigger('click')
+    await flushPromises()
+
+    expect(rechunkDocument).toHaveBeenCalledWith('doc-1', 'chunk-token', {})
+  })
+
+  it('解析失败的重试只提交最新失败任务，不触发发布', async () => {
+    vi.mocked(getDocument).mockResolvedValue(makeDoc({
+      parseStatus: 'FAILED',
+      latestTask: {
+        taskKey: 'task-failed-1',
+        taskType: 'PARSE',
+        status: 'FAILED',
+        progress: 0,
+        attempt: 1,
+        maxAttempts: 3,
+        errorCode: 'PARSE_ERROR',
+        errorMessage: '解析失败',
+        updated: '2026-08-05T08:00:00Z',
+      },
+    }))
+    vi.mocked(retryTask).mockResolvedValue('task-retry-1')
+
+    const wrapper = mount(DocumentDetailView)
+    await flushPromises()
+    await wrapper.get('[data-test="retry-task"]').trigger('click')
+    await flushPromises()
+
+    expect(retryTask).toHaveBeenCalledWith('task-failed-1')
+    expect(triggerPublish).not.toHaveBeenCalled()
   })
 })

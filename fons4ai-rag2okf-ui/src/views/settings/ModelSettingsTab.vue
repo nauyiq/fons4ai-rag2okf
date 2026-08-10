@@ -3,7 +3,7 @@
  * 模型设置 Tab（设置中心子路由）—— CR-001 T028 Ragflow 风格左右双栏。
  *
  * <p>左侧 ~2/3：顶部默认模型配置（7 类型下拉）+ 下方按连接分组的提供商卡片。
- * <p>右侧 ~1/3：可选模型（搜索框 + 类型标签 + 提供商卡片网格 + 自定义入口）。
+ * <p>右侧 ~1/3：可选模型（搜索框 + 提供商卡片网格 + 自定义入口）。
  *
  * <p>两级弹窗：
  * - 连接弹窗：displayName / baseUrl / apiKey（providerCode/providerName 由目录预填，隐藏）
@@ -27,12 +27,12 @@ import {
   testProfile,
   updateConnection,
   updateProfile,
-  type CatalogProvider,
+  listModelProviderTemplates,
+  type ModelProviderTemplate,
   type ModelConnection,
   type ModelProfile,
 } from '../../api/models'
 import { useModelForm } from '../../composables/useModelForm'
-import { useModelCatalog } from '../../composables/useModelCatalog'
 import { useDefaultModels } from '../../composables/useDefaultModels'
 import { modelTestLabel } from '../../utils/formatters'
 import { MODEL_TYPES, MODEL_TYPE_LABELS, type ModelType } from '../../types/model'
@@ -97,14 +97,18 @@ const {
   buildProfileInput,
 } = useModelForm()
 
-const {
-  catalog,
-  filteredProviders,
-  searchKeyword,
-  activeTypeFilter,
-  providerModels,
-  fetchCatalog,
-} = useModelCatalog()
+const templates = ref<ModelProviderTemplate[]>([])
+const searchKeyword = ref('')
+
+const filteredTemplates = computed<ModelProviderTemplate[]>(() => {
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  if (!keyword) return templates.value
+  return templates.value.filter(
+    (t) =>
+      t.providerName.toLowerCase().includes(keyword) ||
+      t.code.toLowerCase().includes(keyword),
+  )
+})
 
 const { defaults, load: loadDefaults, save: saveDefaultsRaw } = useDefaultModels()
 
@@ -145,8 +149,8 @@ function visibleProfiles(group: { connection: ModelConnection; profiles: ModelPr
 }
 
 /** 可选模型网格：排除 CUSTOM（自定义入口单独渲染在底部）。 */
-const marketProviders = computed<CatalogProvider[]>(() =>
-  filteredProviders.value.filter((p) => p.providerCode !== 'CUSTOM'),
+const marketProviders = computed<ModelProviderTemplate[]>(() =>
+  filteredTemplates.value.filter((p) => p.code !== 'CUSTOM'),
 )
 
 /** 按类型分组的档案，供默认偏好下拉使用。 */
@@ -199,27 +203,6 @@ const profileTypeModel = computed<SelectValue>({
   },
 })
 
-/** 当前选中连接对应的目录提供商（无则视为自定义）。 */
-const selectedCatalogProvider = computed<CatalogProvider | null>(() => {
-  const conn = connections.value.find((c) => c.connectionKey === profileForm.value.connectionKey)
-  if (!conn) return null
-  return catalog.value.find((p) => p.providerCode === conn.providerCode) ?? null
-})
-
-/** 自定义提供商（CUSTOM 或目录中无该提供商）时模型名称走自由输入。 */
-const isCustomModelName = computed(() => {
-  const conn = connections.value.find((c) => c.connectionKey === profileForm.value.connectionKey)
-  if (!conn) return true
-  return !selectedCatalogProvider.value || conn.providerCode === 'CUSTOM'
-})
-
-/** 模型名称下拉选项：按目录提供商 + 当前类型过滤。 */
-const modelNameOptions = computed(() => {
-  const provider = selectedCatalogProvider.value
-  if (!provider) return []
-  return provider.models.filter((m) => m.modelType === profileForm.value.modelType)
-})
-
 /** a-input-number 桥接：number | null 字段与组件 string | number 双向转换。 */
 function toNullableNumber(v: string | number): number | null {
   if (typeof v === 'number') return v
@@ -269,16 +252,22 @@ const connectionApiKeyHelp = computed(() => {
 
 function testCellClass(status: string): string {
   if (!status) return 'cell-muted'
-  return status === 'SUCCESS' ? 'cell-success' : 'cell-error'
+  // 与后端 ModelTestStatus 枚举值对齐：SUCCEEDED 为成功，其余视为失败
+  return status === 'SUCCEEDED' ? 'cell-success' : 'cell-error'
 }
 
 async function load(): Promise<void> {
   loading.value = true
   try {
-    const [connList, profileList] = await Promise.all([listConnections(), listProfiles()])
+    const [connList, profileList, templateList] = await Promise.all([
+      listConnections(),
+      listProfiles(),
+      listModelProviderTemplates(),
+    ])
     connections.value = connList
     profiles.value = profileList
-    await Promise.all([fetchCatalog(), loadDefaults()])
+    templates.value = templateList
+    await loadDefaults()
   } catch (error) {
     message.error(error instanceof ApiRequestError ? error.message : '无法读取模型设置。')
   } finally {
@@ -289,11 +278,11 @@ async function load(): Promise<void> {
 // ============ 连接弹窗 ============
 
 /** 从目录卡片打开连接新增弹窗（预填 providerCode/providerName/baseUrl）。 */
-function openConnectionFromCatalog(provider: CatalogProvider): void {
+function openConnectionFromCatalog(provider: ModelProviderTemplate): void {
   prepareCreateConnection()
-  connectionForm.value.providerCode = provider.providerCode
+  connectionForm.value.providerCode = provider.code
   connectionForm.value.providerName = provider.providerName
-  connectionForm.value.baseUrl = provider.defaultBaseUrl
+  connectionForm.value.baseUrl = provider.defaultBaseUrl ?? ''
   editingConnectionKey.value = ''
   connectionErrors.value = []
   showConnectionDialog.value = true
@@ -338,7 +327,12 @@ async function submitConnection(): Promise<void> {
       showAddModelConfirm.value = true
     } else {
       const key = editingConnectionKey.value
-      const updated = await updateConnection(key, buildConnectionInput())
+      const input = buildConnectionInput()
+      const updated = await updateConnection(key, {
+        providerName: input.providerName,
+        displayName: input.displayName,
+        baseUrl: input.baseUrl,
+      })
       if (updated) {
         connections.value = connections.value.map((c) => (c.connectionKey === key ? updated : c))
       }
@@ -356,7 +350,13 @@ async function submitConnection(): Promise<void> {
       message.success('连接已更新')
     }
   } catch (error) {
-    message.error(error instanceof ApiRequestError ? error.message : '无法保存连接。')
+    const errorMessage = error instanceof ApiRequestError ? error.message : '无法保存连接。'
+    // Base URL/SSRF 等后端校验失败必须在弹窗内就地显示，便于用户定位并修正。
+    const inlineMessage = error instanceof ApiRequestError && error.status === 400 && !errorMessage.includes('Base URL')
+      ? `Base URL：${errorMessage}`
+      : errorMessage
+    connectionErrors.value = [inlineMessage]
+    message.error(errorMessage)
   } finally {
     saving.value = false
     if (!isConnectionCreate.value) clearConnectionApiKey()
@@ -443,7 +443,8 @@ async function runTest(profile: ModelProfile): Promise<void> {
       target.lastTestAt = new Date().toISOString()
     }
     const label = modelTestLabel(result.status, result.errorCode)
-    if (result.status === 'SUCCESS') message.success(label)
+    // 后端 ModelTestStatus 仅 SUCCEEDED/FAILED，SUCCEEDED 走成功提示
+    if (result.status === 'SUCCEEDED') message.success(label)
     else message.warning(label)
   } catch (error) {
     message.error(error instanceof ApiRequestError ? error.message : '模型测试未完成。')
@@ -669,39 +670,18 @@ onMounted(load)
             <h2 class="section-title">可选模型</h2>
             <a-input-search
               v-model:value="searchKeyword"
-              placeholder="搜索提供商或模型名称"
+              placeholder="搜索提供商"
               allow-clear
               class="market-search"
               data-test="market-search"
             />
-            <div class="type-tag-bar">
-              <a-tag
-                class="type-tag"
-                :class="{ active: activeTypeFilter === '' }"
-                data-test="type-tag-all"
-                @click="activeTypeFilter = ''"
-              >
-                全部
-              </a-tag>
-              <a-tag
-                v-for="t in MODEL_TYPES"
-                :key="t"
-                class="type-tag"
-                :class="{ active: activeTypeFilter === t }"
-                :color="activeTypeFilter === t ? MODEL_TYPE_COLORS[t] : ''"
-                :data-test="`type-tag-${t}`"
-                @click="activeTypeFilter = activeTypeFilter === t ? '' : t"
-              >
-                {{ MODEL_TYPE_LABELS[t] }}
-              </a-tag>
-            </div>
 
             <div class="market-grid">
               <div
                 v-for="provider in marketProviders"
-                :key="provider.providerCode"
+                :key="provider.code"
                 class="catalog-card"
-                :data-test="`catalog-card-${provider.providerCode}`"
+                :data-test="`catalog-card-${provider.code}`"
                 @click="openConnectionFromCatalog(provider)"
               >
                 <div class="catalog-card-head">
@@ -712,26 +692,15 @@ onMounted(load)
                     :href="provider.officialUrl"
                     target="_blank"
                     rel="noopener noreferrer"
-                    :data-test="`official-link-${provider.providerCode}`"
+                    :data-test="`official-link-${provider.code}`"
                     @click.stop
                   >↗</a>
-                </div>
-                <div class="catalog-models">
-                  <a-tag
-                    v-for="m in providerModels(provider)"
-                    :key="m.modelName"
-                    :color="MODEL_TYPE_COLORS[m.modelType]"
-                    class="catalog-model-tag"
-                  >
-                    {{ m.modelName }}
-                  </a-tag>
-                  <span v-if="!providerModels(provider).length" class="cell-muted">无匹配模型</span>
                 </div>
                 <div class="catalog-card-foot">
                   <a-button
                     type="primary"
                     size="small"
-                    :data-test="`add-connection-${provider.providerCode}`"
+                    :data-test="`add-connection-${provider.code}`"
                     @click.stop="openConnectionFromCatalog(provider)"
                   >
                     添加
@@ -870,23 +839,7 @@ onMounted(load)
           :validate-status="profileErrors.some((e) => e.includes('模型名称')) ? 'error' : ''"
           :help="profileErrors.find((e) => e.includes('模型名称')) || ''"
         >
-          <a-select
-            v-if="!isCustomModelName"
-            v-model:value="profileForm.modelName"
-            show-search
-            placeholder="选择模型"
-            data-test="profile-model-name"
-          >
-            <a-select-option
-              v-for="m in modelNameOptions"
-              :key="m.modelName"
-              :value="m.modelName"
-            >
-              {{ m.modelName }}
-            </a-select-option>
-          </a-select>
           <a-input
-            v-else
             v-model:value="profileForm.modelName"
             placeholder="输入模型名称"
             data-test="profile-model-name"
@@ -1168,22 +1121,6 @@ onMounted(load)
   margin-top: 10px;
 }
 
-.type-tag-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 12px 0;
-}
-
-.type-tag {
-  cursor: pointer;
-  user-select: none;
-}
-
-.type-tag.active {
-  box-shadow: 0 0 0 2px var(--violet);
-}
-
 .market-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -1229,17 +1166,6 @@ onMounted(load)
 
 .official-link:hover {
   text-decoration: underline;
-}
-
-.catalog-models {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-height: 24px;
-}
-
-.catalog-model-tag {
-  margin: 0;
 }
 
 .catalog-card-foot {
@@ -1396,25 +1322,6 @@ onMounted(load)
   margin-top: 8px;
 }
 
-.type-tag-bar {
-  gap: 5px;
-  margin: 12px 0 14px;
-}
-
-.type-tag {
-  margin-inline-end: 0;
-  border: 0;
-  border-radius: 4px;
-  color: var(--muted-foreground);
-  background: var(--surface-muted);
-}
-
-.type-tag.active {
-  color: #fff;
-  background: #262626;
-  box-shadow: none;
-}
-
 .market-grid {
   gap: 10px;
 }
@@ -1444,24 +1351,6 @@ onMounted(load)
   max-height: calc(100vh - 126px);
   overflow-y: auto;
   scrollbar-width: thin;
-}
-
-.model-settings-tab :deep(.ant-btn-primary) {
-  border-color: #262626;
-  background: #262626;
-  box-shadow: none;
-}
-
-.model-settings-tab :deep(.ant-btn-primary:hover),
-.model-settings-tab :deep(.ant-btn-primary:focus) {
-  border-color: #404040;
-  background: #404040;
-}
-
-.model-settings-tab :deep(.ant-select-selector),
-.model-settings-tab :deep(.ant-input-affix-wrapper) {
-  border-radius: 6px !important;
-  box-shadow: none !important;
 }
 
 .model-settings-tab :deep(.ant-tag) {

@@ -109,6 +109,7 @@ export function validateProfileForm(form: ProfileFormState): string[] {
   if (!form.connectionKey) errors.push('请选择所属连接')
   if (!isValidModelType(form.modelType)) errors.push('请选择模型类型')
   if (!form.modelName.trim()) errors.push('请填写模型名称')
+  if (form.modelName.trim().length > 160) errors.push('模型名称不能超过 160 个字符')
   if (form.timeoutSeconds < 1 || form.timeoutSeconds > 120) errors.push('超时秒数需在 1 到 120 之间')
   if (form.temperature != null && (form.temperature < 0 || form.temperature > 2)) {
     errors.push('温度需在 0 到 2 之间')

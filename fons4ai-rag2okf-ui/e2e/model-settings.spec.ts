@@ -1,7 +1,7 @@
 import { expect, type Page, test } from '@playwright/test'
 
 function envelope(data: unknown): object {
-  return { success: true, code: 'SUCCESS', message: 'success', data }
+  return { success: true, code: 'SUCCEEDED', message: 'success', data }
 }
 
 const defaultProfile = {
@@ -13,19 +13,21 @@ const defaultProfile = {
 }
 
 const templates = [
-  { code: 'ALIYUN_DASHSCOPE', providerName: '阿里云百炼', defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
-  { code: 'VOLCENGINE_ARK', providerName: '火山方舟', defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3' },
-  { code: 'TENCENT_HUNYUAN', providerName: '腾讯混元', defaultBaseUrl: 'https://api.hunyuan.cloud.tencent.com/v1' },
-  { code: 'ZHIPU_BIGMODEL', providerName: '智谱 BigModel', defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4' },
-  { code: 'CUSTOM', providerName: '自定义', defaultBaseUrl: null },
+  { code: 'ALIYUN_DASHSCOPE', providerName: '阿里云百炼', defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', officialUrl: 'https://dashscope.aliyun.com' },
+  { code: 'DEEPSEEK', providerName: 'DeepSeek', defaultBaseUrl: 'https://api.deepseek.com/v1', officialUrl: 'https://platform.deepseek.com' },
+  { code: 'OPENAI', providerName: 'OpenAI', defaultBaseUrl: 'https://api.openai.com/v1', officialUrl: 'https://platform.openai.com' },
+  { code: 'VOLCENGINE_ARK', providerName: '火山方舟', defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3', officialUrl: 'https://www.volcengine.com/product/ark' },
+  { code: 'TENCENT_HUNYUAN', providerName: '腾讯混元', defaultBaseUrl: 'https://api.hunyuan.cloud.tencent.com/v1', officialUrl: 'https://hunyuan.tencent.com' },
+  { code: 'ZHIPU_BIGMODEL', providerName: '智谱 BigModel', defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4', officialUrl: 'https://open.bigmodel.cn' },
+  { code: 'CUSTOM', providerName: '自定义', defaultBaseUrl: null, officialUrl: null },
 ]
 
 const connections = [
-  { connectionKey: 'conn-1', providerCode: 'ALIYUN_DASHSCOPE', providerName: '阿里云百炼', displayName: '阿里云百炼', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', apiKeyMask: '····7K2M', status: 'ACTIVE', lastTestStatus: 'SUCCESS', lastTestAt: '2026-08-06T10:00:00Z' },
+  { connectionKey: 'conn-1', providerCode: 'ALIYUN_DASHSCOPE', providerName: '阿里云百炼', displayName: '阿里云百炼', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', apiKeyMask: '····7K2M', status: 'ACTIVE', lastTestStatus: 'SUCCEEDED', lastTestAt: '2026-08-06T10:00:00Z' },
 ]
 
 const profiles = [
-  { profileKey: 'prof-1', connectionKey: 'conn-1', modelName: 'qwen-plus', modelType: 'CHAT', dimensions: null, timeoutSeconds: 60, temperature: null, status: 'ACTIVE', lastTestStatus: 'SUCCESS', lastTestAt: '2026-08-06T10:00:00Z' },
+  { profileKey: 'prof-1', connectionKey: 'conn-1', modelName: 'qwen-plus', modelType: 'CHAT', dimensions: null, timeoutSeconds: 60, temperature: null, status: 'ACTIVE', lastTestStatus: 'SUCCEEDED', lastTestAt: '2026-08-06T10:00:00Z' },
   { profileKey: 'prof-2', connectionKey: 'conn-1', modelName: 'text-embedding-v3', modelType: 'EMBEDDING', dimensions: 1024, timeoutSeconds: 60, temperature: null, status: 'ACTIVE', lastTestStatus: 'PENDING', lastTestAt: null },
 ]
 
@@ -61,7 +63,7 @@ async function mockApis(page: Page): Promise<void> {
 
     if (pathname.endsWith('/model-connections') && request.method() === 'POST') {
       const body = JSON.parse(request.postData() ?? '{}')
-      const newConn = { ...connections[0], connectionKey: 'conn-new', displayName: body.displayName ?? '新连接', providerCode: body.templateCode ?? 'CUSTOM', apiKeyMask: '····NEW1' }
+      const newConn = { ...connections[0], connectionKey: 'conn-new', displayName: body.displayName ?? '新连接', providerCode: body.providerCode ?? 'CUSTOM', apiKeyMask: '····NEW1' }
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify(envelope(newConn)) })
       return
     }
@@ -86,7 +88,7 @@ async function mockApis(page: Page): Promise<void> {
     }
 
     if (pathname.match(/\/model-profiles\/[^/]+\/test$/) && request.method() === 'POST') {
-      await route.fulfill({ contentType: 'application/json', body: JSON.stringify(envelope({ status: 'SUCCESS', errorCode: null, dimensions: null })) })
+      await route.fulfill({ contentType: 'application/json', body: JSON.stringify(envelope({ status: 'SUCCEEDED', errorCode: null, dimensions: null })) })
       return
     }
 

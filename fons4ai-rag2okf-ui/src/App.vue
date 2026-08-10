@@ -29,7 +29,8 @@ const antdThemeConfig = computed(() => {
     algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
     token: isDark
       ? {
-          colorPrimary: '#8b73ff',
+          // 暗色下用浅色（--ink）作为主色，保证黑底可见；与 tokens.css 的 --ink 一致
+          colorPrimary: '#e8edf7',
           colorText: '#e8edf7',
           colorTextSecondary: '#a9b7ce',
           colorBorder: '#213650',
@@ -41,7 +42,8 @@ const antdThemeConfig = computed(() => {
           borderRadius: 10,
         }
       : {
-          colorPrimary: '#6c4dff',
+          // 亮色下用近黑色（#262626）作为主色，统一按钮/选择框/输入框聚焦边框为黑色系
+          colorPrimary: '#262626',
           colorText: '#111827',
           colorTextSecondary: '#52617a',
           colorBorder: '#d9e1ef',

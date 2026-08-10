@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
  *
  * - demo 模式由 VITE_RAG2OKF_DATA_SOURCE=demo 激活
  * - demo 模式走本地 mock 数据，不发起网络请求
- * - 覆盖连接 CRUD、档案 CRUD、目录搜索过滤、偏好读写、CHAT→LLM 迁移、级联删除
+ * - 覆盖连接 CRUD、档案 CRUD、提供商模板、偏好读写、CHAT→LLM 迁移、级联删除
  */
 
 // Mock http.request —— demo 模式下永远不会调用，mock 后可用于验证隔离性
@@ -30,8 +30,8 @@ describe('demo 模式集成测试（T029）', () => {
   // ============ 场景 1：API 数据完整性 ============
 
   describe('API 数据完整性', () => {
-    it('demo mock 数据返回有效的连接、档案、目录和默认配置', async () => {
-      const { listConnections, listProfiles, getModelCatalog, getDefaultModels } =
+    it('demo mock 数据返回有效的连接、档案、提供商模板和默认配置', async () => {
+      const { listConnections, listProfiles, listModelProviderTemplates, getDefaultModels } =
         await import('../api/models')
 
       // listConnections 返回 3+ 连接，字段完整
@@ -62,14 +62,14 @@ describe('demo 模式集成测试（T029）', () => {
         expect(['ACTIVE', 'DISABLED']).toContain(p.status)
       }
 
-      // getModelCatalog 返回 3+ 提供商，每个提供商有模型列表
-      const catalog = await getModelCatalog()
-      expect(catalog.providers.length).toBeGreaterThanOrEqual(3)
-      for (const p of catalog.providers) {
-        expect(p.providerCode).toBeTruthy()
+      // 提供商模板返回 7 个公开厂商元信息，不维护模型清单
+      const templates = await listModelProviderTemplates()
+      expect(templates).toHaveLength(7)
+      for (const p of templates) {
+        expect(p.code).toBeTruthy()
         expect(p.providerName).toBeTruthy()
         expect(p.defaultBaseUrl).toBeDefined()
-        expect(Array.isArray(p.models)).toBe(true)
+        expect(p).toHaveProperty('officialUrl')
       }
 
       // getDefaultModels 返回至少包含 LLM 和 EMBEDDING 的默认配置
@@ -124,56 +124,34 @@ describe('demo 模式集成测试（T029）', () => {
     })
   })
 
-  // ============ 场景 3：目录搜索与类型过滤 ============
+  // ============ 场景 3：提供商模板 + 手填模型名 ============
 
-  describe('目录搜索与类型过滤', () => {
-    it('目录加载后支持关键词搜索与类型标签过滤', async () => {
-      const { useModelCatalog } = await import('../composables/useModelCatalog')
-      const {
-        catalog,
-        fetchCatalog,
-        searchKeyword,
-        activeTypeFilter,
-        filteredProviders,
-      } = useModelCatalog()
+  describe('提供商模板与手填模型名', () => {
+    it('从 DeepSeek 模板创建连接、手填模型名并保存默认模型', async () => {
+      const api = await import('../api/models')
+      const templates = await api.listModelProviderTemplates()
+      const deepSeek = templates.find((template) => template.code === 'DEEPSEEK')
+      expect(deepSeek).toEqual(expect.objectContaining({
+        providerName: 'DeepSeek',
+        officialUrl: 'https://platform.deepseek.com',
+      }))
 
-      // 目录加载，返回提供商
-      await fetchCatalog()
-      expect(catalog.value.length).toBeGreaterThanOrEqual(3)
+      const connection = await api.createConnection({
+        providerCode: deepSeek!.code,
+        providerName: deepSeek!.providerName,
+        displayName: 'DeepSeek 演示连接',
+        baseUrl: deepSeek!.defaultBaseUrl ?? '',
+        apiKey: 'sk-demo-only-1234',
+      })
+      const profile = await api.createProfile({
+        connectionKey: connection.connectionKey,
+        modelType: 'LLM',
+        modelName: 'deepseek-chat',
+      })
+      expect(profile.modelName).toBe('deepseek-chat')
 
-      // 初始无过滤，显示全部有模型的提供商
-      expect(filteredProviders.value.length).toBeGreaterThanOrEqual(3)
-
-      // 关键词搜索 "deepseek" —— 仅匹配 DeepSeek（提供商名）
-      searchKeyword.value = 'deepseek'
-      expect(filteredProviders.value.length).toBe(1)
-      expect(filteredProviders.value[0].providerCode).toBe('DEEPSEEK')
-
-      // 关键词搜索 "qwen" —— 匹配 QWEN 旗下模型名（qwen-plus/qwen-turbo）
-      searchKeyword.value = 'qwen'
-      expect(filteredProviders.value.length).toBe(1)
-      expect(filteredProviders.value[0].providerCode).toBe('QWEN')
-
-      // 清除关键词
-      searchKeyword.value = ''
-      expect(filteredProviders.value.length).toBeGreaterThanOrEqual(3)
-
-      // 类型过滤 EMBEDDING —— DeepSeek/QWEN/OpenAI 都有嵌入模型
-      activeTypeFilter.value = 'EMBEDDING'
-      const embeddingProviders = filteredProviders.value
-      expect(embeddingProviders.length).toBe(3)
-      for (const p of embeddingProviders) {
-        expect(p.models.some((m) => m.modelType === 'EMBEDDING')).toBe(true)
-      }
-
-      // 类型过滤 RERANK —— 仅 QWEN 有 rerank 模型
-      activeTypeFilter.value = 'RERANK'
-      expect(filteredProviders.value.length).toBe(1)
-      expect(filteredProviders.value[0].providerCode).toBe('QWEN')
-
-      // 清除类型过滤
-      activeTypeFilter.value = ''
-      expect(filteredProviders.value.length).toBeGreaterThanOrEqual(3)
+      await api.saveDefaultModels({ defaults: { LLM: profile.profileKey } })
+      expect((await api.getDefaultModels()).defaults.LLM).toBe(profile.profileKey)
     })
   })
 
@@ -236,8 +214,8 @@ describe('demo 模式集成测试（T029）', () => {
       await api.updateProfile(profile.profileKey, { modelName: 'updated-model' })
       await api.testProfile(profile.profileKey)
 
-      // 目录 API
-      await api.getModelCatalog()
+      // 提供商模板 API
+      await api.listModelProviderTemplates()
 
       // 偏好 API
       await api.getDefaultModels()
@@ -263,7 +241,7 @@ describe('demo 模式集成测试（T029）', () => {
       const active = profiles.find((p) => p.status === 'ACTIVE')
       expect(active).toBeDefined()
       const activeResult = await testProfile(active!.profileKey)
-      expect(activeResult.status).toBe('SUCCESS')
+      expect(activeResult.status).toBe('SUCCEEDED')
       expect(activeResult.errorCode).toBeNull()
 
       // 找到 DISABLED 档案

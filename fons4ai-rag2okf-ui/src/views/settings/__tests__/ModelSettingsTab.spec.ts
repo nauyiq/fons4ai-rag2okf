@@ -5,18 +5,19 @@ import { nextTick } from 'vue'
 
 import ModelSettingsTab from '../ModelSettingsTab.vue'
 import * as modelsApi from '../../../api/models'
+import { ApiRequestError } from '../../../api/http'
 
 /**
  * ModelSettingsTab（T028 Ragflow 风格左右双栏）交互测试。
  *
  * 验证点：
  * - 左右双栏布局渲染
- * - 点击目录卡片打开连接弹窗（预填 baseUrl）
+ * - 点击提供商模板卡片打开连接弹窗（预填 baseUrl）
  * - 官方链接点击不触发卡片添加（事件隔离）
  * - 连接创建 → 确认添加模型 → 档案创建流程
  * - 默认模型下拉展示正确档案标签
  * - 保存默认配置调用 saveDefaultModels
- * - 类型标签过滤模型市场
+ * - 搜索框按厂商名称或代码过滤模型市场，且不再渲染类型标签栏
  * - CHAT→LLM 默认值迁移
  */
 
@@ -58,7 +59,7 @@ const mockProfiles = [
     timeoutSeconds: 30,
     temperature: 0.7,
     status: 'ACTIVE',
-    lastTestStatus: 'SUCCESS',
+    lastTestStatus: 'SUCCEEDED',
     lastTestAt: '2026-08-07T00:00:00.000Z',
     updated: '2026-08-07T00:00:00.000Z',
   },
@@ -72,51 +73,39 @@ const mockProfiles = [
     timeoutSeconds: 60,
     temperature: null,
     status: 'ACTIVE',
-    lastTestStatus: 'SUCCESS',
+    lastTestStatus: 'SUCCEEDED',
     lastTestAt: '2026-08-07T00:00:00.000Z',
     updated: '2026-08-07T00:00:00.000Z',
   },
 ]
 
-const mockCatalog = {
-  providers: [
+const mockTemplates = [
     {
-      providerCode: 'DEEPSEEK',
+      code: 'DEEPSEEK',
       providerName: 'DeepSeek',
       defaultBaseUrl: 'https://api.deepseek.com/v1',
-      officialUrl: 'https://www.deepseek.com',
-      models: [
-        { modelName: 'deepseek-chat', modelType: 'LLM' },
-        { modelName: 'deepseek-coder', modelType: 'LLM' },
-      ],
+      officialUrl: 'https://platform.deepseek.com',
     },
     {
-      providerCode: 'QWEN',
-      providerName: '通义千问',
+      code: 'ALIYUN_DASHSCOPE',
+      providerName: '阿里云百炼',
       defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-      officialUrl: 'https://help.aliyun.com/zh/dashscope',
-      models: [
-        { modelName: 'qwen-plus', modelType: 'LLM' },
-        { modelName: 'gte-rerank', modelType: 'RERANK' },
-      ],
+      officialUrl: 'https://dashscope.aliyun.com',
     },
     {
-      providerCode: 'OPENAI',
+      code: 'OPENAI',
       providerName: 'OpenAI',
       defaultBaseUrl: 'https://api.openai.com/v1',
       officialUrl: 'https://platform.openai.com',
-      models: [{ modelName: 'gpt-4o', modelType: 'LLM' }],
     },
-  ],
-  typeCounts: { LLM: 4, RERANK: 1 },
-}
+]
 
 const mockDefaults = { defaults: { LLM: 'prof-1' } }
 
 vi.mock('../../../api/models', () => ({
   listConnections: vi.fn(),
   listProfiles: vi.fn(),
-  getModelCatalog: vi.fn(),
+  listModelProviderTemplates: vi.fn(),
   getDefaultModels: vi.fn(),
   saveDefaultModels: vi.fn(),
   createConnection: vi.fn(),
@@ -148,7 +137,7 @@ describe('ModelSettingsTab', () => {
   beforeEach(() => {
     vi.mocked(modelsApi.listConnections).mockResolvedValue(JSON.parse(JSON.stringify(mockConnections)))
     vi.mocked(modelsApi.listProfiles).mockResolvedValue(JSON.parse(JSON.stringify(mockProfiles)))
-    vi.mocked(modelsApi.getModelCatalog).mockResolvedValue(JSON.parse(JSON.stringify(mockCatalog)))
+    vi.mocked(modelsApi.listModelProviderTemplates).mockResolvedValue(JSON.parse(JSON.stringify(mockTemplates)))
     vi.mocked(modelsApi.getDefaultModels).mockResolvedValue(JSON.parse(JSON.stringify(mockDefaults)))
     vi.mocked(modelsApi.saveDefaultModels).mockResolvedValue(undefined)
     vi.mocked(modelsApi.createConnection).mockResolvedValue({
@@ -181,7 +170,7 @@ describe('ModelSettingsTab', () => {
     vi.mocked(modelsApi.deleteConnection).mockResolvedValue(true)
     vi.mocked(modelsApi.deleteProfile).mockResolvedValue(true)
     vi.mocked(modelsApi.replaceConnectionApiKey).mockResolvedValue({ apiKeyMask: 'sk-****new1' })
-    vi.mocked(modelsApi.testProfile).mockResolvedValue({ status: 'SUCCESS', errorCode: null, dimensions: null })
+    vi.mocked(modelsApi.testProfile).mockResolvedValue({ status: 'SUCCEEDED', errorCode: null, dimensions: null })
   })
 
   it('渲染左右双栏布局', async () => {
@@ -193,12 +182,12 @@ describe('ModelSettingsTab', () => {
     expect(wrapper.find('[data-test="market-search"]').exists()).toBe(true)
   })
 
-  it('点击目录卡片打开连接弹窗并预填 Base URL', async () => {
+  it('点击提供商模板卡片打开连接弹窗并预填 Base URL', async () => {
     const wrapper = mountView()
     await flushPromises()
     // 初始无弹窗
     expect(body().find('[role="dialog"]').exists()).toBe(false)
-    // 点击 DeepSeek 目录卡片
+    // 点击 DeepSeek 提供商卡片
     await wrapper.get('[data-test="catalog-card-DEEPSEEK"]').trigger('click')
     await nextTick()
     // 连接弹窗打开
@@ -215,7 +204,10 @@ describe('ModelSettingsTab', () => {
     await flushPromises()
     expect(body().find('[role="dialog"]').exists()).toBe(false)
     // 点击官方链接 ↗
-    await wrapper.get('[data-test="official-link-DEEPSEEK"]').trigger('click')
+    const officialLink = wrapper.get('[data-test="official-link-DEEPSEEK"]')
+    const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true })
+    clickEvent.preventDefault()
+    officialLink.element.dispatchEvent(clickEvent)
     await nextTick()
     // @click.stop 阻止冒泡，卡片 click 不触发，弹窗不打开
     expect(body().find('[role="dialog"]').exists()).toBe(false)
@@ -270,6 +262,26 @@ describe('ModelSettingsTab', () => {
     )
   })
 
+  it('后端拒绝不安全 Base URL 时在连接弹窗内行内显示错误', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    vi.mocked(modelsApi.createConnection).mockRejectedValueOnce(
+      new ApiRequestError('参数错误', 400),
+    )
+
+    await wrapper.get('[data-test="custom-provider-card"]').trigger('click')
+    await nextTick()
+    await setFieldValue('[data-test="connection-display-name"]', '不安全连接')
+    await setFieldValue('[data-test="connection-base-url"]', 'https://127.0.0.1/v1')
+    await setFieldValue('[data-test="connection-api-key"]', 'sk-test-only')
+    await body().get('[data-test="save-connection"]').trigger('click')
+    await flushPromises()
+
+    expect(body().text()).toContain('Base URL：参数错误')
+    expect(body().get('[data-test="connection-base-url"]').element.closest('.ant-form-item-has-error')).not.toBeNull()
+    expect(body().find('[role="dialog"]').exists()).toBe(true)
+  })
+
   it('默认模型下拉展示正确档案标签', async () => {
     const wrapper = mountView()
     await flushPromises()
@@ -293,26 +305,26 @@ describe('ModelSettingsTab', () => {
     )
   })
 
-  it('类型标签过滤模型市场', async () => {
+  it('只按厂商名称或代码搜索，并移除类型标签栏', async () => {
     const wrapper = mountView()
     await flushPromises()
     // 初始展示 3 个提供商卡片（CUSTOM 单独渲染，不计入网格）
     expect(wrapper.find('[data-test="catalog-card-DEEPSEEK"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="catalog-card-QWEN"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="catalog-card-ALIYUN_DASHSCOPE"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="catalog-card-OPENAI"]').exists()).toBe(true)
 
-    // 点击 RERANK 标签：仅 QWEN 有 RERANK 模型
-    await wrapper.get('[data-test="type-tag-RERANK"]').trigger('click')
-    await nextTick()
-    expect(wrapper.find('[data-test="catalog-card-DEEPSEEK"]').exists()).toBe(false)
-    expect(wrapper.find('[data-test="catalog-card-QWEN"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="catalog-card-OPENAI"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test^="type-tag-"]').exists()).toBe(false)
 
-    // 点击"全部"恢复
-    await wrapper.get('[data-test="type-tag-all"]').trigger('click')
+    await wrapper.get('[data-test="market-search"]').setValue('deep')
     await nextTick()
     expect(wrapper.find('[data-test="catalog-card-DEEPSEEK"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="catalog-card-QWEN"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="catalog-card-ALIYUN_DASHSCOPE"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="catalog-card-OPENAI"]').exists()).toBe(false)
+
+    await wrapper.get('[data-test="market-search"]').setValue('openai')
+    await nextTick()
+    expect(wrapper.find('[data-test="catalog-card-DEEPSEEK"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="catalog-card-ALIYUN_DASHSCOPE"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="catalog-card-OPENAI"]').exists()).toBe(true)
   })
 

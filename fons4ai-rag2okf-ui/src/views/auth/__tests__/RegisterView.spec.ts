@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
-import { Checkbox } from 'ant-design-vue'
+import { Input, InputPassword, message } from 'ant-design-vue'
 
 import RegisterView from '../RegisterView.vue'
 import { getCurrentUser, register } from '../../../api/auth'
@@ -25,21 +25,30 @@ describe('RegisterView', () => {
     vi.mocked(getCurrentUser).mockResolvedValue({ userKey: 'u1', email: 'new@example.com', displayName: 'New', avatarUrl: '', preferenceJson: '{}', workspaceKey: 'ws-1', workspaceName: '个人工作空间', workspaceRole: 'ADMIN' })
   })
 
-  /** a-checkbox 通过 v-model:checked 绑定，直接 emit update:checked 确保表单模型更新 */
-  async function checkTerms(wrapper: ReturnType<typeof mount>): Promise<void> {
-    wrapper.findComponent(Checkbox).vm.$emit('update:checked', true)
+  async function fillRegistrationForm(
+    wrapper: ReturnType<typeof mount>,
+    values: { email: string; password: string; confirmPassword: string; displayName?: string },
+  ): Promise<void> {
+    const plainInputs = wrapper.findAllComponents(Input)
+    const passwordInputs = wrapper.findAllComponents(InputPassword)
+    plainInputs.find((input) => input.props('autocomplete') === 'email')?.vm.$emit('update:value', values.email)
+    passwordInputs[0].vm.$emit('update:value', values.password)
+    passwordInputs[1].vm.$emit('update:value', values.confirmPassword)
+    if (values.displayName !== undefined) {
+      plainInputs.find((input) => input.props('autocomplete') === 'nickname')?.vm.$emit('update:value', values.displayName)
+    }
     await nextTick()
   }
 
   it('使用邮箱密码注册成功后跳转到知识库且不持久化 token', async () => {
     const wrapper = mount(RegisterView)
-    const inputs = wrapper.findAll('input')
-    await inputs[0].setValue('new@example.com')
-    await inputs[1].setValue('secure-pass')
-    await inputs[2].setValue('secure-pass')
-    await inputs[3].setValue('新用户')
-    await checkTerms(wrapper)
-    await wrapper.get('form').trigger('submit')
+    await fillRegistrationForm(wrapper, {
+      email: 'new@example.com',
+      password: 'secure-pass',
+      confirmPassword: 'secure-pass',
+      displayName: '新用户',
+    })
+    await (wrapper.vm as unknown as { submit: () => Promise<void> }).submit()
     await flushPromises()
     expect(register).toHaveBeenCalledWith({
       email: 'new@example.com',
@@ -58,11 +67,12 @@ describe('RegisterView', () => {
 
   it('两次密码不一致时拒绝提交', async () => {
     const wrapper = mount(RegisterView)
-    const inputs = wrapper.findAll('input')
-    await inputs[0].setValue('new@example.com')
-    await inputs[1].setValue('secure-pass')
-    await inputs[2].setValue('different-pass')
-    await wrapper.get('form').trigger('submit')
+    await fillRegistrationForm(wrapper, {
+      email: 'new@example.com',
+      password: 'secure-pass',
+      confirmPassword: 'different-pass',
+    })
+    await (wrapper.vm as unknown as { submit: () => Promise<void> }).submit()
     await flushPromises()
     expect(register).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('两次输入的密码不一致')
@@ -72,14 +82,14 @@ describe('RegisterView', () => {
     const { ApiRequestError } = await import('../../../api/http')
     vi.mocked(register).mockRejectedValue(new ApiRequestError('参数错误', 400))
     const wrapper = mount(RegisterView)
-    const inputs = wrapper.findAll('input')
-    await inputs[0].setValue('existing@example.com')
-    await inputs[1].setValue('secure-pass')
-    await inputs[2].setValue('secure-pass')
-    await checkTerms(wrapper)
-    await wrapper.get('form').trigger('submit')
+    await fillRegistrationForm(wrapper, {
+      email: 'existing@example.com',
+      password: 'secure-pass',
+      confirmPassword: 'secure-pass',
+    })
+    await (wrapper.vm as unknown as { submit: () => Promise<void> }).submit()
     await flushPromises()
-    expect(wrapper.text()).toContain('注册失败，请更换邮箱或密码后重试')
+    expect(message.error).toHaveBeenCalledWith('注册失败，请更换邮箱或密码后重试。')
     expect(wrapper.text()).not.toContain('existing@example.com')
   })
 
@@ -87,19 +97,25 @@ describe('RegisterView', () => {
     const { ApiRequestError } = await import('../../../api/http')
     vi.mocked(register).mockRejectedValue(new ApiRequestError('请求过多', 429))
     const wrapper = mount(RegisterView)
-    const inputs = wrapper.findAll('input')
-    await inputs[0].setValue('new@example.com')
-    await inputs[1].setValue('secure-pass')
-    await inputs[2].setValue('secure-pass')
-    await checkTerms(wrapper)
-    await wrapper.get('form').trigger('submit')
+    await fillRegistrationForm(wrapper, {
+      email: 'new@example.com',
+      password: 'secure-pass',
+      confirmPassword: 'secure-pass',
+    })
+    await (wrapper.vm as unknown as { submit: () => Promise<void> }).submit()
     await flushPromises()
-    expect(wrapper.text()).toContain('注册请求过于频繁')
+    expect(message.error).toHaveBeenCalledWith('注册请求过于频繁，请稍后再试。')
   })
 
   it('页面不出现邮箱验证状态', async () => {
     const wrapper = mount(RegisterView)
     const bodyText = wrapper.text()
     expect(bodyText).not.toMatch(/邮箱已验证|邮箱未验证|email.?verified/i)
+  })
+
+  it('不展示服务条款勾选项且无需额外确认即可提交', () => {
+    const wrapper = mount(RegisterView)
+    expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('我已阅读并同意服务条款')
   })
 })

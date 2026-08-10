@@ -230,9 +230,9 @@ public class LangChain4jChunkerAdapter implements DocumentChunkerPort {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(text.getBytes(StandardCharsets.UTF_8));
-            return "sha256:" + HexFormat.of().formatHex(hash);
+            return HexFormat.of().formatHex(hash);
         } catch (NoSuchAlgorithmException e) {
-            return "sha256:unavailable";
+            throw new IllegalStateException("当前 Java 运行时不支持 SHA-256", e);
         }
     }
 }

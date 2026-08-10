@@ -147,7 +147,7 @@ export function triggerParse(documentKey: string): Promise<OperationAccepted> {
   if (isDemoMode()) {
     return Promise.resolve(mockTriggerParse(documentKey))
   }
-  return request(`/documents/${encodeURIComponent(documentKey)}/parse`, { method: 'POST' })
+  return request(`/documents/${encodeURIComponent(documentKey)}/parse?parseMode=PARSE`, { method: 'POST' })
 }
 
 export function triggerPublish(documentKey: string): Promise<OperationAccepted> {
@@ -204,7 +204,7 @@ export async function getSourceContent(documentKey: string): Promise<SourceConte
   }
   const apiBaseUrl = (import.meta.env.VITE_RAG2OKF_API_BASE_URL ?? '/knowledge/api/v1').replace(/\/$/, '')
   const token = localStorage.getItem('rag2okf_auth_token') ?? undefined
-  const response = await fetch(`${apiBaseUrl}/documents/${encodeURIComponent(documentKey)}/source-content`, {
+  const response = await fetch(`${apiBaseUrl}/documents/${encodeURIComponent(documentKey)}/file`, {
     headers: { Authentication: token ? `Bearer ${token}` : '' },
   })
   if (!response.ok) {

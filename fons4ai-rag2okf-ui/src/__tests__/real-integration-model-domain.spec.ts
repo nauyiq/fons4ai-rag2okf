@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 /**
- * Real 模式集成测试（T031）。
+ * Real 模式 API 契约回归（T031，传输层使用 mock）。
  *
  * 验证 real 模式下模型域全链路 API 契约：基于实际后端 DTO 结构 mock http 层，
  * 验证前端 API 函数正确发送请求（URL/method/body）并解包响应数据。
+ * 真实浏览器到本地后端的联调证据单独记录在实施报告，避免把契约测试误称为真实网络测试。
  *
  * 覆盖：
  * - 连接 CRUD + API Key 替换（DELETE 返回 R<Void>，data 为 null 但 success=true）
@@ -35,7 +36,7 @@ import { request } from '../api/http'
 
 const mockedRequest = vi.mocked(request)
 
-describe('real 模式集成测试（T031）—— 模型域完整契约', () => {
+describe('real 模式 API 契约回归（T031，mock 传输层）', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.stubEnv('VITE_RAG2OKF_DATA_SOURCE', 'real')
@@ -132,45 +133,35 @@ describe('real 模式集成测试（T031）—— 模型域完整契约', () => 
     expect(result.apiKeyConfigured).toBe(true)
   })
 
-  // ============ 场景 3：模型目录 ============
+  // ============ 场景 3：提供商模板 ============
 
-  it('GET /model-catalog 返回目录，providers 与 typeCounts 正确解析', async () => {
-    const backendCatalog = {
-      providers: [
-        {
-          providerCode: 'OPENAI',
-          providerName: 'OpenAI',
-          defaultBaseUrl: 'https://api.openai.com/v1',
-          officialUrl: 'https://platform.openai.com',
-          models: [
-            { modelName: 'gpt-4o', modelType: 'LLM' },
-            { modelName: 'text-embedding-3-small', modelType: 'EMBEDDING' },
-          ],
-        },
-        {
-          providerCode: 'DEEPSEEK',
-          providerName: 'DeepSeek',
-          defaultBaseUrl: 'https://api.deepseek.com/v1',
-          officialUrl: 'https://www.deepseek.com',
-          models: [{ modelName: 'deepseek-chat', modelType: 'LLM' }],
-        },
-      ],
-      typeCounts: { LLM: 2, EMBEDDING: 1, RERANK: 0, TTS: 0, ASR: 0, VLM: 0, OCR: 0 },
-    }
-    mockedRequest.mockResolvedValueOnce(backendCatalog as never)
+  it('GET /model-provider-templates 返回公开模板及 officialUrl', async () => {
+    const backendTemplates = [
+      {
+        code: 'OPENAI',
+        providerName: 'OpenAI',
+        defaultBaseUrl: 'https://api.openai.com/v1',
+        officialUrl: 'https://platform.openai.com',
+      },
+      {
+        code: 'DEEPSEEK',
+        providerName: 'DeepSeek',
+        defaultBaseUrl: 'https://api.deepseek.com/v1',
+        officialUrl: 'https://platform.deepseek.com',
+      },
+    ]
+    mockedRequest.mockResolvedValueOnce(backendTemplates as never)
 
-    const { getModelCatalog } = await import('../api/models')
-    const catalog = await getModelCatalog()
+    const { listModelProviderTemplates } = await import('../api/models')
+    const templates = await listModelProviderTemplates()
 
-    expect(mockedRequest).toHaveBeenCalledWith('/model-catalog')
-    expect(catalog.providers).toHaveLength(2)
-    expect(catalog.providers[0].providerCode).toBe('OPENAI')
-    expect(catalog.providers[0].models).toHaveLength(2)
-    expect(catalog.providers[0].models[0].modelName).toBe('gpt-4o')
-    expect(catalog.providers[0].models[0].modelType).toBe('LLM')
-    expect(catalog.typeCounts.LLM).toBe(2)
-    expect(catalog.typeCounts.EMBEDDING).toBe(1)
-    expect(catalog.typeCounts.OCR).toBe(0)
+    expect(mockedRequest).toHaveBeenCalledWith('/model-provider-templates')
+    expect(templates).toHaveLength(2)
+    expect(templates[0]).toEqual(expect.objectContaining({
+      code: 'OPENAI',
+      officialUrl: 'https://platform.openai.com',
+    }))
+    expect(templates[0]).not.toHaveProperty('models')
   })
 
   // ============ 场景 4：创建档案 ============
@@ -259,7 +250,7 @@ describe('real 模式集成测试（T031）—— 模型域完整契约', () => 
 
   it('POST /model-profiles/{key}/test 测试档案连通性', async () => {
     const testResult = {
-      status: 'SUCCESS',
+      status: 'SUCCEEDED',
       errorCode: null,
       dimensions: null,
     }
@@ -272,14 +263,14 @@ describe('real 模式集成测试（T031）—— 模型域完整契约', () => 
     expect(path).toBe('/model-profiles/prof-001/test')
     expect(init?.method).toBe('POST')
 
-    expect(result.status).toBe('SUCCESS')
+    expect(result.status).toBe('SUCCEEDED')
     expect(result.errorCode).toBeNull()
     expect(result.dimensions).toBeNull()
   })
 
   it('POST /model-profiles/{key}/test EMBEDDING 档案返回 dimensions', async () => {
     const testResult = {
-      status: 'SUCCESS',
+      status: 'SUCCEEDED',
       errorCode: null,
       dimensions: 1024,
     }
@@ -288,7 +279,7 @@ describe('real 模式集成测试（T031）—— 模型域完整契约', () => 
     const { testProfile } = await import('../api/models')
     const result = await testProfile('prof-emb-001')
 
-    expect(result.status).toBe('SUCCESS')
+    expect(result.status).toBe('SUCCEEDED')
     expect(result.dimensions).toBe(1024)
   })
 
@@ -465,7 +456,7 @@ describe('real 模式集成测试（T031）—— 模型域完整契约', () => 
         timeoutSeconds: 45,
         temperature: 0.5,
         status: 'ACTIVE',
-        lastTestStatus: 'SUCCESS',
+        lastTestStatus: 'SUCCEEDED',
         lastTestAt: '2026-08-09T10:00:00Z',
         updated: '2026-08-09T10:00:00Z',
       },
@@ -479,7 +470,7 @@ describe('real 模式集成测试（T031）—— 模型域完整契约', () => 
         timeoutSeconds: 60,
         temperature: null,
         status: 'ACTIVE',
-        lastTestStatus: 'SUCCESS',
+        lastTestStatus: 'SUCCEEDED',
         lastTestAt: '2026-08-09T10:00:00Z',
         updated: '2026-08-09T10:00:00Z',
       },
@@ -680,12 +671,12 @@ describe('real 模式集成测试（T031）—— 模型域完整契约', () => 
 
     // 3. 测试档案
     mockedRequest.mockResolvedValueOnce({
-      status: 'SUCCESS',
+      status: 'SUCCEEDED',
       errorCode: null,
       dimensions: null,
     } as never)
     const testResult = await testProfile(profile.profileKey)
-    expect(testResult.status).toBe('SUCCESS')
+    expect(testResult.status).toBe('SUCCEEDED')
     expect(mockedRequest.mock.calls[2][0]).toBe('/model-profiles/prof-flow-001/test')
 
     // 4. 删除档案（R<Void>）

@@ -84,6 +84,8 @@ class LangChain4jChunkerAdapterTest {
         assertTrue(manifest.childCount() > 0, "recursive 分块必须产生子块");
         assertFalse(manifest.chunks().isEmpty(), "分块列表不可为空");
         assertNotNull(manifest.contentHash(), "contentHash 不可为 null");
+        assertTrue(manifest.contentHash().matches("[0-9a-f]{64}"),
+                "contentHash 必须是可写入 CHAR(64) 的标准 SHA-256 十六进制摘要");
 
         // 验证 MinIO 写入被调用
         verify(artifactStore).storeManifest(any());

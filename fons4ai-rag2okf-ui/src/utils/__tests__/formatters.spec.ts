@@ -80,7 +80,7 @@ describe('formatters', () => {
 
   describe('modelTestLabel', () => {
     it('maps by status first', () => {
-      expect(modelTestLabel('SUCCESS')).toBe('成功')
+      expect(modelTestLabel('SUCCEEDED')).toBe('成功')
     })
 
     it('falls back to errorCode', () => {

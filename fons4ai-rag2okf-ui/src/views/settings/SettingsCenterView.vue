@@ -264,8 +264,48 @@ function chooseTheme(): void {
   .settings-sidebar {
     position: static;
     height: auto;
+    padding: 16px;
+    gap: 10px;
     border-right: none;
     border-bottom: 1px solid var(--line);
+    overflow: visible;
+  }
+
+  .sidebar-top {
+    padding-bottom: 0;
+  }
+
+  .sidebar-nav {
+    flex: none;
+  }
+
+  .sidebar-nav :deep(.ant-menu) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .sidebar-nav :deep(.ant-menu-item) {
+    margin: 0;
+    text-align: center;
+  }
+
+  .sidebar-bottom {
+    margin-top: 0;
+    padding: 0;
+  }
+
+  .version-row {
+    display: none;
+  }
+
+  .sign-out-btn {
+    padding-block: 8px;
+  }
+
+  .settings-main {
+    padding: 20px 16px 32px;
+    border-left: 0;
   }
 }
 </style>

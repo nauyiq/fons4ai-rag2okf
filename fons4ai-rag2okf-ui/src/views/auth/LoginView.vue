@@ -2,7 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import type { FormInstance, Rule } from 'ant-design-vue/es/form'
+import type { Rule } from 'ant-design-vue/es/form'
 
 import { ApiRequestError } from '../../api/http'
 import { useSessionStore } from '../../stores/session'
@@ -11,7 +11,6 @@ const router = useRouter()
 const route = useRoute()
 const sessionStore = useSessionStore()
 const submitting = ref(false)
-const formRef = ref<FormInstance>()
 const form = reactive({ email: '', password: '', rememberMe: false })
 
 const rules: Record<string, Rule[]> = {
@@ -28,11 +27,6 @@ function normalizeRedirect(): string {
 }
 
 async function submit(): Promise<void> {
-  try {
-    await formRef.value?.validate()
-  } catch {
-    return
-  }
   submitting.value = true
   try {
     await sessionStore.signIn({ email: form.email.trim(), password: form.password, rememberMe: form.rememberMe })
@@ -71,12 +65,11 @@ onMounted(() => {
 
     <section class="login-panel">
       <a-form
-        ref="formRef"
         class="login-card"
         layout="vertical"
         :model="form"
         :rules="rules"
-        @submit.prevent="submit"
+        @finish="submit"
       >
         <p class="eyebrow">WELCOME BACK</p>
         <h2>登录你的知识空间</h2>

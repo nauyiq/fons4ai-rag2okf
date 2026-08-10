@@ -58,9 +58,9 @@ const TASK_STATUS_LABELS: Record<string, string> = {
   CANCELLED: '已取消',
 }
 
-/** 模型测试结果到中文的映射。 */
+/** 模型测试结果到中文的映射。状态值与后端 ModelTestStatus 枚举一致（SUCCEEDED/FAILED）。 */
 const MODEL_TEST_LABELS: Record<string, string> = {
-  SUCCESS: '成功',
+  SUCCEEDED: '成功',
   AUTH_FAILED: '认证失败，请检查 API Key',
   UNREACHABLE: '地址不可用，请检查 Base URL',
   MODEL_NOT_FOUND: '模型不存在，请检查模型名称',

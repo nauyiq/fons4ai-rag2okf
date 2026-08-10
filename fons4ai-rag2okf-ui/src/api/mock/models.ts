@@ -4,7 +4,7 @@
  * 忠实模拟两步式结构：
  * - 连接（Connection）：提供商凭证
  * - 档案（Profile）：挂在连接下的具体模型
- * - 目录（Catalog）：只读提供商模板 + 旗下模型清单
+ * - 提供商模板（Provider Template）：只读厂商元信息
  * - 偏好（Preference）：默认模型配置
  *
  * 仅在 demo 模式下使用，完全在内存中，不写入 localStorage 真实 key。
@@ -12,9 +12,9 @@
 import type {
   ModelConnection,
   ModelProfile,
-  ModelCatalog,
-  CatalogProvider,
+  ModelProviderTemplate,
   SaveConnectionInput,
+  UpdateConnectionInput,
   SaveProfileInput,
   DefaultModelSettings,
   ModelTestResult,
@@ -75,7 +75,7 @@ const profiles: ModelProfile[] = [
     timeoutSeconds: 30,
     temperature: 0.7,
     status: 'ACTIVE',
-    lastTestStatus: 'SUCCESS',
+    lastTestStatus: 'SUCCEEDED',
     lastTestAt: oneDayAgo,
     updated: oneDayAgo,
   },
@@ -89,7 +89,7 @@ const profiles: ModelProfile[] = [
     timeoutSeconds: 60,
     temperature: null,
     status: 'ACTIVE',
-    lastTestStatus: 'SUCCESS',
+    lastTestStatus: 'SUCCEEDED',
     lastTestAt: oneDayAgo,
     updated: oneDayAgo,
   },
@@ -103,7 +103,7 @@ const profiles: ModelProfile[] = [
     timeoutSeconds: 60,
     temperature: null,
     status: 'ACTIVE',
-    lastTestStatus: 'SUCCESS',
+    lastTestStatus: 'SUCCEEDED',
     lastTestAt: oneDayAgo,
     updated: oneDayAgo,
   },
@@ -123,66 +123,17 @@ const profiles: ModelProfile[] = [
   },
 ]
 
-// ============ 目录 mock 数据 ============
+// ============ 提供商模板 mock 数据（CR-002：撤销 catalog，回归 templates）============
 
-const catalog: ModelCatalog = {
-  providers: [
-    {
-      providerCode: 'DEEPSEEK',
-      providerName: 'DeepSeek',
-      defaultBaseUrl: 'https://api.deepseek.com/v1',
-      officialUrl: 'https://www.deepseek.com',
-      models: [
-        { modelName: 'deepseek-chat', modelType: 'LLM' as ModelType },
-        { modelName: 'deepseek-coder', modelType: 'LLM' as ModelType },
-        { modelName: 'deepseek-embedding', modelType: 'EMBEDDING' as ModelType },
-      ],
-    },
-    {
-      providerCode: 'QWEN',
-      providerName: '通义千问',
-      defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-      officialUrl: 'https://help.aliyun.com/zh/dashscope',
-      models: [
-        { modelName: 'qwen-plus', modelType: 'LLM' as ModelType },
-        { modelName: 'qwen-turbo', modelType: 'LLM' as ModelType },
-        { modelName: 'text-embedding-v3', modelType: 'EMBEDDING' as ModelType },
-        { modelName: 'gte-rerank', modelType: 'RERANK' as ModelType },
-      ],
-    },
-    {
-      providerCode: 'OPENAI',
-      providerName: 'OpenAI',
-      defaultBaseUrl: 'https://api.openai.com/v1',
-      officialUrl: 'https://platform.openai.com',
-      models: [
-        { modelName: 'gpt-4o', modelType: 'LLM' as ModelType },
-        { modelName: 'gpt-4o-mini', modelType: 'LLM' as ModelType },
-        { modelName: 'text-embedding-3-small', modelType: 'EMBEDDING' as ModelType },
-        { modelName: 'text-embedding-3-large', modelType: 'EMBEDDING' as ModelType },
-        { modelName: 'whisper-1', modelType: 'ASR' as ModelType },
-        { modelName: 'tts-1', modelType: 'TTS' as ModelType },
-        { modelName: 'gpt-4o-vision', modelType: 'VLM' as ModelType },
-      ],
-    },
-    {
-      providerCode: 'CUSTOM',
-      providerName: '自定义提供商',
-      defaultBaseUrl: '',
-      officialUrl: '',
-      models: [],
-    },
-  ],
-  typeCounts: {
-    LLM: 5,
-    EMBEDDING: 4,
-    RERANK: 1,
-    TTS: 1,
-    ASR: 1,
-    VLM: 1,
-    OCR: 0,
-  },
-}
+const providerTemplates: ModelProviderTemplate[] = [
+  { code: 'ALIYUN_DASHSCOPE', providerName: '阿里云百炼', defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', officialUrl: 'https://dashscope.aliyun.com' },
+  { code: 'DEEPSEEK', providerName: 'DeepSeek', defaultBaseUrl: 'https://api.deepseek.com/v1', officialUrl: 'https://platform.deepseek.com' },
+  { code: 'OPENAI', providerName: 'OpenAI', defaultBaseUrl: 'https://api.openai.com/v1', officialUrl: 'https://platform.openai.com' },
+  { code: 'VOLCENGINE_ARK', providerName: '火山方舟', defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3', officialUrl: 'https://www.volcengine.com/product/ark' },
+  { code: 'TENCENT_HUNYUAN', providerName: '腾讯混元', defaultBaseUrl: 'https://api.hunyuan.cloud.tencent.com/v1', officialUrl: 'https://hunyuan.tencent.com' },
+  { code: 'ZHIPU_BIGMODEL', providerName: '智谱 BigModel', defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4', officialUrl: 'https://open.bigmodel.cn' },
+  { code: 'CUSTOM', providerName: '自定义', defaultBaseUrl: null, officialUrl: null },
+]
 
 // ============ 偏好 mock 数据 ============
 
@@ -215,15 +166,16 @@ export function mockCreateConnection(input: SaveConnectionInput): ModelConnectio
   return created
 }
 
-export function mockUpdateConnection(connectionKey: string, input: Partial<SaveConnectionInput>): ModelConnection | undefined {
+export function mockUpdateConnection(connectionKey: string, input: UpdateConnectionInput): ModelConnection | undefined {
   const idx = connections.findIndex((c) => c.connectionKey === connectionKey)
   if (idx === -1) return undefined
   const existing = connections[idx]
   connections[idx] = {
     ...existing,
-    ...input,
-    apiKeyMask: input.apiKey ? `sk-****...****${input.apiKey.slice(-4)}` : existing.apiKeyMask,
-    apiKeyConfigured: input.apiKey ? true : existing.apiKeyConfigured,
+    providerName: input.providerName ?? existing.providerName,
+    displayName: input.displayName ?? existing.displayName,
+    baseUrl: input.baseUrl ?? existing.baseUrl,
+    status: input.status ?? existing.status,
     updated: new Date().toISOString(),
   }
   return connections[idx]
@@ -311,16 +263,16 @@ export function mockTestProfile(profileKey: string): ModelTestResult {
     return { status: 'FAILED', errorCode: 'PROFILE_DISABLED', dimensions: null }
   }
   return {
-    status: 'SUCCESS',
+    status: 'SUCCEEDED',
     errorCode: null,
     dimensions: profile.modelType === 'EMBEDDING' ? profile.dimensions : null,
   }
 }
 
-// ============ 目录 mock 函数 ============
+// ============ 提供商模板 mock 函数 ============
 
-export function mockGetModelCatalog(): ModelCatalog {
-  return JSON.parse(JSON.stringify(catalog))
+export function mockListModelProviderTemplates(): ModelProviderTemplate[] {
+  return [...providerTemplates]
 }
 
 // ============ 偏好 mock 函数 ============
@@ -345,7 +297,7 @@ export function mockAllProfiles(): ModelProfile[] {
   return profiles
 }
 
-/** 获取 catalog 提供商列表（供调试引用）。 */
-export function mockCatalogProviders(): CatalogProvider[] {
-  return catalog.providers
+/** 获取全部提供商模板（供调试引用）。 */
+export function mockProviderTemplates(): ModelProviderTemplate[] {
+  return providerTemplates
 }

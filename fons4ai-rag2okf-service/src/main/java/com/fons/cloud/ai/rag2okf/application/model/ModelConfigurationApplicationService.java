@@ -72,7 +72,7 @@ public class ModelConfigurationApplicationService {
     public List<ModelProviderTemplateResponse> listTemplates() {
         return Arrays.stream(ModelProviderTemplate.values())
                 .map(template -> new ModelProviderTemplateResponse(
-                        template, template.getProviderName(), template.getDefaultBaseUrl()
+                        template, template.getProviderName(), template.getDefaultBaseUrl(), template.getOfficialUrl()
                 ))
                 .toList();
     }
@@ -124,7 +124,7 @@ public class ModelConfigurationApplicationService {
     }
 
     /**
-     * 更新当前用户的 Provider 连接；只在显式提交时替换 API Key。
+     * 更新当前用户的 Provider 连接；API Key 必须通过独立子路径替换。
      *
      * @param connectionKey 连接业务标识
      * @param request 更新请求
@@ -146,13 +146,6 @@ public class ModelConfigurationApplicationService {
         }
         if (request.status() != null) {
             connection.setStatus(request.status());
-        }
-        if (request.apiKey() != null && !request.apiKey().isBlank()) {
-            EncryptedCredential credential = credentialCipher.encrypt(request.apiKey());
-            connection.setApiKeyCiphertext(credential.ciphertext());
-            connection.setApiKeyNonce(credential.nonce());
-            connection.setKeyVersion(credential.keyVersion());
-            connection.setApiKeyMask(mask(request.apiKey()));
         }
         connectionDomainService.updateById(connection);
         return toConnectionResponse(connection);

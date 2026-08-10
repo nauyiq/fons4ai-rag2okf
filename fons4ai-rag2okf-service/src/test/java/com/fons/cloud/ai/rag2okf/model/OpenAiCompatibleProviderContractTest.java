@@ -28,12 +28,12 @@ import static org.mockito.Mockito.mock;
  *
  * <p>验证 P0 内置 Provider 模板与响应 DTO 的契约：
  * <ul>
- *   <li>ModelProviderTemplate 枚举包含 5 个值</li>
+ *   <li>ModelProviderTemplate 枚举包含 7 个值</li>
  *   <li>非 CUSTOM 模板的 defaultBaseUrl 使用 https 协议</li>
  *   <li>CUSTOM 模板的 defaultBaseUrl 为 null</li>
  *   <li>每个模板的 providerName 非空</li>
  *   <li>模板列表可通过 ModelConfigurationApplicationService.listTemplates() 返回</li>
- *   <li>ModelProviderTemplateResponse 只含 code、providerName、defaultBaseUrl，不含敏感字段</li>
+ *   <li>ModelProviderTemplateResponse 只含 code、providerName、defaultBaseUrl、officialUrl，不含敏感字段</li>
  * </ul>
  *
  * @author hongqy
@@ -44,9 +44,11 @@ class OpenAiCompatibleProviderContractTest {
     void modelProviderTemplateShouldContainExactlyFiveValues() {
         ModelProviderTemplate[] values = ModelProviderTemplate.values();
 
-        assertThat(values).hasSize(5);
+        assertThat(values).hasSize(7);
         assertThat(values).containsExactly(
                 ModelProviderTemplate.ALIYUN_DASHSCOPE,
+                ModelProviderTemplate.DEEPSEEK,
+                ModelProviderTemplate.OPENAI,
                 ModelProviderTemplate.VOLCENGINE_ARK,
                 ModelProviderTemplate.TENCENT_HUNYUAN,
                 ModelProviderTemplate.ZHIPU_BIGMODEL,
@@ -87,7 +89,7 @@ class OpenAiCompatibleProviderContractTest {
 
         List<ModelProviderTemplateResponse> templates = service.listTemplates();
 
-        assertThat(templates).hasSize(5);
+        assertThat(templates).hasSize(7);
 
         List<ModelProviderTemplate> codes = templates.stream()
                 .map(ModelProviderTemplateResponse::code)
@@ -102,8 +104,8 @@ class OpenAiCompatibleProviderContractTest {
                 .toList();
 
         assertThat(components)
-                .as("ModelProviderTemplateResponse 只应包含 code、providerName、defaultBaseUrl 三个字段")
-                .containsExactly("code", "providerName", "defaultBaseUrl");
+                .as("ModelProviderTemplateResponse 只应包含 code、providerName、defaultBaseUrl、officialUrl 四个字段")
+                .containsExactly("code", "providerName", "defaultBaseUrl", "officialUrl");
 
         List<String> sensitive = components.stream()
                 .filter(name -> name.toLowerCase().contains("apikey")

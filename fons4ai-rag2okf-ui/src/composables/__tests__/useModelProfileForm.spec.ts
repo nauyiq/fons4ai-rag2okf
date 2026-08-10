@@ -168,7 +168,7 @@ describe('useModelProfileForm 校验', () => {
         timeoutSeconds: 30,
         temperature: 0.7,
         status: 'ACTIVE',
-        lastTestStatus: 'SUCCESS',
+        lastTestStatus: 'SUCCEEDED',
         lastTestAt: null,
         updated: '2024-01-01T00:00:00Z',
       }
@@ -328,6 +328,13 @@ describe('useModelProfileForm 校验', () => {
       form.modelName = '   '
       const errors = validateProfileForm(form)
       expect(errors).toContain('请填写模型名称')
+    })
+
+    it('modelName 超过 160 个字符时无效', () => {
+      const form = validBaseForm()
+      form.modelName = 'm'.repeat(161)
+      const errors = validateProfileForm(form)
+      expect(errors).toContain('模型名称不能超过 160 个字符')
     })
 
     it('contextWindowLength 负数被拒绝', () => {

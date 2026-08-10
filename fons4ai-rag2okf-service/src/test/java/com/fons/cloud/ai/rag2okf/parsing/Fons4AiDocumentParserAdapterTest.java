@@ -89,6 +89,8 @@ class Fons4AiDocumentParserAdapterTest {
         assertEquals("01J_DOC", manifest.documentKey());
         assertEquals("NATIVE_TIKA", manifest.parserProfile());
         assertTrue(manifest.blockCount() > 0, "块数量必须大于 0");
+        assertTrue(manifest.contentHash().matches("[0-9a-f]{64}"),
+                "contentHash 必须使用标准 SHA-256 十六进制摘要格式");
 
         // AC-014：不伪造页码，所有块的 SourceAnchor 为 NONE
         for (ParseManifest.ParsedBlock block : manifest.blocks()) {

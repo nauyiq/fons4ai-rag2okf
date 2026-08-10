@@ -9,14 +9,12 @@ import com.fons.cloud.ai.rag2okf.common.constants.ModelConnectionStatus;
  * @param displayName 当前用户下唯一的连接展示名称
  * @param baseUrl 模型 API 根地址，必须为安全的 HTTPS 公网地址
  * @param status 连接启用状态，可选；前端不传时不变更
- * @param apiKey 可选替换 Key；空值表示保留现有密文
  * @author hongqy
  */
 public record UpdateModelConnectionRequest(
         String providerName,
         String displayName,
         String baseUrl,
-        ModelConnectionStatus status,
-        String apiKey
+        ModelConnectionStatus status
 ) {
 }

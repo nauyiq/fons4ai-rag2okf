@@ -11,7 +11,7 @@ const router = useRouter()
 const sessionStore = useSessionStore()
 const submitting = ref(false)
 const formRef = ref<FormInstance>()
-const form = reactive({ email: '', password: '', confirmPassword: '', displayName: '', termsAccepted: false })
+const form = reactive({ email: '', password: '', confirmPassword: '', displayName: '' })
 
 const rules: Record<string, Rule[]> = {
   email: [
@@ -23,12 +23,6 @@ const rules: Record<string, Rule[]> = {
     { required: true, message: '请再次输入密码。', trigger: 'change' },
     {
       validator: (_rule, value) => (value === form.password ? Promise.resolve() : Promise.reject('两次输入的密码不一致。')),
-      trigger: 'change',
-    },
-  ],
-  termsAccepted: [
-    {
-      validator: (_rule, value) => (value ? Promise.resolve() : Promise.reject('请阅读并同意服务条款后再创建账号。')),
       trigger: 'change',
     },
   ],
@@ -47,7 +41,8 @@ async function submit(): Promise<void> {
       password: form.password,
       confirmPassword: form.confirmPassword,
       displayName: form.displayName.trim(),
-      termsAccepted: form.termsAccepted,
+      // 后端当前不消费该兼容字段；固定为 true，避免把临时 UI 调整扩散成 API 契约变更。
+      termsAccepted: true,
     })
     message.success('账号创建成功，正在进入知识空间…')
     await router.replace('/knowledge-bases')
@@ -84,7 +79,7 @@ async function submit(): Promise<void> {
         layout="vertical"
         :model="form"
         :rules="rules"
-        @submit.prevent="submit"
+        @finish="submit"
       >
         <p class="eyebrow">CREATE ACCOUNT</p>
         <h2>注册你的知识空间</h2>
@@ -120,9 +115,6 @@ async function submit(): Promise<void> {
             autocomplete="nickname"
             placeholder="输入你的展示名称"
           />
-        </a-form-item>
-        <a-form-item name="termsAccepted">
-          <a-checkbox v-model:checked="form.termsAccepted">我已阅读并同意服务条款</a-checkbox>
         </a-form-item>
         <a-button type="primary" html-type="submit" class="login-submit" :loading="submitting">
           创建账号

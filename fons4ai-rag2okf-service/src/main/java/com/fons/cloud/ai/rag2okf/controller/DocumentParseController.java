@@ -37,7 +37,7 @@ public class DocumentParseController {
             @PathVariable String documentKey,
             @RequestParam(value = "parseMode", required = false) String parseMode) {
         return R.ok(parseApplicationService.triggerParse(
-                documentKey, parseMode != null ? parseMode : "DEFAULT"));
+                documentKey, parseMode != null ? parseMode : "PARSE"));
     }
 
     /**

@@ -909,8 +909,8 @@ onBeforeUnmount(() => {
 }
 .document-row:hover {
   transform: translateY(-1px);
-  border-color: #8b7bff;
-  box-shadow: 0 12px 30px color-mix(in srgb, #8b7bff 9%, transparent);
+  border-color: var(--violet);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 8%);
 }
 .document-row.selected { border-color: var(--violet); background: var(--violet-soft); }
 .document-row:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }

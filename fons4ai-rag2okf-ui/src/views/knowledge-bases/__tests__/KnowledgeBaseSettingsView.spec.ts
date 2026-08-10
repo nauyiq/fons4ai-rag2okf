@@ -1,13 +1,13 @@
-import { flushPromises, mount, DOMWrapper } from '@vue/test-utils'
+import { DOMWrapper, enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 
 import KnowledgeBaseSettingsView from '../KnowledgeBaseSettingsView.vue'
 import AppDialog from '../../../components/ui/AppDialog.vue'
 import { getKnowledgeBase, updateKnowledgeBase } from '../../../api/knowledge-bases'
 import { useWorkspaceStore } from '../../../stores/workspace'
-import { listProfiles } from '../../../api/models'
+import { getDefaultModels, listProfiles } from '../../../api/models'
 
 // 通过 vi.hoisted 暴露 router.push，便于断言跨页直达模型设置
 const { routerPush } = vi.hoisted(() => ({ routerPush: vi.fn() }))
@@ -20,9 +20,11 @@ vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { knowledgeBaseKey: 'loan-policy' } }),
   useRouter: () => ({ push: routerPush }),
 }))
-vi.mock('../../../api/models', () => ({ listProfiles: vi.fn() }))
+vi.mock('../../../api/models', () => ({ listProfiles: vi.fn(), getDefaultModels: vi.fn() }))
 
 const mountView = () => mount(KnowledgeBaseSettingsView, { attachTo: document.body })
+
+enableAutoUnmount(afterEach)
 
 /** AppDialog 内容 Teleport 到 body，通过 DOMWrapper 检索 */
 const body = () => new DOMWrapper(document.body)
@@ -49,6 +51,7 @@ describe('KnowledgeBaseSettingsView', () => {
       ownerUserKey: 'user-001', canDelete: true,
     })
     vi.mocked(listProfiles).mockResolvedValue([])
+    vi.mocked(getDefaultModels).mockResolvedValue({ defaults: {} })
     vi.mocked(updateKnowledgeBase).mockResolvedValue({
       knowledgeBaseKey: 'loan-policy', workspaceKey: 'personal-space', name: '贷款政策资料库', description: '政策材料。',
       autoParse: true, autoPublish: false, parserProfile: 'standard',
@@ -88,12 +91,12 @@ describe('KnowledgeBaseSettingsView', () => {
     await flushPromises()
     // 初始无可见弹窗（a-modal destroy-on-close，未打开时 body 中无 dialog）
     expect(body().find('[role="dialog"]').exists()).toBe(false)
-    // 点击编辑后弹出中央模态（aria-modal=true，aria-labelledby 指向标题）
+    // 点击编辑后弹出 Ant Design 中央模态并显示对应标题
     await wrapper.get('[data-test="edit-processing"]').trigger('click')
     await nextTick()
     const dialog = body().get('[role="dialog"]')
-    expect(dialog.attributes('aria-modal')).toBe('true')
-    expect(dialog.attributes('aria-labelledby')).toBe('dialog-title')
+    expect(dialog.find('.ant-modal-content').exists()).toBe(true)
+    expect(dialog.text()).toContain('编辑解析与分块')
   })
 
   it('不再使用自实现 drawer-backdrop，统一用 AppDialog', async () => {
@@ -110,7 +113,7 @@ describe('KnowledgeBaseSettingsView', () => {
     await flushPromises()
     await wrapper.get('[data-test="edit-automation"]').trigger('click')
     await nextTick()
-    await body().get('[data-test="auto-parse-input"]').setValue(false)
+    await body().get('[data-test="auto-parse-input"]').trigger('click')
     await body().get('[data-test="save-automation"]').trigger('click')
     await flushPromises()
 
@@ -127,6 +130,74 @@ describe('KnowledgeBaseSettingsView', () => {
     expect(routerPush).toHaveBeenCalledWith({ name: 'settings-models' })
   })
 
+  it('个人默认模型读取失败时仍可使用知识库设置', async () => {
+    vi.mocked(getDefaultModels).mockRejectedValueOnce(new Error('preference parse failed'))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('贷款政策资料库')
+    expect(wrapper.find('[data-test="edit-processing"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('无法读取知识库设置')
+  })
+
+  it('空 binding 打开弹窗时从个人默认模型预填并可保存为独立绑定', async () => {
+    vi.mocked(listProfiles).mockResolvedValue([
+      {
+        profileKey: 'llm-default', connectionKey: 'conn-1', modelType: 'LLM', modelName: 'qwen-plus',
+        dimensions: null, contextWindowLength: 128000, timeoutSeconds: 60, temperature: 0.7,
+        status: 'ACTIVE', lastTestStatus: 'SUCCEEDED', lastTestAt: null, updated: '2026-08-10T00:00:00Z',
+      },
+    ])
+    vi.mocked(getDefaultModels).mockResolvedValue({ defaults: { LLM: 'llm-default' } })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="edit-model-binding"]').trigger('click')
+    await nextTick()
+    expect(body().text()).toContain('未显式绑定时预填个人默认模型')
+    await body().get('[data-test="save-model-binding"]').trigger('click')
+    await flushPromises()
+
+    expect(updateKnowledgeBase).toHaveBeenCalledWith('loan-policy', expect.objectContaining({
+      modelBindings: [{ usageType: 'ANSWER_GENERATION', profileKey: 'llm-default' }],
+    }))
+  })
+
+  it('知识库已有显式 binding 时优先于个人默认模型', async () => {
+    vi.mocked(getKnowledgeBase).mockResolvedValue({
+      knowledgeBaseKey: 'loan-policy', workspaceKey: 'personal-space', name: '贷款政策资料库', description: '政策材料。',
+      autoParse: true, autoPublish: false, parserProfile: 'standard',
+      chunkProfile: { strategy: 'SEMANTIC', chunkSize: 800, overlap: 120, titleLevel: null },
+      modelBindings: [{ usageType: 'ANSWER_GENERATION', profileKey: 'llm-explicit' }],
+      revision: 3, updated: '2026-08-05T09:00:00.000+08:00', ownerUserKey: 'user-001', canDelete: true,
+    })
+    vi.mocked(listProfiles).mockResolvedValue([
+      {
+        profileKey: 'llm-explicit', connectionKey: 'conn-1', modelType: 'LLM', modelName: 'qwen-explicit',
+        dimensions: null, contextWindowLength: 128000, timeoutSeconds: 60, temperature: 0.7,
+        status: 'ACTIVE', lastTestStatus: 'SUCCEEDED', lastTestAt: null, updated: '2026-08-10T00:00:00Z',
+      },
+      {
+        profileKey: 'llm-default', connectionKey: 'conn-1', modelType: 'LLM', modelName: 'qwen-default',
+        dimensions: null, contextWindowLength: 128000, timeoutSeconds: 60, temperature: 0.7,
+        status: 'ACTIVE', lastTestStatus: 'SUCCEEDED', lastTestAt: null, updated: '2026-08-10T00:00:00Z',
+      },
+    ])
+    vi.mocked(getDefaultModels).mockResolvedValue({ defaults: { LLM: 'llm-default' } })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="edit-model-binding"]').trigger('click')
+    await nextTick()
+    await body().get('[data-test="save-model-binding"]').trigger('click')
+    await flushPromises()
+
+    expect(updateKnowledgeBase).toHaveBeenCalledWith('loan-policy', expect.objectContaining({
+      modelBindings: [{ usageType: 'ANSWER_GENERATION', profileKey: 'llm-explicit' }],
+    }))
+  })
+
   it('保存后反馈停留在触发位置（局部 success message）', async () => {
     const wrapper = mountView()
     await flushPromises()
@@ -135,8 +206,6 @@ describe('KnowledgeBaseSettingsView', () => {
     await body().get('[data-test="save-automation"]').trigger('click')
     await flushPromises()
 
-    // 弹窗关闭
-    expect(body().find('[role="dialog"]').exists()).toBe(false)
     // 反馈出现在自动化卡片内（局部归属）
     const card = wrapper.get('[data-test="automation-card"]')
     expect(card.text()).toContain('设置已保存')

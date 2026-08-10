@@ -2,11 +2,11 @@
  * 模型配置 API 层（CR-001 T025 还原两步式）。
  *
  * 设计依据：技术设计说明书 §3.1（CR-001 替换后）。
- * 恢复"模型提供商连接 + 模型档案"两步式 API，新增 /model-catalog 只读接口和 preferenceJson 读写接口。
+ * 提供“模型提供商连接 + 模型档案”两步式 API、提供商模板和 preferenceJson 读写接口。
  *
- * - 连接（Connection）：提供商凭证，仅 3 个用户可写字段（displayName/baseUrl/apiKey）
+ * - 连接（Connection）：创建时提交凭证；普通更新与 API Key 替换使用不同契约
  * - 档案（Profile）：挂在连接下的具体模型，含 7 类型 + 级联选择 + 动态高级参数
- * - 目录（Catalog）：只读提供商模板 + 旗下模型清单，驱动右侧模型市场
+ * - 提供商模板（Provider Template）：只读厂商元信息，驱动右侧模型市场
  * - 偏好（Preference）：默认模型配置，存入 preferenceJson.defaultModels
  *
  * demo 模式下走本地 mock 数据，real 模式走 http.request。
@@ -26,7 +26,7 @@ import {
   mockUpdateProfile,
   mockDeleteProfile,
   mockTestProfile,
-  mockGetModelCatalog,
+  mockListModelProviderTemplates,
   mockGetDefaultModels,
   mockSaveDefaultModels,
 } from './mock/models'
@@ -61,6 +61,14 @@ export interface SaveConnectionInput {
   baseUrl: string
   /** 仅创建或替换时提交 */
   apiKey?: string
+}
+
+/** 普通连接更新输入；故意不包含 apiKey，密钥只能走独立替换接口。 */
+export interface UpdateConnectionInput {
+  providerName?: string
+  displayName?: string
+  baseUrl?: string
+  status?: 'ACTIVE' | 'DISABLED'
 }
 
 // ============ 档案（Model Profile）============
@@ -109,30 +117,23 @@ export interface ModelTestResult {
   dimensions: number | null
 }
 
-// ============ 目录（Model Catalog）============
+// ============ 提供商模板（Provider Templates）============
 
-/** 目录中的单个模型信息。 */
-export interface CatalogModel {
-  modelName: string
-  modelType: ModelType
-}
-
-/** 目录中的提供商卡片信息。 */
-export interface CatalogProvider {
-  providerCode: string
+/**
+ * 提供商模板由 /model-provider-templates 统一提供。
+ *
+ * 服务端只提供厂商元信息（名称 + 默认 Base URL + 官方跳转），不维护模型清单；
+ * 模型名称由用户手填。
+ */
+export interface ModelProviderTemplate {
+  /** 模板代码（如 ALIYUN_DASHSCOPE/DEEPSEEK/OPENAI/CUSTOM） */
+  code: string
+  /** 厂商名称 */
   providerName: string
-  defaultBaseUrl: string
-  /** 官方网站 URL */
-  officialUrl: string
-  /** 该提供商支持的模型列表 */
-  models: CatalogModel[]
-}
-
-/** /model-catalog 响应。 */
-export interface ModelCatalog {
-  providers: CatalogProvider[]
-  /** 各类型模型总数 */
-  typeCounts: Record<string, number>
+  /** 常见 API 根地址；CUSTOM 为 null */
+  defaultBaseUrl: string | null
+  /** 厂商官方网站 URL，用于前端 ProviderCard 官方跳转；CUSTOM 为 null */
+  officialUrl: string | null
 }
 
 // ============ 默认模型偏好（Preference）============
@@ -164,14 +165,20 @@ export function createConnection(input: SaveConnectionInput): Promise<ModelConne
   })
 }
 
-/** 更新连接（不提交 apiKey 时保留原密钥）。 */
-export function updateConnection(connectionKey: string, input: Partial<SaveConnectionInput>): Promise<ModelConnection | undefined> {
+/** 更新连接的非凭证字段；API Key 必须走 replaceConnectionApiKey。 */
+export function updateConnection(connectionKey: string, input: UpdateConnectionInput): Promise<ModelConnection | undefined> {
+  const body: UpdateConnectionInput = {
+    providerName: input.providerName,
+    displayName: input.displayName,
+    baseUrl: input.baseUrl,
+    status: input.status,
+  }
   if (isDemoMode()) {
-    return Promise.resolve(mockUpdateConnection(connectionKey, input))
+    return Promise.resolve(mockUpdateConnection(connectionKey, body))
   }
   return request(`/model-connections/${encodeURIComponent(connectionKey)}`, {
     method: 'PATCH',
-    body: JSON.stringify(input),
+    body: JSON.stringify(body),
   })
 }
 
@@ -252,14 +259,14 @@ export function testProfile(profileKey: string): Promise<ModelTestResult> {
   })
 }
 
-// ============ 目录 API ============
+// ============ 提供商模板 API ============
 
-/** 获取模型市场目录（只读）。 */
-export function getModelCatalog(): Promise<ModelCatalog> {
+/** 获取提供商模板列表（只读，不含凭证）。 */
+export function listModelProviderTemplates(): Promise<ModelProviderTemplate[]> {
   if (isDemoMode()) {
-    return Promise.resolve(mockGetModelCatalog())
+    return Promise.resolve(mockListModelProviderTemplates())
   }
-  return request('/model-catalog')
+  return request('/model-provider-templates')
 }
 
 // ============ 偏好 API ============

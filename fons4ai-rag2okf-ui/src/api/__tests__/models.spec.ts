@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
  * 模型配置 API 层测试（CR-001 T025 还原两步式）。
  *
  * 验证点：
- * - 两步式 API：连接（Connection）+ 档案（Profile）+ 目录（Catalog）+ 偏好（Preference）
+ * - 两步式 API：连接（Connection）+ 档案（Profile）+ 提供商模板 + 偏好（Preference）
  * - 不再导出合并后的 ModelConfig 单步 CRUD 函数
  * - demo 模式下走 mock 数据，real 模式走 http.request
  * - API Key 只在创建或替换时提交
@@ -38,8 +38,8 @@ describe('models API - 两步式契约导出', () => {
     expect(typeof api.updateProfile).toBe('function')
     expect(typeof api.deleteProfile).toBe('function')
     expect(typeof api.testProfile).toBe('function')
-    // 目录
-    expect(typeof api.getModelCatalog).toBe('function')
+    // 提供商模板
+    expect(typeof api.listModelProviderTemplates).toBe('function')
     // 偏好
     expect(typeof api.getDefaultModels).toBe('function')
     expect(typeof api.saveDefaultModels).toBe('function')
@@ -53,7 +53,6 @@ describe('models API - 两步式契约导出', () => {
     expect(api.deleteModelConfig).toBeUndefined()
     expect(api.testModelConfig).toBeUndefined()
     expect(api.replaceModelApiKey).toBeUndefined()
-    expect(api.listModelProviderTemplates).toBeUndefined()
   })
 })
 
@@ -182,7 +181,7 @@ describe('models API - demo 模式档案 CRUD', () => {
     const active = list.find((p) => p.status === 'ACTIVE' && p.modelType === 'EMBEDDING')
     expect(active).toBeDefined()
     const result = await testProfile(active!.profileKey)
-    expect(result.status).toBe('SUCCESS')
+    expect(result.status).toBe('SUCCEEDED')
     expect(mockedRequest).not.toHaveBeenCalled()
   })
 
@@ -210,21 +209,27 @@ describe('models API - demo 模式档案 CRUD', () => {
   })
 })
 
-describe('models API - demo 模式目录与偏好', () => {
+describe('models API - demo 模式提供商模板与偏好', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.stubEnv('VITE_RAG2OKF_DATA_SOURCE', 'demo')
     mockedRequest.mockClear()
   })
 
-  it('getModelCatalog 返回提供商列表和类型计数', async () => {
-    const { getModelCatalog } = await import('../models')
-    const catalog = await getModelCatalog()
-    expect(catalog.providers.length).toBeGreaterThan(0)
-    expect(catalog.providers[0]).toHaveProperty('providerCode')
-    expect(catalog.providers[0]).toHaveProperty('models')
-    expect(catalog.typeCounts).toHaveProperty('LLM')
-    expect(catalog.typeCounts).toHaveProperty('EMBEDDING')
+  it('listModelProviderTemplates 返回 7 个公开厂商模板', async () => {
+    const { listModelProviderTemplates } = await import('../models')
+    const templates = await listModelProviderTemplates()
+    expect(templates).toHaveLength(7)
+    expect(templates.map((item) => item.code)).toEqual(expect.arrayContaining(['DEEPSEEK', 'OPENAI', 'CUSTOM']))
+    expect(templates[0]).toEqual(expect.objectContaining({
+      code: expect.any(String),
+      providerName: expect.any(String),
+      officialUrl: expect.any(String),
+    }))
+    expect(templates.find((item) => item.code === 'CUSTOM')).toEqual(expect.objectContaining({
+      defaultBaseUrl: null,
+      officialUrl: null,
+    }))
     expect(mockedRequest).not.toHaveBeenCalled()
   })
 
@@ -289,6 +294,21 @@ describe('models API - real 模式走 http.request', () => {
     expect(body.apiKey).toBeUndefined()
   })
 
+  it('updateConnection 即使收到越界对象也会剥离 apiKey', async () => {
+    mockedRequest.mockResolvedValueOnce(undefined as never)
+    const { updateConnection } = await import('../models')
+
+    await updateConnection('conn-001', {
+      displayName: '更新',
+      apiKey: 'must-not-reach-generic-patch',
+    } as unknown as Parameters<typeof updateConnection>[1])
+
+    const options = mockedRequest.mock.calls.at(-1)?.[1]
+    const body = JSON.parse(String(options?.body)) as Record<string, unknown>
+    expect(body.displayName).toBe('更新')
+    expect(body.apiKey).toBeUndefined()
+  })
+
   it('replaceConnectionApiKey 调用 PATCH /model-connections/{key}/api-key', async () => {
     mockedRequest.mockResolvedValueOnce({ apiKeyMask: 'sk-****' } as never)
     const { replaceConnectionApiKey } = await import('../models')
@@ -328,7 +348,7 @@ describe('models API - real 模式走 http.request', () => {
   })
 
   it('testProfile 调用 POST /model-profiles/{key}/test', async () => {
-    mockedRequest.mockResolvedValueOnce({ status: 'SUCCESS' } as never)
+    mockedRequest.mockResolvedValueOnce({ status: 'SUCCEEDED' } as never)
     const { testProfile } = await import('../models')
     await testProfile('prof-001')
     const [path, init] = mockedRequest.mock.calls[0]
@@ -336,11 +356,11 @@ describe('models API - real 模式走 http.request', () => {
     expect(init?.method).toBe('POST')
   })
 
-  it('getModelCatalog 调用 GET /model-catalog', async () => {
-    mockedRequest.mockResolvedValueOnce({ providers: [], typeCounts: {} } as never)
-    const { getModelCatalog } = await import('../models')
-    await getModelCatalog()
-    expect(mockedRequest).toHaveBeenCalledWith('/model-catalog')
+  it('listModelProviderTemplates 调用 GET /model-provider-templates', async () => {
+    mockedRequest.mockResolvedValueOnce([] as never)
+    const { listModelProviderTemplates } = await import('../models')
+    await listModelProviderTemplates()
+    expect(mockedRequest).toHaveBeenCalledWith('/model-provider-templates')
   })
 
   it('getDefaultModels 调用 GET /users/me 并解析 preferenceJson（字符串形式）', async () => {

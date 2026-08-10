@@ -5,12 +5,14 @@ import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
 import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.common.dto.FileValidationPolicy;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
+import com.fons.cloud.ai.rag2okf.application.parsing.ParseApplicationService;
 import com.fons.cloud.ai.rag2okf.common.constants.WorkspaceRole;
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
 import com.fons.cloud.ai.rag2okf.common.exeception.KnowledgeBaseConflictException;
 import com.fons.cloud.ai.rag2okf.common.exeception.WorkspaceAccessDeniedException;
 import com.fons.cloud.ai.rag2okf.common.response.DocumentUploadResponse;
 import com.fons.cloud.ai.rag2okf.common.response.DocumentSummaryResponse;
+import com.fons.cloud.ai.rag2okf.common.response.ParseTriggerResponse;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactContent;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.StoredArtifact;
@@ -66,6 +68,7 @@ class DocumentApplicationServiceTest {
     @Mock private FileValidationPolicy fileValidationPolicy;
     @Mock private ModelBusinessKeyGenerator keyGenerator;
     @Mock private TaskApplicationService taskApplicationService;
+    @Mock private ParseApplicationService parseApplicationService;
 
     @InjectMocks private DocumentApplicationService service;
 
@@ -138,6 +141,38 @@ class DocumentApplicationServiceTest {
         assertEquals("NOT_STARTED", response.parseStatus());
         assertEquals("UNPUBLISHED", response.publishStatus());
         assertNull(response.taskKey(), "T009 不创建任务，taskKey 为 null");
+        verifyNoInteractions(parseApplicationService);
+    }
+
+    @Test
+    @DisplayName("PARSE 模式上传提交文件后创建解析任务并返回 QUEUED")
+    void uploadDocument_parseModeParseTriggersTaskAfterPersistence() throws IOException {
+        KbUserEntity user = mockUser("01J_USER_KEY");
+        KbKnowledgeBaseEntity kb = mockKnowledgeBase("01J_KB_KEY", 1L);
+        KbWorkspaceEntity workspace = mockWorkspace("01J_WS_KEY", 1L);
+        when(currentUserContext.requireCurrentUser()).thenReturn(user);
+        when(knowledgeBaseDomainService.getOne(any())).thenReturn(kb);
+        when(workspaceDomainService.getById(1L)).thenReturn(workspace);
+        when(keyGenerator.nextKey()).thenReturn("01J_DOC", "01J_FILE_TOKEN");
+        FileValidationPolicy.ValidatedFile validatedFile = mockValidatedFile("guide.md");
+        when(fileValidationPolicy.validate(anyString(), anyString(), any(), anyLong()))
+                .thenReturn(validatedFile);
+        when(documentArtifactStore.storeOriginal(any())).thenReturn(mockStoredArtifact());
+        when(sourceDocumentDomainService.save(any())).thenAnswer(inv -> {
+            ((KbSourceDocumentEntity) inv.getArgument(0)).setId(idSequence.incrementAndGet());
+            return true;
+        });
+        when(parseApplicationService.triggerParse("01J_DOC", "PARSE"))
+                .thenReturn(new ParseTriggerResponse(
+                        "01J_DOC", "01J_TASK", "QUEUED", "UNPUBLISHED", null));
+
+        DocumentUploadResponse response = service.uploadDocument(
+                "01J_KB_KEY", mockMultipartFile("guide.md"), "PARSE", null);
+
+        verify(sourceDocumentDomainService).save(any());
+        verify(parseApplicationService).triggerParse("01J_DOC", "PARSE");
+        assertEquals("01J_TASK", response.taskKey());
+        assertEquals("QUEUED", response.parseStatus());
     }
 
     // ────────────────────────────── AC-009：更新成功切换当前文件 ──────────────────────────────

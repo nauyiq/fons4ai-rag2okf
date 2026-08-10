@@ -71,6 +71,43 @@ export interface SaveKnowledgeBaseInput {
   revision: number
 }
 
+/** 后端 ModelBindingItem/Response 使用 modelProfileKey，API 层统一适配为前端 profileKey。 */
+interface BackendModelBinding {
+  bindingKey?: string
+  usageType: string
+  modelProfileKey?: string
+  /** 兼容旧前端 mock 或过渡响应。 */
+  profileKey?: string
+}
+
+type BackendKnowledgeBase = Omit<KnowledgeBase, 'modelBindings'> & {
+  modelBindings?: BackendModelBinding[]
+}
+
+function normalizeKnowledgeBase(input: BackendKnowledgeBase | undefined): KnowledgeBase | undefined {
+  if (!input) return undefined
+  return {
+    ...input,
+    modelBindings: (input.modelBindings ?? []).map(item => ({
+      bindingKey: item.bindingKey,
+      usageType: item.usageType,
+      profileKey: item.modelProfileKey ?? item.profileKey ?? '',
+    })),
+  }
+}
+
+function toBackendSaveInput(input: SaveKnowledgeBaseInput): Omit<SaveKnowledgeBaseInput, 'modelBindings'> & {
+  modelBindings?: Array<{ usageType: string; modelProfileKey: string }>
+} {
+  return {
+    ...input,
+    modelBindings: input.modelBindings?.map(item => ({
+      usageType: item.usageType,
+      modelProfileKey: item.profileKey,
+    })),
+  }
+}
+
 /** 分页查询知识库列表。 */
 export function listKnowledgeBases(workspaceKey: string, page = 0, size = 20): Promise<PageResponse<KnowledgeBaseSummary>> {
   if (isDemoMode()) {
@@ -84,7 +121,8 @@ export function getKnowledgeBase(knowledgeBaseKey: string): Promise<KnowledgeBas
   if (isDemoMode()) {
     return Promise.resolve(mockGetKnowledgeBase(knowledgeBaseKey))
   }
-  return request(`/knowledge-bases/${encodeURIComponent(knowledgeBaseKey)}`)
+  return request<BackendKnowledgeBase>(`/knowledge-bases/${encodeURIComponent(knowledgeBaseKey)}`)
+    .then(normalizeKnowledgeBase)
 }
 
 /** 创建知识库。 */
@@ -92,10 +130,10 @@ export function createKnowledgeBase(workspaceKey: string, input: SaveKnowledgeBa
   if (isDemoMode()) {
     return Promise.resolve(mockCreateKnowledgeBase(workspaceKey, input))
   }
-  return request(`/workspaces/${encodeURIComponent(workspaceKey)}/knowledge-bases`, {
+  return request<BackendKnowledgeBase>(`/workspaces/${encodeURIComponent(workspaceKey)}/knowledge-bases`, {
     method: 'POST',
-    body: JSON.stringify(input),
-  })
+    body: JSON.stringify(toBackendSaveInput(input)),
+  }).then(result => normalizeKnowledgeBase(result) as KnowledgeBase)
 }
 
 /** 更新知识库（含重命名，复用 update 仅提交 name）。 */
@@ -103,10 +141,10 @@ export function updateKnowledgeBase(knowledgeBaseKey: string, input: SaveKnowled
   if (isDemoMode()) {
     return Promise.resolve(mockUpdateKnowledgeBase(knowledgeBaseKey, input))
   }
-  return request(`/knowledge-bases/${encodeURIComponent(knowledgeBaseKey)}`, {
+  return request<BackendKnowledgeBase>(`/knowledge-bases/${encodeURIComponent(knowledgeBaseKey)}`, {
     method: 'PATCH',
-    body: JSON.stringify(input),
-  })
+    body: JSON.stringify(toBackendSaveInput(input)),
+  }).then(normalizeKnowledgeBase)
 }
 
 /** 删除知识库（服务端校验创建者；非创建者返回 403）。 */
