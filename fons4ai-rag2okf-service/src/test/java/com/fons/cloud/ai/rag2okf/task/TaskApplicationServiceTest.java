@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.Date;
 import java.util.List;
@@ -37,6 +38,7 @@ class TaskApplicationServiceTest {
 
     @Mock private KbProcessingTaskDomainService taskDomainService;
     @Mock private ModelBusinessKeyGenerator keyGenerator;
+    @Mock private ApplicationEventPublisher applicationEventPublisher;
 
     @InjectMocks private TaskApplicationService service;
 

@@ -94,6 +94,22 @@ describe('DocumentDetailView', () => {
     expect(wrapper.find('[data-test="parse-progress"]').exists()).toBe(true)
   })
 
+  it('disables parse button when parseStatus is QUEUED', async () => {
+    vi.mocked(getDocument).mockResolvedValue(makeDoc({ parseStatus: 'QUEUED', latestTask: { taskKey: 't1', taskType: 'PARSE', status: 'QUEUED', stage: '排队中', progress: 0, attempt: 1, maxAttempts: 3, updated: '2026-08-05T08:00:00Z' } }))
+    const wrapper = mount(DocumentDetailView)
+    await flushPromises()
+    const parseBtn = wrapper.find('[data-test="parse-button"]')
+    expect(parseBtn.attributes('disabled')).toBeDefined()
+  })
+
+  it('enables parse button when parseStatus is NOT_STARTED', async () => {
+    vi.mocked(getDocument).mockResolvedValue(makeDoc({ parseStatus: 'NOT_STARTED' }))
+    const wrapper = mount(DocumentDetailView)
+    await flushPromises()
+    const parseBtn = wrapper.find('[data-test="parse-button"]')
+    expect(parseBtn.attributes('disabled')).toBeUndefined()
+  })
+
   it('shows parse failure and allows retry', async () => {
     vi.mocked(getDocument).mockResolvedValue(makeDoc({ parseStatus: 'FAILED', latestTask: { taskKey: 't1', taskType: 'PARSE', status: 'FAILED', progress: 0, attempt: 1, maxAttempts: 3, errorCode: 'PARSE_ERROR', errorMessage: '文件格式不支持', updated: '2026-08-05T08:00:00Z' } }))
     const wrapper = mount(DocumentDetailView)
@@ -186,7 +202,7 @@ describe('DocumentDetailView', () => {
 
     const wrapper = mount(DocumentDetailView)
     await flushPromises()
-    await wrapper.get('[data-test="retry-task"]').trigger('click')
+    await wrapper.get('[data-test="reparse-btn"]').trigger('click')
     await flushPromises()
 
     expect(retryTask).toHaveBeenCalledWith('task-failed-1')

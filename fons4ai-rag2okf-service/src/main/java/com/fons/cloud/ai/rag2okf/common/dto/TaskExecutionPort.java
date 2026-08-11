@@ -24,4 +24,21 @@ public interface TaskExecutionPort {
      * @return 执行结果
      */
     TaskExecutionResult execute(ProcessingTask task);
+
+    /**
+     * 任务终态失败回调。
+     *
+     * <p>当任务最终失败（达到最大重试次数或不可重试致命错误）时，
+     * 由 {@code DistributedLockedTaskExecutor} 在更新任务状态前调用此方法，
+     * 让执行器有机会同步业务级状态（如文档解析状态流转为 FAILED）。
+     *
+     * <p>默认空实现，执行器按需覆写。回调异常由调用方捕获并记录 WARN 日志，
+     * 不影响任务状态持久化。
+     *
+     * @param task         处理任务领域模型，此时状态已在内存中标记为终态
+     * @param errorCode    安全化错误码
+     * @param errorMessage 安全化错误摘要
+     */
+    default void onTerminalFailure(ProcessingTask task, String errorCode, String errorMessage) {
+    }
 }

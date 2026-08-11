@@ -15,6 +15,7 @@ import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
 import com.fons.cloud.ai.rag2okf.common.dto.ProcessingTask;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskStatus;
 import com.fons.cloud.ai.rag2okf.common.dto.TaskType;
 import com.fons.cloud.ai.rag2okf.infrastructure.identity.WorkspaceAccessPolicy;
 import com.fons.cloud.ai.rag2okf.domain.service.KbChunkRevisionDomainService;
@@ -181,6 +182,7 @@ class ParseApplicationServiceTest {
         originalEntity.setKnowledgeBaseId(2L);
         originalEntity.setSourceDocumentId(3L);
         originalEntity.setTaskType("PARSE");
+        originalEntity.setStatus(TaskStatus.FAILED.name());
         originalEntity.setInputRevisionKey("01J_VER");
         originalEntity.setPayloadJson("{\"documentKey\":\"01J_DOC\"}");
         ProcessingTask originalTask = new ProcessingTask(originalEntity);

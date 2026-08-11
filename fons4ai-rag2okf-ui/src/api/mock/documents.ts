@@ -12,6 +12,7 @@ import type {
   PageResponse,
   OperationAccepted,
   ChunkPreview,
+  ChunkView,
   ParsePreview,
   TaskSummary,
 } from '../documents'
@@ -100,7 +101,7 @@ const documents: (DocumentDetail & { knowledgeBaseKey: string })[] = [
     folderPath: '/合规材料/2024Q4',
     currentFile: { filename: '2024q4-report.docx', contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: 890_000 },
     currentFileToken: 'mock-token-004',
-    parseStatus: 'PENDING',
+    parseStatus: 'NOT_STARTED',
     publishStatus: 'UNPUBLISHED',
     hasActivePublication: false,
     updated: now,
@@ -237,7 +238,7 @@ export function mockUploadDocument(knowledgeBaseKey: string, file: File, parseMo
     folderPath: path,
     currentFile: { filename: file.name, contentType: file.type || 'application/octet-stream', size: file.size },
     currentFileToken: `mock-token-${Date.now()}`,
-    parseStatus: parseMode === 'SKIP' ? 'NOT_STARTED' : 'PENDING',
+    parseStatus: 'NOT_STARTED',
     publishStatus: 'UNPUBLISHED',
     hasActivePublication: false,
     updated: new Date().toISOString(),
@@ -266,7 +267,7 @@ export function mockBatchUploadDocuments(knowledgeBaseKey: string, files: File[]
       folderPath,
       currentFile: { filename: file.name, contentType: file.type || 'application/octet-stream', size: file.size },
       currentFileToken: `mock-token-${Date.now()}-${i}`,
-      parseStatus: parseMode === 'SKIP' ? 'NOT_STARTED' : 'PENDING',
+      parseStatus: 'NOT_STARTED',
       publishStatus: 'UNPUBLISHED',
       hasActivePublication: false,
       updated: new Date().toISOString(),
@@ -284,7 +285,7 @@ export function mockUpdateDocumentFile(documentKey: string, file: File, parseMod
   if (doc) {
     doc.currentFile = { filename: file.name, contentType: file.type || 'application/octet-stream', size: file.size }
     doc.currentFileToken = `mock-token-${Date.now()}`
-    doc.parseStatus = parseMode === 'SKIP' ? 'NOT_STARTED' : 'PENDING'
+    doc.parseStatus = 'NOT_STARTED'
     doc.updated = new Date().toISOString()
   }
   return { documentKey }
@@ -330,17 +331,69 @@ export function mockTriggerPublish(documentKey: string): OperationAccepted {
   return { documentKey }
 }
 
-/** 模拟查询分块预览。 */
-export function mockGetChunkPreview(documentKey: string): ChunkPreview {
+/**
+ * 生成模拟父子分块数据。
+ *
+ * <p>父块数量 = parentCount，每个父块挂 3 个子块，总块数 = parentCount * 4。
+ * 父块 skipEmbedding=true，子块 skipEmbedding=false，子块 parentChunkId 指向父块 index。
+ */
+function buildMockChunks(parentCount: number): ChunkView[] {
+  const chunks: ChunkView[] = []
+  let index = 0
+  for (let p = 0; p < parentCount; p++) {
+    const parentIndex = index
+    chunks.push({
+      index: parentIndex,
+      content: `父块 #${parentIndex}：本块为分块层级中的父节点，包含下文摘要或标题，仅存储供检索召回使用，不参与向量化。`,
+      parentChunkId: null,
+      skipEmbedding: true,
+    })
+    index++
+    for (let c = 0; c < 3; c++) {
+      chunks.push({
+        index,
+        content: `子块 #${parentIndex}-${c}：本块为父块 #${parentIndex} 的第 ${c + 1} 个子块，包含具体正文内容片段，参与向量化检索。`.padEnd(120, '示例正文内容。'),
+        parentChunkId: String(parentIndex),
+        skipEmbedding: false,
+      })
+      index++
+    }
+  }
+  return chunks
+}
+
+/** 模拟查询分块预览（支持分页）。 */
+export function mockGetChunkPreview(documentKey: string, page = 0, size = 20): ChunkPreview {
   const doc = documents.find((d) => d.documentKey === documentKey)
   const hasChunk = doc?.parseStatus === 'SUCCEEDED'
+  if (!hasChunk) {
+    return {
+      hasChunk: false,
+      currentChunkRevisionKey: undefined,
+      chunkProfile: undefined,
+      parentCount: 0,
+      childCount: 0,
+      total: 0,
+      page,
+      size,
+      chunks: [],
+    }
+  }
+  const parentCount = 8
+  const allChunks = buildMockChunks(parentCount)
+  const total = allChunks.length
+  const start = page * size
+  const chunks = allChunks.slice(start, start + size)
   return {
-    hasChunk,
-    currentChunkRevisionKey: hasChunk ? `cr-${documentKey}` : undefined,
-    chunkProfile: hasChunk ? { strategy: 'fixed', chunkSize: 512, overlap: 64 } : undefined,
-    parentCount: hasChunk ? 8 : 0,
-    childCount: hasChunk ? 24 : 0,
-    total: hasChunk ? 24 : 0,
+    hasChunk: true,
+    currentChunkRevisionKey: `cr-${documentKey}`,
+    chunkProfile: { strategy: 'fixed', chunkSize: 512, overlap: 64 },
+    parentCount,
+    childCount: total - parentCount,
+    total,
+    page,
+    size,
+    chunks,
   }
 }
 

@@ -7,8 +7,8 @@ import { useTaskPolling } from '../useTaskPolling'
 /**
  * useTaskPolling 测试。
  * 验证点（对应 T004 Verification）：
- * - 首次轮询在 2s 后执行
- * - 每次轮询间隔 ×1.5，上限 15s
+ * - 首次轮询在 5s 后执行
+ * - 每次轮询固定 5s 间隔，无退避
  * - 任务终态（SUCCEEDED/FAILED）时停止
  * - 组件卸载时定时器清理
  * - 重叠请求时复用进行中的 Promise（单飞）
@@ -41,23 +41,23 @@ describe('useTaskPolling', () => {
     return { ...runningTask(100), status: 'SUCCEEDED', stage: '完成' }
   }
 
-  it('start() 后首次轮询在 2s 后执行', async () => {
+  it('start() 后首次轮询在 5s 后执行', async () => {
     const fetcher = vi.fn().mockResolvedValue(runningTask())
     const isActive = vi.fn().mockReturnValue(true)
     const onUpdate = vi.fn()
     const { start } = useTaskPolling({ fetcher, isActive, onUpdate })
 
     start()
-    // 2s 前不执行
-    vi.advanceTimersByTime(1999)
+    // 5s 前不执行
+    vi.advanceTimersByTime(4999)
     expect(fetcher).not.toHaveBeenCalled()
 
-    // 2s 时执行
+    // 5s 时执行
     await vi.advanceTimersByTimeAsync(1)
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
-  it('每次轮询间隔 ×1.5', async () => {
+  it('每次轮询固定 5s 间隔，无退避', async () => {
     const fetcher = vi.fn().mockResolvedValue(runningTask())
     const isActive = vi.fn().mockReturnValue(true)
     const onUpdate = vi.fn()
@@ -65,43 +65,21 @@ describe('useTaskPolling', () => {
 
     start()
 
-    // 首次 2s
-    await vi.advanceTimersByTimeAsync(2000)
+    // 首次 5s
+    await vi.advanceTimersByTimeAsync(5000)
     expect(fetcher).toHaveBeenCalledTimes(1)
 
-    // 第二次 3s (2000 * 1.5)
-    await vi.advanceTimersByTimeAsync(2999)
+    // 第二次 5s
+    await vi.advanceTimersByTimeAsync(4999)
     expect(fetcher).toHaveBeenCalledTimes(1)
     await vi.advanceTimersByTimeAsync(1)
     expect(fetcher).toHaveBeenCalledTimes(2)
 
-    // 第三次 4.5s (3000 * 1.5)
-    await vi.advanceTimersByTimeAsync(4499)
+    // 第三次 5s
+    await vi.advanceTimersByTimeAsync(4999)
     expect(fetcher).toHaveBeenCalledTimes(2)
     await vi.advanceTimersByTimeAsync(1)
     expect(fetcher).toHaveBeenCalledTimes(3)
-  })
-
-  it('间隔上限 15s', async () => {
-    const fetcher = vi.fn().mockResolvedValue(runningTask())
-    const isActive = vi.fn().mockReturnValue(true)
-    const onUpdate = vi.fn()
-    const { start } = useTaskPolling({ fetcher, isActive, onUpdate })
-
-    start()
-
-    // 轮询序列：2s, 3s, 4.5s, 6.75s, 10.125s, 15s(capped), 15s(capped)
-    const intervals = [2000, 3000, 4500, 6750, 10125]
-    for (const interval of intervals) {
-      await vi.advanceTimersByTimeAsync(interval)
-    }
-    // 第 6 次：min(10125 * 1.5, 15000) = min(15187.5, 15000) = 15000
-    await vi.advanceTimersByTimeAsync(15000)
-    expect(fetcher).toHaveBeenCalledTimes(6)
-
-    // 第 7 次：min(15000 * 1.5, 15000) = 15000
-    await vi.advanceTimersByTimeAsync(15000)
-    expect(fetcher).toHaveBeenCalledTimes(7)
   })
 
   it('任务状态变为 SUCCEEDED 时轮询停止', async () => {
@@ -112,7 +90,7 @@ describe('useTaskPolling', () => {
     const { start } = useTaskPolling({ fetcher, isActive, onUpdate })
 
     start()
-    await vi.advanceTimersByTimeAsync(2000)
+    await vi.advanceTimersByTimeAsync(5000)
 
     expect(fetcher).toHaveBeenCalledTimes(1)
     expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ status: 'SUCCEEDED' }))
@@ -131,7 +109,7 @@ describe('useTaskPolling', () => {
     const { start } = useTaskPolling({ fetcher, isActive, onUpdate })
 
     start()
-    await vi.advanceTimersByTimeAsync(2000)
+    await vi.advanceTimersByTimeAsync(5000)
 
     expect(fetcher).toHaveBeenCalledTimes(1)
     expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ status: 'FAILED' }))
@@ -148,7 +126,7 @@ describe('useTaskPolling', () => {
     const { start } = useTaskPolling({ fetcher, isActive, onUpdate })
 
     start()
-    await vi.advanceTimersByTimeAsync(2000)
+    await vi.advanceTimersByTimeAsync(5000)
 
     expect(onUpdate).toHaveBeenCalledWith(task)
   })
@@ -160,7 +138,7 @@ describe('useTaskPolling', () => {
     const { start } = useTaskPolling({ fetcher, isActive, onUpdate })
 
     start()
-    await vi.advanceTimersByTimeAsync(2000)
+    await vi.advanceTimersByTimeAsync(5000)
 
     expect(onUpdate).not.toHaveBeenCalled()
   })
@@ -176,18 +154,18 @@ describe('useTaskPolling', () => {
 
     start()
 
-    // 首次轮询触发
-    await vi.advanceTimersByTimeAsync(2000)
+    // 首次轮询触发（5s）
+    await vi.advanceTimersByTimeAsync(5000)
     expect(fetcher).toHaveBeenCalledTimes(1)
 
-    // 推进到下一次轮询时间（3s），但 fetcher 尚未 resolve
-    await vi.advanceTimersByTimeAsync(3000)
+    // 推进到下一次轮询时间（又一个 5s），但 fetcher 尚未 resolve
+    await vi.advanceTimersByTimeAsync(5000)
     // 应该只有 1 次调用（单飞，不重复发起新请求）
     expect(fetcher).toHaveBeenCalledTimes(1)
 
-    // resolve 后
+    // resolve 后，下一次轮询在 5s 后
     resolveFetch(runningTask(60))
-    await vi.advanceTimersByTimeAsync(4500)
+    await vi.advanceTimersByTimeAsync(5000)
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
 
@@ -198,7 +176,7 @@ describe('useTaskPolling', () => {
     const { start, stop } = useTaskPolling({ fetcher, isActive, onUpdate })
 
     start()
-    await vi.advanceTimersByTimeAsync(2000)
+    await vi.advanceTimersByTimeAsync(5000)
     expect(fetcher).toHaveBeenCalledTimes(1)
 
     stop()
@@ -217,7 +195,7 @@ describe('useTaskPolling', () => {
     start()
     start()
 
-    await vi.advanceTimersByTimeAsync(2000)
+    await vi.advanceTimersByTimeAsync(5000)
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
@@ -236,7 +214,7 @@ describe('useTaskPolling', () => {
     const wrapper = mount(Comp)
 
     polling!.start()
-    await vi.advanceTimersByTimeAsync(2000)
+    await vi.advanceTimersByTimeAsync(5000)
     expect(fetcher).toHaveBeenCalledTimes(1)
 
     wrapper.unmount()
@@ -254,8 +232,6 @@ describe('useTaskPolling', () => {
       isActive,
       onUpdate,
       intervalMs: 1000,
-      backoffFactor: 2,
-      maxIntervalMs: 8000,
     })
 
     start()
@@ -264,20 +240,12 @@ describe('useTaskPolling', () => {
     await vi.advanceTimersByTimeAsync(1000)
     expect(fetcher).toHaveBeenCalledTimes(1)
 
-    // 第二次 2s (1000 * 2)
-    await vi.advanceTimersByTimeAsync(2000)
+    // 第二次 1s（固定间隔，无退避）
+    await vi.advanceTimersByTimeAsync(1000)
     expect(fetcher).toHaveBeenCalledTimes(2)
 
-    // 第三次 4s (2000 * 2)
-    await vi.advanceTimersByTimeAsync(4000)
+    // 第三次 1s
+    await vi.advanceTimersByTimeAsync(1000)
     expect(fetcher).toHaveBeenCalledTimes(3)
-
-    // 第四次 8s (4000 * 2 = 8000, capped)
-    await vi.advanceTimersByTimeAsync(8000)
-    expect(fetcher).toHaveBeenCalledTimes(4)
-
-    // 第五次 8s (capped)
-    await vi.advanceTimersByTimeAsync(8000)
-    expect(fetcher).toHaveBeenCalledTimes(5)
   })
 })

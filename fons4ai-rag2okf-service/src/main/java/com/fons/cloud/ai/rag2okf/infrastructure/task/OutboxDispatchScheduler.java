@@ -34,9 +34,9 @@ public class OutboxDispatchScheduler {
     /**
      * 定时扫描待投递事件并尝试分发。
      *
-     * <p>固定延迟 5 秒，初始延迟 15 秒。worker 不占用 HTTP 线程。
+     * <p>固定延迟 2 分钟，初始延迟 15 秒。正常任务创建后已立即触发，兜底扫描只需补偿漏网情况。
      */
-    @Scheduled(fixedDelayString = "${rag2okf.outbox.scan-interval-ms:60000}", initialDelayString = "15000")
+    @Scheduled(fixedDelayString = "${rag2okf.outbox.scan-interval-ms:120000}", initialDelayString = "15000")
     public void scanAndDispatch() {
         Date now = new Date();
         List<KbOutboxEventEntity> candidates = outboxApplicationService.scanPendingEvents(now, scanBatchSize);

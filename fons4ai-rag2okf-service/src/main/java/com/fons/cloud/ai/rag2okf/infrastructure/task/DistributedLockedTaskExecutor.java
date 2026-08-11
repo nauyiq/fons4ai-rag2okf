@@ -126,10 +126,24 @@ public class DistributedLockedTaskExecutor {
             case TaskExecutionResult.RetryableFailure r -> {
                 boolean willRetry = task.markRetryableFailure(r.errorCode(), r.errorMessage(), completedAt);
                 log.warn("Task retryable failure: taskKey={}, willRetry={}", taskKey, willRetry);
+                // 终态失败（重试上限）时通知执行器同步业务级状态
+                if (!willRetry) {
+                    try {
+                        port.onTerminalFailure(task, r.errorCode(), r.errorMessage());
+                    } catch (Exception e) {
+                        log.warn("onTerminalFailure callback failed: taskKey={}", taskKey, e);
+                    }
+                }
             }
             case TaskExecutionResult.FatalFailure f -> {
                 task.markFailed(f.errorCode(), f.errorMessage(), completedAt);
                 log.error("Task fatal failure: taskKey={}, errorCode={}", taskKey, f.errorCode());
+                // 致命失败时通知执行器同步业务级状态
+                try {
+                    port.onTerminalFailure(task, f.errorCode(), f.errorMessage());
+                } catch (Exception e) {
+                    log.warn("onTerminalFailure callback failed: taskKey={}", taskKey, e);
+                }
             }
         }
         taskApplicationService.updateTask(task);

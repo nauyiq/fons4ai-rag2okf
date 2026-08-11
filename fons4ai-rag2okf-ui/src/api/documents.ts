@@ -67,6 +67,17 @@ export interface OperationAccepted {
   currentFileToken?: string
 }
 
+export interface ChunkView {
+  /** 分块序号，从 0 开始 */
+  index: number
+  /** 分块文本内容 */
+  content: string
+  /** 父分块标识；父块自身为 null，子块指向父块 index 字符串 */
+  parentChunkId: string | null
+  /** 是否跳过向量化（父块为 true，仅存储供检索时召回） */
+  skipEmbedding: boolean
+}
+
 export interface ChunkPreview {
   hasChunk: boolean
   currentChunkRevisionKey?: string
@@ -74,6 +85,12 @@ export interface ChunkPreview {
   parentCount: number
   childCount: number
   total: number
+  /** 当前页码（从 0 开始） */
+  page: number
+  /** 每页大小 */
+  size: number
+  /** 当前页分块列表 */
+  chunks: ChunkView[]
 }
 
 export interface ParsePreview {
@@ -157,11 +174,11 @@ export function triggerPublish(documentKey: string): Promise<OperationAccepted> 
   return request(`/documents/${encodeURIComponent(documentKey)}/publish`, { method: 'POST' })
 }
 
-export function getChunkPreview(documentKey: string): Promise<ChunkPreview> {
+export function getChunkPreview(documentKey: string, page = 0, size = 20): Promise<ChunkPreview> {
   if (isDemoMode()) {
-    return Promise.resolve(mockGetChunkPreview(documentKey))
+    return Promise.resolve(mockGetChunkPreview(documentKey, page, size))
   }
-  return request(`/documents/${encodeURIComponent(documentKey)}/chunks?page=0&size=20`)
+  return request(`/documents/${encodeURIComponent(documentKey)}/chunks?page=${page}&size=${size}`)
 }
 
 export function getParsePreview(documentKey: string): Promise<ParsePreview> {

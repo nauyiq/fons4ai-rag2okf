@@ -28,7 +28,7 @@ const tone = computed(() => {
   const s = props.status
   if (['SUCCEEDED', 'PUBLISHED'].includes(s)) return 'success'
   if (['FAILED', 'PUBLISH_FAILED'].includes(s)) return 'danger'
-  if (['RUNNING', 'PUBLISHING', 'QUEUED', 'PENDING'].includes(s)) return 'active'
+  if (['RUNNING', 'PUBLISHING', 'QUEUED'].includes(s)) return 'active'
   return 'neutral'
 })
 </script>

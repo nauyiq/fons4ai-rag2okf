@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { ApiRequestError } from '../../api/http'
@@ -20,11 +20,12 @@ import {
   type TaskSummary,
 } from '../../api/documents'
 import AppDialog from '../../components/ui/AppDialog.vue'
+import ChunkTreeList from '../../components/document/ChunkTreeList.vue'
 import DocumentStatusRail from '../../components/document/DocumentStatusRail.vue'
 import SourceFilePreview from '../../components/document/SourceFilePreview.vue'
 import { useTaskPolling } from '../../composables/useTaskPolling'
 import { useWorkspaceStore } from '../../stores/workspace'
-import { formatBytes, taskStatusLabel } from '../../utils/formatters'
+import { formatBytes } from '../../utils/formatters'
 
 /** 每动作独立的操作反馈状态。 */
 interface ActionState {
@@ -47,6 +48,10 @@ const parse = ref<ParsePreview>()
 const source = ref<SourceContent>()
 const loading = ref(true)
 const errorMessage = ref('')
+/** 分块列表加载状态（独立于整页 loading，翻页时使用） */
+const chunkLoading = ref(false)
+/** 当前分块页码（从 0 开始） */
+const chunkPage = ref(0)
 
 // 独立 ActionState：解析、发布、替换文件、重新分块、重试任务
 const parseAction = ref<ActionState>(createActionState())
@@ -61,14 +66,17 @@ const showRechunk = ref(false)
 
 const documentKey = String(route.params.documentKey)
 
-/** 解析是否处于活跃状态（排队或处理中），用于禁用解析按钮和驱动轮询。 */
+/** 解析是否处于活跃状态（已入队或执行中），用于禁用解析按钮和驱动轮询。 */
 const isParseActive = computed(() => {
   const status = document.value?.parseStatus
-  return status === 'QUEUED' || status === 'RUNNING' || status === 'PENDING'
+  return status === 'QUEUED' || status === 'RUNNING'
 })
 
 /** 解析是否失败，用于显示失败原因并允许重试。 */
 const isParseFailed = computed(() => document.value?.parseStatus === 'FAILED')
+
+/** 任务是否处于重试等待（解析中失败但还会重试），用于进度条区分展示。 */
+const isRetryWait = computed(() => document.value?.latestTask?.status === 'RETRY_WAIT')
 
 /** 任务是否处于活跃状态，用于驱动轮询。 */
 function isTaskActive(): boolean {
@@ -103,12 +111,13 @@ async function load(): Promise<void> {
   try {
     const [detail, chunkPreview, parsePreview, sourceContent] = await Promise.all([
       getDocument(documentKey),
-      getChunkPreview(documentKey),
+      getChunkPreview(documentKey, 0),
       getParsePreview(documentKey),
       getSourceContent(documentKey).catch(() => null),
     ])
     document.value = detail
     chunk.value = chunkPreview
+    chunkPage.value = 0
     parse.value = parsePreview
     if (sourceContent) source.value = sourceContent
   } catch (error) {
@@ -118,20 +127,49 @@ async function load(): Promise<void> {
   }
 }
 
-/** 轮询时局部刷新：只更新文档、分块、解析预览，不重置整页。 */
+/**
+ * 轮询时局部刷新：只调文档详情接口获取进度和状态，避免每次轮询重复拉取分块/解析预览。
+ *
+ * <p>当 parseStatus 从活跃态（QUEUED/RUNNING）流转到 SUCCEEDED 时，补拉一次
+ * getChunkPreview 和 getParsePreview 以填充结果预览，之后轮询因 isParseActive=false 自然停止。
+ */
 async function refreshStatus(): Promise<TaskSummary | undefined> {
   try {
-    const [detail, chunkPreview, parsePreview] = await Promise.all([
-      getDocument(documentKey),
-      getChunkPreview(documentKey),
-      getParsePreview(documentKey),
-    ])
+    const detail = await getDocument(documentKey)
+    const prevStatus = document.value?.parseStatus
     document.value = detail
-    chunk.value = chunkPreview
-    parse.value = parsePreview
+    // 解析刚完成：补拉分块和解析预览结果（轮询期间未拉取）
+    if (detail.parseStatus === 'SUCCEEDED' && prevStatus !== 'SUCCEEDED') {
+      const [chunkPreview, parsePreview] = await Promise.all([
+        getChunkPreview(documentKey, chunkPage.value),
+        getParsePreview(documentKey),
+      ])
+      chunk.value = chunkPreview
+      parse.value = parsePreview
+    }
     return detail.latestTask
   } catch {
     return undefined
+  }
+}
+
+/**
+ * 翻页加载分块列表。
+ *
+ * <p>独立调用 getChunkPreview(page)，不重置整页状态，仅刷新 chunk 数据和页码。
+ * 翻页后滚动到分块区域顶部。
+ */
+async function loadChunkPage(page: number): Promise<void> {
+  chunkLoading.value = true
+  try {
+    const chunkPreview = await getChunkPreview(documentKey, page)
+    chunk.value = chunkPreview
+    chunkPage.value = page
+  } catch (error) {
+    // 翻页失败时记录到 rechunkAction.error 复用展示位
+    rechunkAction.value.error = error instanceof ApiRequestError ? error.message : '加载分块失败，请稍后重试。'
+  } finally {
+    chunkLoading.value = false
   }
 }
 
@@ -230,6 +268,17 @@ onMounted(async () => {
   if (isParseActive.value) startPolling()
 })
 
+// keep-alive 场景：离开页面停止轮询，返回时按状态恢复
+onDeactivated(() => {
+  stopPolling()
+})
+
+onActivated(() => {
+  if (isParseActive.value) {
+    startPolling()
+  }
+})
+
 onBeforeUnmount(() => {
   stopPolling()
   // 释放 blobUrl
@@ -274,8 +323,17 @@ onBeforeUnmount(() => {
       <!-- 解析进度条 -->
       <div v-if="isParseActive && document.latestTask" class="parse-progress" data-test="parse-progress">
         <p class="eyebrow">PARSING</p>
-        <a-progress :percent="document.latestTask.progress" :status="document.latestTask.status === 'FAILED' ? 'exception' : 'active'" />
-        <p class="progress-stage">{{ document.latestTask.stage || '处理中' }} · {{ document.latestTask.progress }}%</p>
+        <a-progress
+          :percent="document.latestTask.progress"
+          :status="document.latestTask.status === 'FAILED' ? 'exception' : 'active'"
+        />
+        <!-- RETRY_WAIT：展示上次失败原因，避免"报错+处理中"同时出现造成困惑 -->
+        <template v-if="isRetryWait && document.latestTask.errorMessage">
+          <p class="progress-stage">重试中 · {{ document.latestTask.errorCode || '任务失败' }}：{{ document.latestTask.errorMessage }}</p>
+        </template>
+        <template v-else>
+          <p class="progress-stage">{{ document.latestTask.stage || '处理中' }} · {{ document.latestTask.progress }}%</p>
+        </template>
       </div>
 
       <!-- 解析失败 -->
@@ -283,25 +341,15 @@ onBeforeUnmount(() => {
         <p class="eyebrow">PARSE FAILED</p>
         <p v-if="document.latestTask?.errorMessage" class="task-error">{{ document.latestTask.errorCode || '任务失败' }}：{{ document.latestTask.errorMessage }}</p>
         <p v-else class="task-error">解析失败，请重试。</p>
+        <a-button
+          v-if="workspaceStore.canManage && document.latestTask?.taskKey"
+          :loading="retryAction.loading"
+          data-test="reparse-btn"
+          @click="retryLatestTask"
+        >再次解析</a-button>
       </div>
 
       <DocumentStatusRail class="detail-rail" :document="document" />
-
-      <!-- 最新任务卡片 -->
-      <section v-if="document.latestTask" class="task-card">
-        <div>
-          <p class="eyebrow">LATEST TASK</p>
-          <strong>{{ document.latestTask.taskType }} · {{ taskStatusLabel(document.latestTask.status) }}</strong>
-          <p v-if="document.latestTask.status === 'RUNNING'">{{ document.latestTask.progress }}% · {{ document.latestTask.stage || '处理中' }}</p>
-          <p v-else-if="document.latestTask.errorMessage" class="task-error">{{ document.latestTask.errorCode || '任务失败' }}：{{ document.latestTask.errorMessage }}</p>
-        </div>
-        <a-button
-          v-if="workspaceStore.canManage && document.latestTask.status === 'FAILED'"
-          :loading="retryAction.loading"
-          data-test="retry-task"
-          @click="retryLatestTask"
-        >重试任务</a-button>
-      </section>
 
       <!-- 源文件预览 + 分块详情并排 -->
       <section class="content-grid">
@@ -318,20 +366,34 @@ onBeforeUnmount(() => {
           <p v-else class="muted-text">源文件内容不可用。</p>
         </article>
 
-        <!-- 右侧：分块 + 解析预览并排 -->
+        <!-- 右侧：分块列表 + 解析预览 + 发布 -->
         <div class="chunk-panel">
           <article class="chunk-card" data-test="chunk-card">
-            <p class="eyebrow">CHUNKS</p>
-            <h2>{{ chunk?.hasChunk ? `${chunk.total} 个分块` : '尚无可用分块' }}</h2>
-            <p>{{ chunk?.hasChunk ? `父块 ${chunk.parentCount} · 子块 ${chunk.childCount}` : '未解析或尚未生成分块时，不展示伪造的结构化结果。' }}</p>
-            <a-button
-              v-if="workspaceStore.canManage && chunk?.hasChunk"
-              type="link"
-              danger
-              :loading="rechunkAction.loading"
-              data-test="rechunk-button"
-              @click="showRechunk = true"
-            >重新分块</a-button>
+            <div class="chunk-card-header">
+              <div>
+                <p class="eyebrow">CHUNKS</p>
+                <h2>{{ chunk?.hasChunk ? `${chunk.total} 个分块 · 父块 ${chunk.parentCount} · 子块 ${chunk.childCount}` : '尚无可用分块' }}</h2>
+              </div>
+              <a-button
+                v-if="workspaceStore.canManage && chunk?.hasChunk"
+                type="link"
+                danger
+                :loading="rechunkAction.loading"
+                data-test="rechunk-button"
+                @click="showRechunk = true"
+              >重新分块</a-button>
+            </div>
+            <p v-if="!chunk?.hasChunk" class="muted-text">未解析或尚未生成分块时，不展示伪造的结构化结果。</p>
+            <ChunkTreeList
+              v-else
+              :chunks="chunk.chunks"
+              :page="chunk.page"
+              :size="chunk.size"
+              :total="chunk.total"
+              :loading="chunkLoading"
+              data-test="chunk-tree-list"
+              @page-change="loadChunkPage"
+            />
             <p v-if="rechunkAction.error" class="inline-error" role="alert">{{ rechunkAction.error }}</p>
             <p v-if="rechunkAction.success" class="inline-success">{{ rechunkAction.success }}</p>
           </article>
@@ -499,6 +561,19 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.chunk-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.chunk-card-header h2 {
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 .muted-text {

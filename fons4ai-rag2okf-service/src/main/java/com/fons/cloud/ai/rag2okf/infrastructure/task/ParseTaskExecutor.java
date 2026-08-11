@@ -2,6 +2,7 @@ package com.fons.cloud.ai.rag2okf.infrastructure.task;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fons.cloud.ai.rag2okf.common.dto.ParseTaskPayload;
+import com.fons.cloud.ai.rag2okf.application.parsing.ParseApplicationService;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactScope;
@@ -92,6 +93,13 @@ public class ParseTaskExecutor implements TaskExecutionPort {
             log.error("Failed to deserialize parse payload: taskKey={}", task.taskKey(), e);
             return new TaskExecutionResult.FatalFailure(
                     "PAYLOAD_INVALID", "任务输入快照解析失败");
+        }
+
+        // 标记文档解析状态为执行中，前端据此继续轮询；异常不中断解析流程
+        try {
+            self.markParseRunning(payload.sourceDocumentId());
+        } catch (Exception e) {
+            log.warn("Failed to mark parse running: taskKey={}", task.taskKey(), e);
         }
 
         ArtifactScope scope = new ArtifactScope(
@@ -206,6 +214,47 @@ public class ParseTaskExecutor implements TaskExecutionPort {
         boolean updated = sourceDocumentDomainService.updateById(document);
         if (!updated) {
             throw new DocumentArtifactException("文档指针切换失败（CAS 冲突）: " + payload.documentKey());
+        }
+    }
+
+    /**
+     * 标记文档解析状态为执行中（RUNNING）。
+     *
+     * <p>通过 @Lazy 自引用触发 Spring AOP 代理，使 @Transactional 生效，
+     * 与 {@link #persistParseResult} 模式一致。
+     *
+     * @param sourceDocumentId 源文档主键
+     */
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
+    public void markParseRunning(Long sourceDocumentId) {
+        KbSourceDocumentEntity document = sourceDocumentDomainService.getById(sourceDocumentId);
+        if (document != null) {
+            document.setParseStatus(ParseApplicationService.PARSE_STATUS_RUNNING);
+            sourceDocumentDomainService.updateById(document);
+        }
+    }
+
+    /**
+     * 任务终态失败回调：将文档解析状态更新为 FAILED。
+     *
+     * <p>由 {@code DistributedLockedTaskExecutor} 在任务最终失败时调用，
+     * 确保前端轮询依据正确流转到终态。
+     *
+     * @param task         处理任务领域模型
+     * @param errorCode    安全化错误码
+     * @param errorMessage 安全化错误摘要
+     */
+    @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
+    public void onTerminalFailure(ProcessingTask task, String errorCode, String errorMessage) {
+        Long sourceDocumentId = task.entity().getSourceDocumentId();
+        if (sourceDocumentId == null) {
+            return;
+        }
+        KbSourceDocumentEntity document = sourceDocumentDomainService.getById(sourceDocumentId);
+        if (document != null) {
+            document.setParseStatus(ParseApplicationService.PARSE_STATUS_FAILED);
+            sourceDocumentDomainService.updateById(document);
         }
     }
 

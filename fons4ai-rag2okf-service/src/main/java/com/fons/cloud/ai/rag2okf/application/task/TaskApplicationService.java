@@ -11,6 +11,7 @@ import com.fons.cloud.ai.rag2okf.common.dto.TaskStatus;
 import com.fons.cloud.ai.rag2okf.common.dto.TaskType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +33,7 @@ public class TaskApplicationService {
 
     private final KbProcessingTaskDomainService taskDomainService;
     private final ModelBusinessKeyGenerator keyGenerator;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     /**
      * 幂等创建任务。
@@ -81,6 +83,8 @@ public class TaskApplicationService {
         entity.setMaxAttempts(ProcessingTask.DEFAULT_MAX_ATTEMPTS);
         entity.setPayloadJson(payloadJson);
         taskDomainService.save(entity);
+        // 新建任务发布事件，事务提交后异步触发立即执行；幂等命中不发布
+        applicationEventPublisher.publishEvent(new TaskCreatedEvent(entity.getTaskKey()));
         return new ProcessingTask(entity);
     }
 
@@ -167,6 +171,46 @@ public class TaskApplicationService {
                         .orderByAsc(KbProcessingTaskEntity::getExecutionDeadline)
                         .last("LIMIT " + batchSize));
         return entities.stream().map(ProcessingTask::new).toList();
+    }
+
+    /**
+     * 扫描退避到期需要恢复的 RETRY_WAIT 任务。
+     *
+     * <p>RETRY_WAIT 状态的任务 nextRunAt 为退避到期时间，到期后需转回 QUEUED 才能被
+     * {@link #scanCandidates} 扫描执行。此方法只查询不更新，更新由
+     * {@link #requeueFromRetryWait} 在事务内完成。
+     *
+     * @param now       当前时间
+     * @param batchSize 批量大小
+     * @return 退避已到期的 RETRY_WAIT 任务列表
+     */
+    public List<ProcessingTask> scanRetryWaitTasks(Date now, int batchSize) {
+        List<KbProcessingTaskEntity> entities = taskDomainService.list(
+                Wrappers.<KbProcessingTaskEntity>lambdaQuery()
+                        .eq(KbProcessingTaskEntity::getStatus, TaskStatus.RETRY_WAIT.name())
+                        .le(KbProcessingTaskEntity::getNextRunAt, now)
+                        .orderByAsc(KbProcessingTaskEntity::getNextRunAt)
+                        .last("LIMIT " + batchSize));
+        return entities.stream().map(ProcessingTask::new).toList();
+    }
+
+    /**
+     * 将 RETRY_WAIT 任务转回 QUEUED（退避到期恢复）。
+     *
+     * <p>独立事务保证 CAS 原子性，转换后由调用方立即触发执行或等待兜底扫描。
+     *
+     * @param taskKey 任务业务标识
+     * @return true 如果成功转回 QUEUED；false 如果任务已不在 RETRY_WAIT 状态（被其他实例处理）
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean requeueFromRetryWait(String taskKey) {
+        ProcessingTask task = findByKey(taskKey);
+        if (task == null || task.status() != TaskStatus.RETRY_WAIT) {
+            return false;
+        }
+        task.markRequeued();
+        updateTask(task);
+        return true;
     }
 
     /**

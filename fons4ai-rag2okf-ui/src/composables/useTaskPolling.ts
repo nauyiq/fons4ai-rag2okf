@@ -9,21 +9,17 @@ export interface UseTaskPollingOptions {
   isActive: () => boolean
   /** 任务更新回调，接收最新 task 数据 */
   onUpdate: (task: TaskSummary) => void
-  /** 首次轮询间隔（ms），默认 2000 */
+  /** 轮询间隔（ms），默认 5000 */
   intervalMs?: number
-  /** 轮询间隔上限（ms），默认 15000 */
-  maxIntervalMs?: number
-  /** 退避系数，每次轮询后间隔 × 该系数，默认 1.5 */
-  backoffFactor?: number
 }
 
 /**
  * 异步任务轮询组合式函数。
  *
- * <p>封装指数退避轮询策略，用于文档解析、发布、重新分块等异步任务的进度刷新。
+ * <p>封装固定间隔轮询策略，用于文档解析、发布、重新分块等异步任务的进度刷新。
  *
  * <ul>
- *   <li>指数退避：首次 intervalMs，每次 ×backoffFactor，上限 maxIntervalMs</li>
+ *   <li>固定间隔：每次轮询后按 intervalMs 间隔执行下一次</li>
  *   <li>终态停止：isActive 返回 false 时自动停止</li>
  *   <li>单飞：重叠请求时复用进行中的 Promise，不重复发起</li>
  *   <li>卸载清理：onBeforeUnmount 清理定时器，防止内存泄漏</li>
@@ -38,9 +34,7 @@ export function useTaskPolling(options: UseTaskPollingOptions): {
     fetcher,
     isActive,
     onUpdate,
-    intervalMs = 2000,
-    maxIntervalMs = 15000,
-    backoffFactor = 1.5,
+    intervalMs = 5000,
   } = options
 
   /** 当前定时器 ID，null 表示无待执行定时器 */
@@ -49,8 +43,6 @@ export function useTaskPolling(options: UseTaskPollingOptions): {
   let inFlight: Promise<TaskSummary | undefined> | null = null
   /** 轮询是否处于运行状态 */
   let running = false
-  /** 当前轮询间隔（随退避递增，上限 maxIntervalMs） */
-  let currentInterval = intervalMs
 
   /** 清除待执行定时器 */
   function clearTimer(): void {
@@ -67,7 +59,7 @@ export function useTaskPolling(options: UseTaskPollingOptions): {
       stop()
       return
     }
-    timerId = setTimeout(poll, currentInterval)
+    timerId = setTimeout(poll, intervalMs)
   }
 
   /** 执行一次轮询：调用 fetcher 获取最新任务状态 */
@@ -100,8 +92,6 @@ export function useTaskPolling(options: UseTaskPollingOptions): {
       return
     }
 
-    // 递增间隔（指数退避，上限 maxIntervalMs）
-    currentInterval = Math.min(currentInterval * backoffFactor, maxIntervalMs)
     scheduleNext()
   }
 
@@ -109,7 +99,6 @@ export function useTaskPolling(options: UseTaskPollingOptions): {
   function start(): void {
     if (running) return
     running = true
-    currentInterval = intervalMs
     scheduleNext()
   }
 

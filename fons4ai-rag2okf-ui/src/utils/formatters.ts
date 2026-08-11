@@ -51,8 +51,9 @@ const PUBLISH_STATUS_LABELS: Record<string, string> = {
 
 /** 任务状态到中文的映射。 */
 const TASK_STATUS_LABELS: Record<string, string> = {
-  PENDING: '等待中',
+  QUEUED: '排队中',
   RUNNING: '执行中',
+  RETRY_WAIT: '重试中',
   SUCCEEDED: '已完成',
   FAILED: '已失败',
   CANCELLED: '已取消',

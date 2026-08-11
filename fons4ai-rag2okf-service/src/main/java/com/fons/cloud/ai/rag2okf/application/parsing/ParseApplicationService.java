@@ -36,6 +36,7 @@ import com.fons.cloud.ai.rag2okf.domain.service.KbParseRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbSourceDocumentDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbWorkspaceDomainService;
 import com.fons.cloud.ai.rag2okf.common.dto.TaskType;
+import com.fons.cloud.ai.rag2okf.common.dto.TaskStatus;
 import com.fons.cloud.ai.rag2okf.infrastructure.identity.WorkspaceAccessPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -65,6 +66,10 @@ public class ParseApplicationService {
 
     private static final String PARSE_STATUS_QUEUED = "QUEUED";
     private static final String PARSE_STATUS_NOT_STARTED = "NOT_STARTED";
+    /** 解析执行中：任务开始执行时写入，前端据此继续轮询。 */
+    public static final String PARSE_STATUS_RUNNING = "RUNNING";
+    /** 解析失败：任务终态失败时写入，前端据此停止轮询并展示重试入口。 */
+    public static final String PARSE_STATUS_FAILED = "FAILED";
     private static final String DEFAULT_PARSER_PROFILE = "NATIVE_TIKA";
 
     private final CurrentUserContext currentUserContext;
@@ -264,6 +269,12 @@ public class ParseApplicationService {
         var originalTask = taskApplicationService.findByKey(taskKey);
         if (originalTask == null) {
             throw new TaskExecutionException("Task not found: " + taskKey);
+        }
+
+        // 仅失败状态的任务可重试，避免误重试正在执行或已成功的任务（AC-008）
+        if (originalTask.status() != TaskStatus.FAILED) {
+            throw new TaskExecutionException(
+                    "TASK_NOT_RETRYABLE: 仅失败状态的任务可重试，当前状态: " + originalTask.status());
         }
 
         KbSourceDocumentEntity document = sourceDocumentDomainService.getById(

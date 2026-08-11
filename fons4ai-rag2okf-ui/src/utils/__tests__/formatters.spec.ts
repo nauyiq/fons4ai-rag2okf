@@ -71,7 +71,7 @@ describe('formatters', () => {
 
   describe('taskStatusLabel', () => {
     it('maps known statuses', () => {
-      expect(taskStatusLabel('PENDING')).toBe('等待中')
+      expect(taskStatusLabel('QUEUED')).toBe('排队中')
       expect(taskStatusLabel('RUNNING')).toBe('执行中')
       expect(taskStatusLabel('SUCCEEDED')).toBe('已完成')
       expect(taskStatusLabel('FAILED')).toBe('已失败')
