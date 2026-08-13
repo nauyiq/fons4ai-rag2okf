@@ -1,9 +1,8 @@
 package com.fons.cloud.ai.rag2okf.common.response;
 
-import com.fons.cloud.ai.rag2okf.common.constants.WorkspaceRole;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceMemberEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbUser;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspace;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceMember;
 
 /**
  * 面向客户端的用户资料安全响应，不包含密码摘要和会话令牌。
@@ -37,8 +36,8 @@ public record UserProfileResponse(
      * @param membership 工作空间成员关系实体（可为 null）
      * @return 安全的用户资料响应
      */
-    public static UserProfileResponse from(KbUserEntity user, KbWorkspaceEntity workspace,
-                                           KbWorkspaceMemberEntity membership) {
+    public static UserProfileResponse from(KbUser user, KbWorkspace workspace,
+                                           KbWorkspaceMember membership) {
         return new UserProfileResponse(
                 user.getUserKey(), user.getEmail(), user.getDisplayName(), user.getAvatarUrl(),
                 user.getPreferenceJson(),

@@ -15,8 +15,8 @@ import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBaseEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbProcessingTaskEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbPublicationRevisionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbUser;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspace;
 import com.fons.cloud.ai.rag2okf.common.dto.PublicationManifest;
 import com.fons.cloud.ai.rag2okf.domain.service.KbChunkRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
@@ -85,10 +85,10 @@ public class PublicationApplicationService {
      */
     @Transactional(rollbackFor = Exception.class)
     public PublicationResponse triggerPublish(String documentKey, String triggerType) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         KbSourceDocumentEntity document = requireDocument(documentKey);
         KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBase(document.getKnowledgeBaseId());
-        KbWorkspaceEntity workspace = requireWorkspace(knowledgeBase.getWorkspaceId());
+        KbWorkspace workspace = requireWorkspace(knowledgeBase.getWorkspaceId());
         workspaceAccessPolicy.checkAccess(
                 user.getUserKey(), workspace.getWorkspaceKey(), WorkspaceRole.ADMIN);
 
@@ -216,8 +216,8 @@ public class PublicationApplicationService {
         return knowledgeBase;
     }
 
-    private KbWorkspaceEntity requireWorkspace(Long workspaceId) {
-        KbWorkspaceEntity workspace = workspaceDomainService.getById(workspaceId);
+    private KbWorkspace requireWorkspace(Long workspaceId) {
+        KbWorkspace workspace = workspaceDomainService.getById(workspaceId);
         if (workspace == null) {
             throw new WorkspaceAccessDeniedException();
         }

@@ -1,9 +1,8 @@
 package com.fons.cloud.ai.rag2okf.application.task;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.common.exeception.TaskExecutionException;
+import com.fons.cloud.ai.rag2okf.common.utils.BusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbProcessingTaskEntity;
 import com.fons.cloud.ai.rag2okf.domain.service.KbProcessingTaskDomainService;
 import com.fons.cloud.ai.rag2okf.common.dto.ProcessingTask;
@@ -32,7 +31,6 @@ import java.util.List;
 public class TaskApplicationService {
 
     private final KbProcessingTaskDomainService taskDomainService;
-    private final ModelBusinessKeyGenerator keyGenerator;
     private final ApplicationEventPublisher applicationEventPublisher;
 
     /**
@@ -70,7 +68,7 @@ public class TaskApplicationService {
         }
 
         KbProcessingTaskEntity entity = new KbProcessingTaskEntity();
-        entity.setTaskKey(keyGenerator.nextKey());
+        entity.setTaskKey(BusinessKeyGenerator.nextKey());
         entity.setWorkspaceId(workspaceId);
         entity.setKnowledgeBaseId(knowledgeBaseId);
         entity.setSourceDocumentId(sourceDocumentId);

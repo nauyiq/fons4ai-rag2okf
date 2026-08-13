@@ -1,4 +1,4 @@
-package com.fons.cloud.ai.rag2okf.controller;
+package com.fons.cloud.ai.rag2okf.controller.knowledgebase;
 
 import com.fons.cloud.ai.rag2okf.application.knowledgebase.KnowledgeBaseApplicationService;
 import com.fons.cloud.ai.rag2okf.common.request.CreateKnowledgeBaseRequest;

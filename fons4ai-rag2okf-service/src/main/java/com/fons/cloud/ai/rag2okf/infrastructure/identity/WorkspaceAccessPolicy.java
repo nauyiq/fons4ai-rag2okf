@@ -6,9 +6,9 @@ import com.fons.cloud.ai.rag2okf.common.constants.WorkspaceMemberStatus;
 import com.fons.cloud.ai.rag2okf.common.constants.WorkspaceRole;
 import com.fons.cloud.ai.rag2okf.common.constants.WorkspaceStatus;
 import com.fons.cloud.ai.rag2okf.common.exeception.WorkspaceAccessDeniedException;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceMemberEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbUser;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspace;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceMember;
 import com.fons.cloud.ai.rag2okf.domain.service.KbUserDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbWorkspaceDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbWorkspaceMemberDomainService;
@@ -38,21 +38,21 @@ public class WorkspaceAccessPolicy {
      * @param requiredRole 目标操作所需的最小本地角色
      */
     public void checkAccess(String userKey, String workspaceKey, WorkspaceRole requiredRole) {
-        KbUserEntity user = userDomainService.getOne(Wrappers.<KbUserEntity>lambdaQuery()
-                .eq(KbUserEntity::getUserKey, userKey));
+        KbUser user = userDomainService.getOne(Wrappers.<KbUser>lambdaQuery()
+                .eq(KbUser::getUserKey, userKey));
         if (user == null || user.getStatus() != UserStatus.ACTIVE) {
             saTokenAuthTemplate.kickout(userKey);
             throw new WorkspaceAccessDeniedException();
         }
-        KbWorkspaceEntity workspace = workspaceDomainService.getOne(Wrappers.<KbWorkspaceEntity>lambdaQuery()
-                .eq(KbWorkspaceEntity::getWorkspaceKey, workspaceKey));
+        KbWorkspace workspace = workspaceDomainService.getOne(Wrappers.<KbWorkspace>lambdaQuery()
+                .eq(KbWorkspace::getWorkspaceKey, workspaceKey));
         if (workspace == null || workspace.getStatus() != WorkspaceStatus.ACTIVE) {
             throw new WorkspaceAccessDeniedException();
         }
-        KbWorkspaceMemberEntity membership = workspaceMemberDomainService.getOne(
-                Wrappers.<KbWorkspaceMemberEntity>lambdaQuery()
-                        .eq(KbWorkspaceMemberEntity::getWorkspaceId, workspace.getId())
-                        .eq(KbWorkspaceMemberEntity::getUserId, user.getId())
+        KbWorkspaceMember membership = workspaceMemberDomainService.getOne(
+                Wrappers.<KbWorkspaceMember>lambdaQuery()
+                        .eq(KbWorkspaceMember::getWorkspaceId, workspace.getId())
+                        .eq(KbWorkspaceMember::getUserId, user.getId())
         );
         if (membership == null || membership.getStatus() != WorkspaceMemberStatus.ACTIVE) {
             throw new WorkspaceAccessDeniedException();

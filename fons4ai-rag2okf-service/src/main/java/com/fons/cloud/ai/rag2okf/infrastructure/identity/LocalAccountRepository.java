@@ -1,6 +1,6 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.identity;
 
-import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbUser;
 
 import java.util.Date;
 import java.util.Optional;
@@ -18,7 +18,7 @@ public interface LocalAccountRepository {
      * @param normalizedEmail trim 且小写后的邮箱
      * @return 本地账号；不存在时为空
      */
-    Optional<KbUserEntity> findByNormalizedEmail(String normalizedEmail);
+    Optional<KbUser> findByNormalizedEmail(String normalizedEmail);
 
     /**
      * 按 Sa-Token loginId 查询本地账号。
@@ -26,7 +26,7 @@ public interface LocalAccountRepository {
      * @param userKey 不可变业务用户标识
      * @return 本地账号；不存在时为空
      */
-    Optional<KbUserEntity> findByUserKey(String userKey);
+    Optional<KbUser> findByUserKey(String userKey);
 
     /**
      * 更新最近一次成功登录时间。
@@ -41,7 +41,7 @@ public interface LocalAccountRepository {
      *
      * @param user 用户资料快照，不包含密码摘要更新
      */
-    void updateProfile(KbUserEntity user);
+    void updateProfile(KbUser user);
 
     /**
      * 判断规范化邮箱是否已被注册。
@@ -57,5 +57,5 @@ public interface LocalAccountRepository {
      * @param user 已填充必要字段的新用户实体
      * @return 保存后的实体，包含数据库生成的主键
      */
-    KbUserEntity save(KbUserEntity user);
+    KbUser save(KbUser user);
 }

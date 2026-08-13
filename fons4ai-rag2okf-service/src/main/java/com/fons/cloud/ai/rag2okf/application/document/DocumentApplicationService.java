@@ -3,7 +3,6 @@ package com.fons.cloud.ai.rag2okf.application.document;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
-import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.common.dto.FileValidationPolicy;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.application.parsing.ParseApplicationService;
@@ -24,11 +23,12 @@ import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactScope;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactType;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.OriginalArtifactRequest;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.StoredArtifact;
+import com.fons.cloud.ai.rag2okf.common.utils.BusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBaseEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbProcessingTaskEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbUser;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspace;
 import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbSourceDocumentDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbWorkspaceDomainService;
@@ -73,7 +73,6 @@ public class DocumentApplicationService {
     private final KbWorkspaceDomainService workspaceDomainService;
     private final DocumentArtifactStore documentArtifactStore;
     private final FileValidationPolicy fileValidationPolicy;
-    private final ModelBusinessKeyGenerator keyGenerator;
     private final TaskApplicationService taskApplicationService;
     private final ParseApplicationService parseApplicationService;
 
@@ -94,14 +93,14 @@ public class DocumentApplicationService {
      * @return 上传受理响应
      */
     public DocumentUploadResponse uploadDocument(String knowledgeBaseKey, MultipartFile file, String parseMode, String folderPath) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBaseAccess(
                 user.getUserKey(), knowledgeBaseKey, WorkspaceRole.ADMIN);
-        KbWorkspaceEntity workspace = requireWorkspace(knowledgeBase.getWorkspaceId());
+        KbWorkspace workspace = requireWorkspace(knowledgeBase.getWorkspaceId());
 
         FileValidationPolicy.ValidatedFile validatedFile = validateFile(file);
-        String documentKey = keyGenerator.nextKey();
-        String fileToken = keyGenerator.nextKey();
+        String documentKey = BusinessKeyGenerator.nextKey();
+        String fileToken = BusinessKeyGenerator.nextKey();
         String fileExtension = extractExtension(validatedFile.safeFilename());
         String safeFolderPath = sanitizeFolderPath(folderPath);
 
@@ -168,11 +167,11 @@ public class DocumentApplicationService {
      */
     public DocumentUploadResponse updateDocumentFile(
             String documentKey, MultipartFile file, String parseMode, String expectedCurrentFileToken) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         KbSourceDocumentEntity document = requireDocument(documentKey);
         KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBaseAccess(
                 user.getUserKey(), document.getKnowledgeBaseId(), WorkspaceRole.ADMIN, documentKey);
-        KbWorkspaceEntity workspace = requireWorkspace(knowledgeBase.getWorkspaceId());
+        KbWorkspace workspace = requireWorkspace(knowledgeBase.getWorkspaceId());
 
         // CAS 前置校验：比较 expectedCurrentFileToken 与 document.fileToken
         if (document.getFileToken() == null || !document.getFileToken().equals(expectedCurrentFileToken)) {
@@ -180,7 +179,7 @@ public class DocumentApplicationService {
         }
 
         FileValidationPolicy.ValidatedFile validatedFile = validateFile(file);
-        String newFileToken = keyGenerator.nextKey();
+        String newFileToken = BusinessKeyGenerator.nextKey();
         String fileExtension = extractExtension(validatedFile.safeFilename());
 
         // 上传新文件到 MinIO（事务外）
@@ -260,7 +259,7 @@ public class DocumentApplicationService {
      */
     public PageResponse<DocumentSummaryResponse> listDocuments(
             String knowledgeBaseKey, int page, int size, String folderPath) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBaseAccess(
                 user.getUserKey(), knowledgeBaseKey, WorkspaceRole.KNOWLEDGE_USER);
         int safePage = Math.max(0, page);
@@ -288,7 +287,7 @@ public class DocumentApplicationService {
      * @return 文档详情响应
      */
     public DocumentDetailResponse getDocumentDetail(String documentKey) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         KbSourceDocumentEntity document = requireDocument(documentKey);
         KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBase(
                 document.getKnowledgeBaseId());
@@ -324,11 +323,11 @@ public class DocumentApplicationService {
      * @return 文件内容与元数据
      */
     public DocumentFileContent downloadDocumentFile(String documentKey) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         KbSourceDocumentEntity document = requireDocument(documentKey);
         KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBase(
                 document.getKnowledgeBaseId());
-        KbWorkspaceEntity workspace = requireWorkspaceAccess(
+        KbWorkspace workspace = requireWorkspaceAccess(
                 user.getUserKey(), knowledgeBase.getWorkspaceId(), WorkspaceRole.KNOWLEDGE_USER);
 
         ArtifactScope scope = new ArtifactScope(
@@ -400,23 +399,23 @@ public class DocumentApplicationService {
         return document;
     }
 
-    private KbWorkspaceEntity requireWorkspace(Long workspaceId) {
-        KbWorkspaceEntity workspace = workspaceDomainService.getById(workspaceId);
+    private KbWorkspace requireWorkspace(Long workspaceId) {
+        KbWorkspace workspace = workspaceDomainService.getById(workspaceId);
         if (workspace == null) {
             throw new WorkspaceAccessDeniedException();
         }
         return workspace;
     }
 
-    private KbWorkspaceEntity requireWorkspaceAccess(
+    private KbWorkspace requireWorkspaceAccess(
             String userKey, Long workspaceId, WorkspaceRole requiredRole) {
-        KbWorkspaceEntity workspace = requireWorkspace(workspaceId);
+        KbWorkspace workspace = requireWorkspace(workspaceId);
         workspaceAccessPolicy.checkAccess(userKey, workspace.getWorkspaceKey(), requiredRole);
         return workspace;
     }
 
     private String resolveWorkspaceKey(Long workspaceId) {
-        KbWorkspaceEntity workspace = requireWorkspace(workspaceId);
+        KbWorkspace workspace = requireWorkspace(workspaceId);
         return workspace.getWorkspaceKey();
     }
 

@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
-import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.common.constants.ModelProfileStatus;
 import com.fons.cloud.ai.rag2okf.common.constants.ModelUsageType;
 import com.fons.cloud.ai.rag2okf.common.constants.WorkspaceRole;
@@ -22,11 +21,12 @@ import com.fons.cloud.ai.rag2okf.common.response.KnowledgeBaseResponse;
 import com.fons.cloud.ai.rag2okf.common.response.KnowledgeBaseSummaryResponse;
 import com.fons.cloud.ai.rag2okf.common.response.ModelBindingResponse;
 import com.fons.cloud.ai.rag2okf.common.response.PageResponse;
+import com.fons.cloud.ai.rag2okf.common.utils.BusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBaseEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbModelBindingEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbModelProfileEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbUser;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspace;
 import com.fons.cloud.ai.rag2okf.common.dto.ChunkProfile;
 import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbModelBindingDomainService;
@@ -76,7 +76,6 @@ public class KnowledgeBaseApplicationService {
     private final KbModelBindingDomainService modelBindingDomainService;
     private final KbModelProfileDomainService modelProfileDomainService;
     private final KbUserDomainService userDomainService;
-    private final ModelBusinessKeyGenerator keyGenerator;
     private final ModelUsagePolicy modelUsagePolicy;
     private final ObjectMapper objectMapper;
 
@@ -94,8 +93,8 @@ public class KnowledgeBaseApplicationService {
      */
     @Transactional(rollbackFor = Exception.class)
     public KnowledgeBaseResponse createKnowledgeBase(String workspaceKey, CreateKnowledgeBaseRequest request) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
-        KbWorkspaceEntity workspace = requireWorkspaceAccess(user.getUserKey(), workspaceKey, WorkspaceRole.ADMIN);
+        KbUser user = currentUserContext.requireCurrentUser();
+        KbWorkspace workspace = requireWorkspaceAccess(user.getUserKey(), workspaceKey, WorkspaceRole.ADMIN);
         ChunkProfile chunkProfile = toChunkProfile(request.chunkProfile());
         validateSettings(request.autoParse(), request.autoPublish(), request.parserProfile());
         String name = requiredText(request.name(), MAX_NAME_LENGTH);
@@ -103,7 +102,7 @@ public class KnowledgeBaseApplicationService {
         String parserProfile = requiredText(request.parserProfile(), MAX_PARSER_PROFILE_LENGTH);
 
         KbKnowledgeBaseEntity entity = new KbKnowledgeBaseEntity();
-        entity.setKnowledgeBaseKey(keyGenerator.nextKey());
+        entity.setKnowledgeBaseKey(BusinessKeyGenerator.nextKey());
         entity.setWorkspaceId(workspace.getId());
         entity.setOwnerUserId(user.getId());
         entity.setName(name);
@@ -134,8 +133,8 @@ public class KnowledgeBaseApplicationService {
      */
     public PageResponse<KnowledgeBaseSummaryResponse> listKnowledgeBases(
             String workspaceKey, int page, int size) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
-        KbWorkspaceEntity workspace = requireWorkspaceAccess(
+        KbUser user = currentUserContext.requireCurrentUser();
+        KbWorkspace workspace = requireWorkspaceAccess(
                 user.getUserKey(), workspaceKey, WorkspaceRole.KNOWLEDGE_USER);
         Page<KbKnowledgeBaseEntity> pageParam = new Page<>(page + 1, size);
         Page<KbKnowledgeBaseEntity> result = knowledgeBaseDomainService.page(pageParam,
@@ -143,7 +142,7 @@ public class KnowledgeBaseApplicationService {
                         .eq(KbKnowledgeBaseEntity::getWorkspaceId, workspace.getId())
                         .orderByDesc(KbKnowledgeBaseEntity::getUpdated));
         // 批量查询知识库创建者，避免逐条 N+1 查 kb_user
-        Map<Long, KbUserEntity> ownerMap = loadOwnerUserMap(result.getRecords());
+        Map<Long, KbUser> ownerMap = loadOwnerUserMap(result.getRecords());
         List<KnowledgeBaseSummaryResponse> records = result.getRecords().stream()
                 .map(entity -> toSummaryResponse(entity, user.getId(), ownerMap))
                 .toList();
@@ -159,9 +158,9 @@ public class KnowledgeBaseApplicationService {
      * @return 知识库详情响应
      */
     public KnowledgeBaseResponse getKnowledgeBase(String knowledgeBaseKey) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         KbKnowledgeBaseEntity entity = requireKnowledgeBase(knowledgeBaseKey);
-        KbWorkspaceEntity workspace = requireWorkspaceAccess(
+        KbWorkspace workspace = requireWorkspaceAccess(
                 user.getUserKey(), resolveWorkspaceKey(entity), WorkspaceRole.KNOWLEDGE_USER);
         List<ModelBindingResponse> bindings = loadBindings(entity.getId());
         return toResponse(entity, workspace.getWorkspaceKey(), bindings);
@@ -180,9 +179,9 @@ public class KnowledgeBaseApplicationService {
      */
     @Transactional(rollbackFor = Exception.class)
     public KnowledgeBaseResponse updateKnowledgeBase(String knowledgeBaseKey, UpdateKnowledgeBaseRequest request) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         KbKnowledgeBaseEntity entity = requireKnowledgeBase(knowledgeBaseKey);
-        KbWorkspaceEntity workspace = requireWorkspaceAccess(
+        KbWorkspace workspace = requireWorkspaceAccess(
                 user.getUserKey(), resolveWorkspaceKey(entity), WorkspaceRole.ADMIN);
         if (entity.getVersion() != request.revision()) {
             throw new KnowledgeBaseConflictException();
@@ -238,7 +237,7 @@ public class KnowledgeBaseApplicationService {
      * @return 模型用途绑定列表
      */
     public List<ModelBindingResponse> getModelBindings(String knowledgeBaseKey) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         KbKnowledgeBaseEntity entity = requireKnowledgeBase(knowledgeBaseKey);
         requireWorkspaceAccess(user.getUserKey(), resolveWorkspaceKey(entity), WorkspaceRole.KNOWLEDGE_USER);
         return loadBindings(entity.getId());
@@ -256,9 +255,9 @@ public class KnowledgeBaseApplicationService {
      */
     @Transactional(rollbackFor = Exception.class)
     public List<ModelBindingResponse> saveModelBindings(String knowledgeBaseKey, SaveModelBindingsRequest request) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         KbKnowledgeBaseEntity entity = requireKnowledgeBase(knowledgeBaseKey);
-        KbWorkspaceEntity workspace = requireWorkspaceAccess(
+        KbWorkspace workspace = requireWorkspaceAccess(
                 user.getUserKey(), resolveWorkspaceKey(entity), WorkspaceRole.ADMIN);
         List<ModelBindingResponse> bindings = saveBindings(entity.getId(), workspace.getOwnerUserId(),
                 request.modelBindings() != null ? request.modelBindings() : List.of());
@@ -275,7 +274,7 @@ public class KnowledgeBaseApplicationService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void deleteKnowledgeBase(String knowledgeBaseKey) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         KbKnowledgeBaseEntity entity = knowledgeBaseDomainService.getOne(
                 Wrappers.<KbKnowledgeBaseEntity>lambdaQuery()
                         .eq(KbKnowledgeBaseEntity::getKnowledgeBaseKey, knowledgeBaseKey));
@@ -300,7 +299,7 @@ public class KnowledgeBaseApplicationService {
             KbModelProfileEntity profile = requireOwnedActiveCompatibleProfile(
                     item.modelProfileKey(), workspaceOwnerUserId, item.usageType());
             KbModelBindingEntity binding = new KbModelBindingEntity();
-            binding.setBindingKey(keyGenerator.nextKey());
+            binding.setBindingKey(BusinessKeyGenerator.nextKey());
             binding.setKnowledgeBaseId(knowledgeBaseId);
             binding.setUsageType(item.usageType());
             binding.setModelProfileId(profile.getId());
@@ -358,12 +357,12 @@ public class KnowledgeBaseApplicationService {
         return entity;
     }
 
-    private KbWorkspaceEntity requireWorkspaceAccess(
+    private KbWorkspace requireWorkspaceAccess(
             String userKey, String workspaceKey, WorkspaceRole requiredRole) {
         workspaceAccessPolicy.checkAccess(userKey, workspaceKey, requiredRole);
-        KbWorkspaceEntity workspace = workspaceDomainService.getOne(
-                Wrappers.<KbWorkspaceEntity>lambdaQuery()
-                        .eq(KbWorkspaceEntity::getWorkspaceKey, workspaceKey));
+        KbWorkspace workspace = workspaceDomainService.getOne(
+                Wrappers.<KbWorkspace>lambdaQuery()
+                        .eq(KbWorkspace::getWorkspaceKey, workspaceKey));
         if (workspace == null) {
             throw new WorkspaceAccessDeniedException();
         }
@@ -371,7 +370,7 @@ public class KnowledgeBaseApplicationService {
     }
 
     private String resolveWorkspaceKey(KbKnowledgeBaseEntity entity) {
-        KbWorkspaceEntity workspace = workspaceDomainService.getById(entity.getWorkspaceId());
+        KbWorkspace workspace = workspaceDomainService.getById(entity.getWorkspaceId());
         if (workspace == null) {
             throw new WorkspaceAccessDeniedException();
         }
@@ -454,10 +453,10 @@ public class KnowledgeBaseApplicationService {
     }
 
     private KnowledgeBaseSummaryResponse toSummaryResponse(
-            KbKnowledgeBaseEntity entity, Long currentUserId, Map<Long, KbUserEntity> ownerMap) {
+            KbKnowledgeBaseEntity entity, Long currentUserId, Map<Long, KbUser> ownerMap) {
         String ownerUserKey = null;
         if (entity.getOwnerUserId() != null) {
-            KbUserEntity owner = ownerMap.get(entity.getOwnerUserId());
+            KbUser owner = ownerMap.get(entity.getOwnerUserId());
             if (owner != null) {
                 ownerUserKey = owner.getUserKey();
             }
@@ -477,7 +476,7 @@ public class KnowledgeBaseApplicationService {
      * @param knowledgeBases 当前页知识库实体
      * @return ownerUserId 到用户实体的映射，无创建者时返回空映射
      */
-    private Map<Long, KbUserEntity> loadOwnerUserMap(List<KbKnowledgeBaseEntity> knowledgeBases) {
+    private Map<Long, KbUser> loadOwnerUserMap(List<KbKnowledgeBaseEntity> knowledgeBases) {
         Set<Long> ownerUserIds = knowledgeBases.stream()
                 .map(KbKnowledgeBaseEntity::getOwnerUserId)
                 .filter(Objects::nonNull)
@@ -486,6 +485,6 @@ public class KnowledgeBaseApplicationService {
             return Map.of();
         }
         return userDomainService.listByIds(ownerUserIds).stream()
-                .collect(Collectors.toMap(KbUserEntity::getId, Function.identity()));
+                .collect(Collectors.toMap(KbUser::getId, Function.identity()));
     }
 }

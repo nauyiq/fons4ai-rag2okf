@@ -1,7 +1,7 @@
 package com.fons.cloud.ai.rag2okf.domain.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspace;
 import com.fons.cloud.ai.rag2okf.domain.mapper.KbWorkspaceMapper;
 import com.fons.cloud.ai.rag2okf.domain.service.KbWorkspaceDomainService;
 import org.springframework.stereotype.Service;
@@ -13,6 +13,6 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class KbWorkspaceDomainServiceImpl
-        extends ServiceImpl<KbWorkspaceMapper, KbWorkspaceEntity>
+        extends ServiceImpl<KbWorkspaceMapper, KbWorkspace>
         implements KbWorkspaceDomainService {
 }

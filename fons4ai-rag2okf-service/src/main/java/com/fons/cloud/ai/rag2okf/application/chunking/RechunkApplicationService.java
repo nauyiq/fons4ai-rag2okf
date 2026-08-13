@@ -3,11 +3,9 @@ package com.fons.cloud.ai.rag2okf.application.chunking;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
-import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.common.dto.RechunkTaskPayload;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.common.constants.WorkspaceRole;
-import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
 import com.fons.cloud.ai.rag2okf.common.exeception.KnowledgeBaseConflictException;
 import com.fons.cloud.ai.rag2okf.common.exeception.TaskExecutionException;
 import com.fons.cloud.ai.rag2okf.common.exeception.WorkspaceAccessDeniedException;
@@ -16,8 +14,8 @@ import com.fons.cloud.ai.rag2okf.domain.entity.KbChunkRevisionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBaseEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbParseRevisionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbUser;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspace;
 import com.fons.cloud.ai.rag2okf.common.dto.ParsingChunkProfile;
 import com.fons.cloud.ai.rag2okf.domain.service.KbChunkRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
@@ -79,10 +77,10 @@ public class RechunkApplicationService {
             throw new TaskExecutionException("RECHUNK_CONFIRMATION_REQUIRED");
         }
 
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         KbSourceDocumentEntity document = requireDocument(documentKey);
         KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBase(document.getKnowledgeBaseId());
-        KbWorkspaceEntity workspace = requireWorkspace(knowledgeBase.getWorkspaceId());
+        KbWorkspace workspace = requireWorkspace(knowledgeBase.getWorkspaceId());
         workspaceAccessPolicy.checkAccess(
                 user.getUserKey(), workspace.getWorkspaceKey(), WorkspaceRole.ADMIN);
 
@@ -164,8 +162,8 @@ public class RechunkApplicationService {
         return knowledgeBase;
     }
 
-    private KbWorkspaceEntity requireWorkspace(Long workspaceId) {
-        KbWorkspaceEntity workspace = workspaceDomainService.getById(workspaceId);
+    private KbWorkspace requireWorkspace(Long workspaceId) {
+        KbWorkspace workspace = workspaceDomainService.getById(workspaceId);
         if (workspace == null) {
             throw new WorkspaceAccessDeniedException();
         }

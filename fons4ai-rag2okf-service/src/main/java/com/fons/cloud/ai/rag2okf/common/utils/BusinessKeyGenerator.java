@@ -1,7 +1,4 @@
-package com.fons.cloud.ai.rag2okf.infrastructure.model;
-
-import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
-import org.springframework.stereotype.Component;
+package com.fons.cloud.ai.rag2okf.common.utils;
 
 import java.security.SecureRandom;
 
@@ -10,15 +7,13 @@ import java.security.SecureRandom;
  *
  * @author hongqy
  */
-@Component
-public class UlidModelBusinessKeyGenerator implements ModelBusinessKeyGenerator {
+public class BusinessKeyGenerator {
 
     private static final char[] BASE32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ".toCharArray();
     private static final int RANDOM_BITS = 80;
-    private final SecureRandom secureRandom = new SecureRandom();
+    private final static SecureRandom SECURE_RANDOM = new SecureRandom();
 
-    @Override
-    public String nextKey() {
+    public static String nextKey() {
         char[] value = new char[26];
         long timestamp = System.currentTimeMillis();
         for (int index = 9; index >= 0; index--) {
@@ -26,7 +21,7 @@ public class UlidModelBusinessKeyGenerator implements ModelBusinessKeyGenerator 
             timestamp >>>= 5;
         }
         byte[] random = new byte[RANDOM_BITS / Byte.SIZE];
-        secureRandom.nextBytes(random);
+        SECURE_RANDOM.nextBytes(random);
         int bitBuffer = 0;
         int bufferedBits = 0;
         int target = 10;

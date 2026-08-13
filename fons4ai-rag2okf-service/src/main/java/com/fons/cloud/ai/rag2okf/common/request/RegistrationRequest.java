@@ -1,5 +1,9 @@
 package com.fons.cloud.ai.rag2okf.common.request;
 
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Size;
+
 /**
  * 邮箱密码注册请求。
  *
@@ -10,5 +14,8 @@ package com.fons.cloud.ai.rag2okf.common.request;
  * @param termsAccepted  是否同意条款，必须为 true
  * @author hongqy
  */
-public record RegistrationRequest(String email, String password, String confirmPassword, String displayName, boolean termsAccepted) {
+public record RegistrationRequest(@Email(message = "邮箱格式不正确") String email,
+                                  @Size(min = 8, max = 20, message = "密码长度必须在8到20个之间") String password,
+                                  @Size(min = 8, max = 20, message = "密码长度必须在8到20个字符之间") String confirmPassword,
+                                  @Max(value = 20, message = "展示名称长度必须在20个字符以内") String displayName, boolean termsAccepted) {
 }

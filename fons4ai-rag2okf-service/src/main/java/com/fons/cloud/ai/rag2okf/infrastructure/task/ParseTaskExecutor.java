@@ -6,13 +6,12 @@ import com.fons.cloud.ai.rag2okf.application.parsing.ParseApplicationService;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactScope;
+import com.fons.cloud.ai.rag2okf.common.utils.BusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbChunkRevisionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbParseRevisionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
-import com.fons.cloud.ai.rag2okf.common.dto.ChunkManifest;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentChunkerPort;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentParserPort;
-import com.fons.cloud.ai.rag2okf.common.dto.ParseManifest;
 import com.fons.cloud.ai.rag2okf.domain.service.KbChunkRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbParseRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbSourceDocumentDomainService;
@@ -20,13 +19,10 @@ import com.fons.cloud.ai.rag2okf.common.dto.ProcessingTask;
 import com.fons.cloud.ai.rag2okf.common.dto.TaskExecutionPort;
 import com.fons.cloud.ai.rag2okf.common.dto.TaskExecutionResult;
 import com.fons.cloud.ai.rag2okf.common.dto.TaskType;
-import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
-
-import java.util.Date;
 
 /**
  * 解析任务执行器，实现 {@link TaskExecutionPort}。
@@ -54,7 +50,6 @@ public class ParseTaskExecutor implements TaskExecutionPort {
     private final KbChunkRevisionDomainService chunkRevisionDomainService;
     private final KbSourceDocumentDomainService sourceDocumentDomainService;
     private final TaskApplicationService taskApplicationService;
-    private final ModelBusinessKeyGenerator keyGenerator;
     private final ObjectMapper objectMapper;
 
     @Lazy
@@ -67,7 +62,6 @@ public class ParseTaskExecutor implements TaskExecutionPort {
                              KbChunkRevisionDomainService chunkRevisionDomainService,
                              KbSourceDocumentDomainService sourceDocumentDomainService,
                              TaskApplicationService taskApplicationService,
-                             ModelBusinessKeyGenerator keyGenerator,
                              ObjectMapper objectMapper) {
         this.documentParserPort = documentParserPort;
         this.documentChunkerPort = documentChunkerPort;
@@ -75,7 +69,6 @@ public class ParseTaskExecutor implements TaskExecutionPort {
         this.chunkRevisionDomainService = chunkRevisionDomainService;
         this.sourceDocumentDomainService = sourceDocumentDomainService;
         this.taskApplicationService = taskApplicationService;
-        this.keyGenerator = keyGenerator;
         this.objectMapper = objectMapper;
     }
 
@@ -104,8 +97,8 @@ public class ParseTaskExecutor implements TaskExecutionPort {
 
         ArtifactScope scope = new ArtifactScope(
                 payload.workspaceKey(), payload.knowledgeBaseKey(), payload.documentKey());
-        String parseRevisionKey = keyGenerator.nextKey();
-        String chunkRevisionKey = keyGenerator.nextKey();
+        String parseRevisionKey = BusinessKeyGenerator.nextKey();
+        String chunkRevisionKey = BusinessKeyGenerator.nextKey();
 
         try {
             // 1. 解析文件

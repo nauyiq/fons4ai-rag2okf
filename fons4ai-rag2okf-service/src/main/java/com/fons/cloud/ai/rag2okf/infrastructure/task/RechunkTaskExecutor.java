@@ -2,12 +2,12 @@ package com.fons.cloud.ai.rag2okf.infrastructure.task;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fons.cloud.ai.rag2okf.common.dto.RechunkTaskPayload;
-import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactReference;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactScope;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactType;
+import com.fons.cloud.ai.rag2okf.common.utils.BusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbChunkRevisionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentChunkerPort;
@@ -46,7 +46,6 @@ public class RechunkTaskExecutor implements TaskExecutionPort {
     private final KbChunkRevisionDomainService chunkRevisionDomainService;
     private final KbSourceDocumentDomainService sourceDocumentDomainService;
     private final DocumentArtifactStore documentArtifactStore;
-    private final ModelBusinessKeyGenerator keyGenerator;
     private final ObjectMapper objectMapper;
 
     @Lazy
@@ -57,13 +56,11 @@ public class RechunkTaskExecutor implements TaskExecutionPort {
                                KbChunkRevisionDomainService chunkRevisionDomainService,
                                KbSourceDocumentDomainService sourceDocumentDomainService,
                                DocumentArtifactStore documentArtifactStore,
-                               ModelBusinessKeyGenerator keyGenerator,
                                ObjectMapper objectMapper) {
         this.documentChunkerPort = documentChunkerPort;
         this.chunkRevisionDomainService = chunkRevisionDomainService;
         this.sourceDocumentDomainService = sourceDocumentDomainService;
         this.documentArtifactStore = documentArtifactStore;
-        this.keyGenerator = keyGenerator;
         this.objectMapper = objectMapper;
     }
 
@@ -85,7 +82,7 @@ public class RechunkTaskExecutor implements TaskExecutionPort {
 
         ArtifactScope scope = new ArtifactScope(
                 payload.workspaceKey(), payload.knowledgeBaseKey(), payload.documentKey());
-        String newChunkRevisionKey = keyGenerator.nextKey();
+        String newChunkRevisionKey = BusinessKeyGenerator.nextKey();
 
         try {
             // 1. 基于已有 ParseRevision 重新分块

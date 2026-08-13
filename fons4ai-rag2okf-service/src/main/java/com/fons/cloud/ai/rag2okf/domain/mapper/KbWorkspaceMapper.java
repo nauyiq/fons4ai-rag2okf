@@ -1,6 +1,6 @@
 package com.fons.cloud.ai.rag2okf.domain.mapper;
 
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspace;
 import com.fons.cloud.db.mybatisplus.BasePlusMapper;
 import org.apache.ibatis.annotations.Mapper;
 
@@ -10,5 +10,5 @@ import org.apache.ibatis.annotations.Mapper;
  * @author hongqy
  */
 @Mapper
-public interface KbWorkspaceMapper extends BasePlusMapper<KbWorkspaceEntity> {
+public interface KbWorkspaceMapper extends BasePlusMapper<KbWorkspace> {
 }

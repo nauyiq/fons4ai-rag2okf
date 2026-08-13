@@ -1,7 +1,7 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.identity;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbUser;
 import com.fons.cloud.ai.rag2okf.domain.service.KbUserDomainService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -21,44 +21,44 @@ public class MybatisLocalAccountRepository implements LocalAccountRepository {
     private final KbUserDomainService userDomainService;
 
     @Override
-    public Optional<KbUserEntity> findByNormalizedEmail(String normalizedEmail) {
+    public Optional<KbUser> findByNormalizedEmail(String normalizedEmail) {
         return Optional.ofNullable(userDomainService.getOne(
-                Wrappers.<KbUserEntity>lambdaQuery().eq(KbUserEntity::getEmail, normalizedEmail)
+                Wrappers.<KbUser>lambdaQuery().eq(KbUser::getEmail, normalizedEmail)
         ));
     }
 
     @Override
-    public Optional<KbUserEntity> findByUserKey(String userKey) {
+    public Optional<KbUser> findByUserKey(String userKey) {
         return Optional.ofNullable(userDomainService.getOne(
-                Wrappers.<KbUserEntity>lambdaQuery().eq(KbUserEntity::getUserKey, userKey)
+                Wrappers.<KbUser>lambdaQuery().eq(KbUser::getUserKey, userKey)
         ));
     }
 
     @Override
     public void updateLastLoginAt(Long userId, Date loginAt) {
-        userDomainService.update(Wrappers.<KbUserEntity>lambdaUpdate()
-                .eq(KbUserEntity::getId, userId)
-                .set(KbUserEntity::getLastLoginAt, loginAt));
+        userDomainService.update(Wrappers.<KbUser>lambdaUpdate()
+                .eq(KbUser::getId, userId)
+                .set(KbUser::getLastLoginAt, loginAt));
     }
 
     @Override
-    public void updateProfile(KbUserEntity user) {
-        userDomainService.update(Wrappers.<KbUserEntity>lambdaUpdate()
-                .eq(KbUserEntity::getId, user.getId())
-                .set(KbUserEntity::getDisplayName, user.getDisplayName())
-                .set(KbUserEntity::getAvatarUrl, user.getAvatarUrl())
-                .set(KbUserEntity::getPreferenceJson, user.getPreferenceJson()));
+    public void updateProfile(KbUser user) {
+        userDomainService.update(Wrappers.<KbUser>lambdaUpdate()
+                .eq(KbUser::getId, user.getId())
+                .set(KbUser::getDisplayName, user.getDisplayName())
+                .set(KbUser::getAvatarUrl, user.getAvatarUrl())
+                .set(KbUser::getPreferenceJson, user.getPreferenceJson()));
     }
 
     @Override
     public boolean existsByNormalizedEmail(String normalizedEmail) {
         return userDomainService.count(
-                Wrappers.<KbUserEntity>lambdaQuery().eq(KbUserEntity::getEmail, normalizedEmail)
+                Wrappers.<KbUser>lambdaQuery().eq(KbUser::getEmail, normalizedEmail)
         ) > 0;
     }
 
     @Override
-    public KbUserEntity save(KbUserEntity user) {
+    public KbUser save(KbUser user) {
         userDomainService.save(user);
         return user;
     }

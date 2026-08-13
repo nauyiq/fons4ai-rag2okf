@@ -1,11 +1,11 @@
-package com.fons.cloud.ai.rag2okf.controller;
+package com.fons.cloud.ai.rag2okf.controller.user;
 
-import com.fons.cloud.ai.rag2okf.application.identity.UserProfileApplicationService;
+import com.fons.cloud.ai.rag2okf.application.user.UserProfileApplicationService;
 import com.fons.cloud.ai.rag2okf.common.request.UpdateUserProfileRequest;
 import com.fons.cloud.ai.rag2okf.common.response.UserProfileResponse;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceMemberEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbUser;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspace;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceMember;
 import com.fons.cloud.common.result.R;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,9 +33,9 @@ public class UserProfileController {
      */
     @GetMapping
     public R<UserProfileResponse> currentUser() {
-        KbUserEntity user = userProfileApplicationService.currentUser();
-        KbWorkspaceEntity workspace = userProfileApplicationService.currentWorkspace(user);
-        KbWorkspaceMemberEntity membership = userProfileApplicationService.currentMembership(user, workspace);
+        KbUser user = userProfileApplicationService.currentUser();
+        KbWorkspace workspace = userProfileApplicationService.currentWorkspace(user);
+        KbWorkspaceMember membership = userProfileApplicationService.currentMembership(user, workspace);
         return R.ok(UserProfileResponse.from(user, workspace, membership));
     }
 
@@ -47,10 +47,10 @@ public class UserProfileController {
      */
     @PatchMapping
     public R<UserProfileResponse> updateCurrentUser(@RequestBody UpdateUserProfileRequest request) {
-        KbUserEntity user = userProfileApplicationService.updateCurrentUser(
+        KbUser user = userProfileApplicationService.updateCurrentUser(
                 request.displayName(), request.avatarUrl(), request.preferenceJson());
-        KbWorkspaceEntity workspace = userProfileApplicationService.currentWorkspace(user);
-        KbWorkspaceMemberEntity membership = userProfileApplicationService.currentMembership(user, workspace);
+        KbWorkspace workspace = userProfileApplicationService.currentWorkspace(user);
+        KbWorkspaceMember membership = userProfileApplicationService.currentMembership(user, workspace);
         return R.ok(UserProfileResponse.from(user, workspace, membership));
     }
 

@@ -1,5 +1,8 @@
 package com.fons.cloud.ai.rag2okf.common.request;
 
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Size;
+
 /**
  * 本地邮箱密码登录请求。
  *
@@ -8,5 +11,5 @@ package com.fons.cloud.ai.rag2okf.common.request;
  * @param rememberMe 是否请求更长的会话有效期
  * @author hongqy
  */
-public record LoginRequest(String email, String password, boolean rememberMe) {
+public record LoginRequest(@Email(message = "邮箱格式不正确") String email, @Size(min = 8, max = 20, message = "密码长度必须在8到20个字符之间") String password, boolean rememberMe) {
 }

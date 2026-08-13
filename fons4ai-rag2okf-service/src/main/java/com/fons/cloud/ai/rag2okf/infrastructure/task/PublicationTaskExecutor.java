@@ -10,12 +10,10 @@ import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactConten
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactReference;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactScope;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactType;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbChunkRevisionEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbParseRevisionEntity;
+import com.fons.cloud.ai.rag2okf.common.utils.BusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbPublicationRevisionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
 import com.fons.cloud.ai.rag2okf.common.dto.ChunkManifest;
-import com.fons.cloud.ai.rag2okf.common.dto.PublicationManifest;
 import com.fons.cloud.ai.rag2okf.common.dto.PublicationProjectionPort;
 import com.fons.cloud.ai.rag2okf.common.dto.PublicationProjectionPort.ChunkProjection;
 import com.fons.cloud.ai.rag2okf.common.dto.PublicationProjectionPort.ProjectionRequest;
@@ -28,7 +26,6 @@ import com.fons.cloud.ai.rag2okf.common.dto.ProcessingTask;
 import com.fons.cloud.ai.rag2okf.common.dto.TaskExecutionPort;
 import com.fons.cloud.ai.rag2okf.common.dto.TaskExecutionResult;
 import com.fons.cloud.ai.rag2okf.common.dto.TaskType;
-import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.application.publication.EmbeddingProjectionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -78,7 +75,6 @@ public class PublicationTaskExecutor implements TaskExecutionPort {
     private final KbPublicationRevisionDomainService publicationRevisionDomainService;
     private final TaskApplicationService taskApplicationService;
     private final OutboxApplicationService outboxApplicationService;
-    private final ModelBusinessKeyGenerator keyGenerator;
     private final ObjectMapper objectMapper;
     private final EmbeddingProjectionService embeddingProjectionService;
 
@@ -94,7 +90,6 @@ public class PublicationTaskExecutor implements TaskExecutionPort {
                                    KbPublicationRevisionDomainService publicationRevisionDomainService,
                                    TaskApplicationService taskApplicationService,
                                    OutboxApplicationService outboxApplicationService,
-                                   ModelBusinessKeyGenerator keyGenerator,
                                    ObjectMapper objectMapper,
                                    EmbeddingProjectionService embeddingProjectionService) {
         this.documentArtifactStore = documentArtifactStore;
@@ -105,7 +100,6 @@ public class PublicationTaskExecutor implements TaskExecutionPort {
         this.publicationRevisionDomainService = publicationRevisionDomainService;
         this.taskApplicationService = taskApplicationService;
         this.outboxApplicationService = outboxApplicationService;
-        this.keyGenerator = keyGenerator;
         this.objectMapper = objectMapper;
         this.embeddingProjectionService = embeddingProjectionService;
     }
@@ -128,7 +122,7 @@ public class PublicationTaskExecutor implements TaskExecutionPort {
 
         ArtifactScope scope = new ArtifactScope(
                 payload.workspaceKey(), payload.knowledgeBaseKey(), payload.documentKey());
-        String publicationRevisionKey = keyGenerator.nextKey();
+        String publicationRevisionKey = BusinessKeyGenerator.nextKey();
 
         try {
             // 1. 读取 ChunkManifest

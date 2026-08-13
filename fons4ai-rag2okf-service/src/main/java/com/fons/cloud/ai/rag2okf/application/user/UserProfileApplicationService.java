@@ -1,13 +1,13 @@
-package com.fons.cloud.ai.rag2okf.application.identity;
+package com.fons.cloud.ai.rag2okf.application.user;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceMemberEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbUser;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspace;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceMember;
 import com.fons.cloud.ai.rag2okf.domain.mapper.KbWorkspaceMapper;
 import com.fons.cloud.ai.rag2okf.domain.mapper.KbWorkspaceMemberMapper;
 import com.fons.cloud.ai.rag2okf.common.exeception.AuthenticationDeniedException;
@@ -55,12 +55,12 @@ public class UserProfileApplicationService {
      *
      * @return 当前活跃本地账号
      */
-    public KbUserEntity currentUser() {
+    public KbUser currentUser() {
         if (!saTokenAuthTemplate.isLogin()) {
             throw new AuthenticationDeniedException();
         }
         String userKey = saTokenAuthTemplate.getCurrentLoginIdAsString();
-        KbUserEntity user = accountRepository.findByUserKey(userKey).orElse(null);
+        KbUser user = accountRepository.findByUserKey(userKey).orElse(null);
         if (user == null || user.getStatus() != UserStatus.ACTIVE) {
             saTokenAuthTemplate.kickout(userKey);
             throw new AuthenticationDeniedException();
@@ -74,10 +74,10 @@ public class UserProfileApplicationService {
      * @param user 当前用户
      * @return 个人工作空间实体，不存在时返回 null
      */
-    public KbWorkspaceEntity currentWorkspace(KbUserEntity user) {
+    public KbWorkspace currentWorkspace(KbUser user) {
         return workspaceMapper.selectOne(
-                new LambdaQueryWrapper<KbWorkspaceEntity>()
-                        .eq(KbWorkspaceEntity::getOwnerUserId, user.getId()));
+                new LambdaQueryWrapper<KbWorkspace>()
+                        .eq(KbWorkspace::getOwnerUserId, user.getId()));
     }
 
     /**
@@ -87,15 +87,15 @@ public class UserProfileApplicationService {
      * @param workspace 工作空间
      * @return 成员关系实体，不存在时返回 null
      */
-    public KbWorkspaceMemberEntity currentMembership(KbUserEntity user, KbWorkspaceEntity workspace) {
+    public KbWorkspaceMember currentMembership(KbUser user, KbWorkspace workspace) {
         if (workspace == null) {
             return null;
         }
         return workspaceMemberMapper.selectOne(
-                new LambdaQueryWrapper<KbWorkspaceMemberEntity>()
-                        .eq(KbWorkspaceMemberEntity::getWorkspaceId, workspace.getId())
-                        .eq(KbWorkspaceMemberEntity::getUserId, user.getId())
-                        .eq(KbWorkspaceMemberEntity::getStatus, WorkspaceMemberStatus.ACTIVE));
+                new LambdaQueryWrapper<KbWorkspaceMember>()
+                        .eq(KbWorkspaceMember::getWorkspaceId, workspace.getId())
+                        .eq(KbWorkspaceMember::getUserId, user.getId())
+                        .eq(KbWorkspaceMember::getStatus, WorkspaceMemberStatus.ACTIVE));
     }
 
     /**
@@ -106,8 +106,8 @@ public class UserProfileApplicationService {
      * @param preferenceJson 用户偏好快照
      * @return 更新后的当前用户
      */
-    public KbUserEntity updateCurrentUser(String displayName, String avatarUrl, String preferenceJson) {
-        KbUserEntity user = currentUser();
+    public KbUser updateCurrentUser(String displayName, String avatarUrl, String preferenceJson) {
+        KbUser user = currentUser();
         // PATCH 采用字段级部分更新：未提交的字段保持原值；空字符串仍可显式清空可选头像。
         if (displayName != null) {
             user.setDisplayName(normalizeDisplayName(displayName));

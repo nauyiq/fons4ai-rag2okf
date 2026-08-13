@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.Serial;
 import java.util.Date;
@@ -26,7 +27,7 @@ import java.util.Date;
 @NoArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @TableName("kb_user")
-public class KbUserEntity extends CommonEntity {
+public class KbUser extends CommonEntity {
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -57,4 +58,22 @@ public class KbUserEntity extends CommonEntity {
 
     /** 当前密码摘要生效时间。 */
     private Date passwordChangedAt;
+
+    public boolean isActive() {
+        return status == UserStatus.ACTIVE;
+    }
+
+
+    public static KbUser create(String userKey, String passwordHash, String email, String displayName) {
+        KbUser user = new KbUser();
+        user.setUserKey(userKey);
+        user.setEmail(email);
+        user.setPasswordHash(passwordHash);
+        user.setDisplayName(StringUtils.isBlank(displayName) ? email : displayName);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setPreferenceJson("{}");
+        user.setPasswordChangedAt(new Date());
+        return user;
+    }
+
 }

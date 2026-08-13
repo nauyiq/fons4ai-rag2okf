@@ -10,7 +10,6 @@ import com.fons.cloud.ai.rag2okf.common.constants.ModelType;
 import com.fons.cloud.ai.rag2okf.common.dto.CredentialCipher;
 import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
 import com.fons.cloud.ai.rag2okf.common.dto.EncryptedCredential;
-import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.common.dto.ModelClientFactory;
 import com.fons.cloud.ai.rag2okf.common.dto.ModelParameterCodec;
 import com.fons.cloud.ai.rag2okf.common.dto.ResolvedModelDescriptor;
@@ -26,9 +25,10 @@ import com.fons.cloud.ai.rag2okf.common.response.ModelConnectionResponse;
 import com.fons.cloud.ai.rag2okf.common.response.ModelProfileResponse;
 import com.fons.cloud.ai.rag2okf.common.response.ModelProviderTemplateResponse;
 import com.fons.cloud.ai.rag2okf.common.response.ModelTestResponse;
+import com.fons.cloud.ai.rag2okf.common.utils.BusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbModelConnectionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbModelProfileEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbUser;
 import com.fons.cloud.ai.rag2okf.domain.service.KbModelConnectionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbModelProfileDomainService;
 import com.fons.cloud.ai.rag2okf.infrastructure.model.ModelEndpointPolicy;
@@ -58,7 +58,6 @@ public class ModelConfigurationApplicationService {
     private final KbModelConnectionDomainService connectionDomainService;
     private final KbModelProfileDomainService profileDomainService;
     private final CredentialCipher credentialCipher;
-    private final ModelBusinessKeyGenerator keyGenerator;
     private final ModelEndpointPolicy endpointPolicy;
     private final ModelParameterCodec parameterCodec;
     private final UserModelResolver userModelResolver;
@@ -83,7 +82,7 @@ public class ModelConfigurationApplicationService {
      * @return 当前用户拥有的连接列表
      */
     public List<ModelConnectionResponse> listConnections() {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         return connectionDomainService.list(Wrappers.<KbModelConnectionEntity>lambdaQuery()
                         .eq(KbModelConnectionEntity::getOwnerUserId, user.getId())
                         .orderByDesc(KbModelConnectionEntity::getUpdated))
@@ -100,14 +99,14 @@ public class ModelConfigurationApplicationService {
      */
     @Transactional(rollbackFor = Exception.class)
     public ModelConnectionResponse createConnection(CreateModelConnectionRequest request) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         // providerCode 为字符串：匹配已知模板时复用模板信息，否则按自定义处理使用传入的 providerName 和 baseUrl
         String providerCode = validateProviderCode(request.providerCode());
         validateConnectionRequest(request.providerName(), request.displayName(), request.baseUrl());
         endpointPolicy.validate(request.baseUrl());
         EncryptedCredential credential = credentialCipher.encrypt(request.apiKey());
         KbModelConnectionEntity connection = new KbModelConnectionEntity();
-        connection.setConnectionKey(keyGenerator.nextKey());
+        connection.setConnectionKey(BusinessKeyGenerator.nextKey());
         connection.setOwnerUserId(user.getId());
         connection.setProviderCode(providerCode);
         connection.setProviderName(requiredText(request.providerName(), 80));
@@ -132,7 +131,7 @@ public class ModelConfigurationApplicationService {
      */
     @Transactional(rollbackFor = Exception.class)
     public ModelConnectionResponse updateConnection(String connectionKey, UpdateModelConnectionRequest request) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         KbModelConnectionEntity connection = requireOwnedConnection(connectionKey, user.getId());
         if (request.providerName() != null) {
             connection.setProviderName(requiredText(request.providerName(), 80));
@@ -162,7 +161,7 @@ public class ModelConfigurationApplicationService {
      */
     @Transactional(rollbackFor = Exception.class)
     public ModelConnectionResponse replaceApiKey(String connectionKey, String apiKey) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         KbModelConnectionEntity connection = requireOwnedConnection(connectionKey, user.getId());
         if (apiKey == null || apiKey.isBlank()) {
             throw new ModelConfigurationException();
@@ -185,7 +184,7 @@ public class ModelConfigurationApplicationService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void deleteConnection(String connectionKey) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         KbModelConnectionEntity connection = requireOwnedConnection(connectionKey, user.getId());
         // 先软删除该连接下的所有档案
         profileDomainService.remove(Wrappers.<KbModelProfileEntity>lambdaQuery()
@@ -201,7 +200,7 @@ public class ModelConfigurationApplicationService {
      * @return 当前用户拥有的档案列表
      */
     public List<ModelProfileResponse> listProfiles(String connectionKey) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         List<KbModelProfileEntity> profiles;
         if (connectionKey != null && !connectionKey.isBlank()) {
             // connectionKey 非空时按所属连接过滤
@@ -228,7 +227,7 @@ public class ModelConfigurationApplicationService {
      */
     @Transactional(rollbackFor = Exception.class)
     public ModelProfileResponse createProfile(CreateModelProfileRequest request) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         KbModelConnectionEntity connection = requireOwnedConnection(request.connectionKey(), user.getId());
         if (connection.getStatus() != ModelConnectionStatus.ACTIVE || request.modelType() == null) {
             throw new ModelConfigurationException();
@@ -236,7 +235,7 @@ public class ModelConfigurationApplicationService {
         validateProfileInput(request.modelType(), request.modelName(), request.dimensions(),
                 request.contextWindowLength(), request.timeoutSeconds(), request.temperature());
         KbModelProfileEntity profile = new KbModelProfileEntity();
-        profile.setProfileKey(keyGenerator.nextKey());
+        profile.setProfileKey(BusinessKeyGenerator.nextKey());
         profile.setOwnerUserId(user.getId());
         profile.setConnectionId(connection.getId());
         profile.setModelType(request.modelType());
@@ -258,7 +257,7 @@ public class ModelConfigurationApplicationService {
      */
     @Transactional(rollbackFor = Exception.class)
     public ModelProfileResponse updateProfile(String profileKey, UpdateModelProfileRequest request) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         KbModelProfileEntity profile = requireOwnedProfile(profileKey, user.getId());
         KbModelConnectionEntity connection = requireOwnedConnectionById(profile.getConnectionId(), user.getId());
         Integer dimensions = request.dimensions() == null ? profile.getDimensions() : request.dimensions();
@@ -290,7 +289,7 @@ public class ModelConfigurationApplicationService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void deleteProfile(String profileKey) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         KbModelProfileEntity profile = requireOwnedProfile(profileKey, user.getId());
         profileDomainService.removeById(profile.getId());
     }
@@ -302,7 +301,7 @@ public class ModelConfigurationApplicationService {
      * @return 安全化测试结果
      */
     public ModelTestResponse testProfile(String profileKey) {
-        KbUserEntity user = currentUserContext.requireCurrentUser();
+        KbUser user = currentUserContext.requireCurrentUser();
         ResolvedUserModel resolvedModel = userModelResolver.resolveOwnedActiveProfile(profileKey, user.getId());
         KbModelProfileEntity profile = resolvedModel.profile();
         KbModelConnectionEntity connection = resolvedModel.connection();

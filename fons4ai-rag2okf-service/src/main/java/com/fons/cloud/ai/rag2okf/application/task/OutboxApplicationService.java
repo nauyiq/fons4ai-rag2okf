@@ -1,7 +1,7 @@
 package com.fons.cloud.ai.rag2okf.application.task;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.fons.cloud.ai.rag2okf.common.dto.ModelBusinessKeyGenerator;
+import com.fons.cloud.ai.rag2okf.common.utils.BusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbOutboxEventEntity;
 import com.fons.cloud.ai.rag2okf.domain.service.KbOutboxEventDomainService;
 import com.fons.cloud.ai.rag2okf.common.dto.OutboxEventStatus;
@@ -36,7 +36,6 @@ public class OutboxApplicationService {
     public static final long OUTBOX_BACKOFF_CAP_MS = 600_000L;
 
     private final KbOutboxEventDomainService outboxDomainService;
-    private final ModelBusinessKeyGenerator keyGenerator;
 
     /**
      * 创建 Outbox 事件。
@@ -52,7 +51,7 @@ public class OutboxApplicationService {
     public KbOutboxEventEntity createEvent(
             String aggregateType, String aggregateKey, String eventType, String payloadJson) {
         KbOutboxEventEntity entity = new KbOutboxEventEntity();
-        entity.setEventKey(keyGenerator.nextKey());
+        entity.setEventKey(BusinessKeyGenerator.nextKey());
         entity.setAggregateType(aggregateType);
         entity.setAggregateKey(aggregateKey);
         entity.setEventType(eventType);

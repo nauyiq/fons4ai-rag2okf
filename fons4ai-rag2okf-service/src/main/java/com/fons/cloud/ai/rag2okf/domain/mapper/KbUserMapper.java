@@ -1,8 +1,7 @@
 package com.fons.cloud.ai.rag2okf.domain.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbUserEntity;
-import com.fons.cloud.db.mybatisplus.BasePlusMapper;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbUser;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
@@ -11,5 +10,5 @@ import org.apache.ibatis.annotations.Mapper;
  * @author hongqy
  */
 @Mapper
-public interface KbUserMapper extends BaseMapper<KbUserEntity> {
+public interface KbUserMapper extends BaseMapper<KbUser> {
 }

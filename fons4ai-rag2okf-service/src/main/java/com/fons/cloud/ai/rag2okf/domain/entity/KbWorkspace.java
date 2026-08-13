@@ -23,7 +23,7 @@ import java.io.Serial;
 @NoArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @TableName("kb_workspace")
-public class KbWorkspaceEntity extends CommonEntity {
+public class KbWorkspace extends CommonEntity {
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -42,4 +42,14 @@ public class KbWorkspaceEntity extends CommonEntity {
 
     /** 工作空间状态。 */
     private WorkspaceStatus status;
+
+    public static KbWorkspace create(String workspaceKey, Long ownerUserId, String userDisplayName) {
+        KbWorkspace kbWorkspace = new KbWorkspace();
+        kbWorkspace.setWorkspaceKey(workspaceKey);
+        kbWorkspace.setName(userDisplayName + " 的知识空间");
+        kbWorkspace.setOwnerUserId(ownerUserId);
+        kbWorkspace.setWorkspaceType(WorkspaceType.PERSONAL);
+        kbWorkspace.setStatus(WorkspaceStatus.ACTIVE);
+        return kbWorkspace;
+    }
 }
