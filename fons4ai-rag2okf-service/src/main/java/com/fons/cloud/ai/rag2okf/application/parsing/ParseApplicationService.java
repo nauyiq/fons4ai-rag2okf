@@ -1,15 +1,17 @@
 package com.fons.cloud.ai.rag2okf.application.parsing;
 
+import com.fons.cloud.ai.rag2okf.common.constants.Rag2OkfResultCode;
+
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
+import com.fons.cloud.ai.rag2okf.infrastructure.adapter.user.SaTokenCurrentUserContext;
 import com.fons.cloud.ai.rag2okf.common.dto.ParseTaskPayload;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
-import com.fons.cloud.ai.rag2okf.common.constants.WorkspaceRole;
+import com.fons.cloud.ai.rag2okf.common.constants.user.WorkspaceRole;
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
 import com.fons.cloud.ai.rag2okf.common.exeception.KnowledgeBaseConflictException;
 import com.fons.cloud.ai.rag2okf.common.exeception.TaskExecutionException;
-import com.fons.cloud.ai.rag2okf.common.exeception.WorkspaceAccessDeniedException;
+import com.fons.cloud.ai.rag2okf.common.exception.user.WorkspaceAccessDeniedException;
 import com.fons.cloud.ai.rag2okf.common.response.ChunkPreviewResponse;
 import com.fons.cloud.ai.rag2okf.common.response.ChunkPreviewResponse.ChunkView;
 import com.fons.cloud.ai.rag2okf.common.response.ParsePreviewResponse;
@@ -21,11 +23,11 @@ import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactRefere
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactScope;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactType;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbChunkRevisionEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBaseEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBase;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbParseRevisionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbUser;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspace;
+import com.fons.cloud.ai.rag2okf.domain.entity.user.KbUser;
+import com.fons.cloud.ai.rag2okf.domain.entity.user.KbWorkspace;
 import com.fons.cloud.ai.rag2okf.common.dto.ChunkManifest;
 import com.fons.cloud.ai.rag2okf.common.dto.ParsingChunkProfile;
 import com.fons.cloud.ai.rag2okf.common.dto.ParseManifest;
@@ -33,10 +35,10 @@ import com.fons.cloud.ai.rag2okf.domain.service.KbChunkRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbParseRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbSourceDocumentDomainService;
-import com.fons.cloud.ai.rag2okf.domain.service.KbWorkspaceDomainService;
+import com.fons.cloud.ai.rag2okf.domain.service.user.KbWorkspaceDomainService;
 import com.fons.cloud.ai.rag2okf.common.dto.TaskType;
 import com.fons.cloud.ai.rag2okf.common.dto.TaskStatus;
-import com.fons.cloud.ai.rag2okf.infrastructure.identity.WorkspaceAccessPolicy;
+import com.fons.cloud.ai.rag2okf.infrastructure.support.user.WorkspaceAccessPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -70,7 +72,7 @@ public class ParseApplicationService {
     public static final String PARSE_STATUS_FAILED = "FAILED";
     private static final String DEFAULT_PARSER_PROFILE = "NATIVE_TIKA";
 
-    private final CurrentUserContext currentUserContext;
+    private final SaTokenCurrentUserContext currentUserContext;
     private final WorkspaceAccessPolicy workspaceAccessPolicy;
     private final KbSourceDocumentDomainService sourceDocumentDomainService;
     private final KbKnowledgeBaseDomainService knowledgeBaseDomainService;
@@ -79,7 +81,6 @@ public class ParseApplicationService {
     private final KbWorkspaceDomainService workspaceDomainService;
     private final DocumentArtifactStore documentArtifactStore;
     private final TaskApplicationService taskApplicationService;
-    private final ModelBusinessKeyGenerator keyGenerator;
     private final ObjectMapper objectMapper;
 
     // ────────────────────────────── 触发解析 ──────────────────────────────
@@ -94,7 +95,7 @@ public class ParseApplicationService {
     public ParseTriggerResponse triggerParse(String documentKey, String parseMode) {
         KbUser user = currentUserContext.requireCurrentUser();
         KbSourceDocumentEntity document = requireDocument(documentKey);
-        KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBase(document.getKnowledgeBaseId());
+        KbKnowledgeBase knowledgeBase = requireKnowledgeBase(document.getKnowledgeBaseId());
         KbWorkspace workspace = requireWorkspace(knowledgeBase.getWorkspaceId());
         workspaceAccessPolicy.checkAccess(
                 user.getUserKey(), workspace.getWorkspaceKey(), WorkspaceRole.ADMIN);
@@ -168,7 +169,7 @@ public class ParseApplicationService {
     public ParsePreviewResponse getParsePreview(String documentKey) {
         KbUser user = currentUserContext.requireCurrentUser();
         KbSourceDocumentEntity document = requireDocument(documentKey);
-        KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBase(document.getKnowledgeBaseId());
+        KbKnowledgeBase knowledgeBase = requireKnowledgeBase(document.getKnowledgeBaseId());
         requireWorkspaceAccess(
                 user.getUserKey(), knowledgeBase.getWorkspaceId(), WorkspaceRole.KNOWLEDGE_USER);
 
@@ -214,7 +215,7 @@ public class ParseApplicationService {
     public ChunkPreviewResponse getChunkPreview(String documentKey, int page, int size) {
         KbUser user = currentUserContext.requireCurrentUser();
         KbSourceDocumentEntity document = requireDocument(documentKey);
-        KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBase(document.getKnowledgeBaseId());
+        KbKnowledgeBase knowledgeBase = requireKnowledgeBase(document.getKnowledgeBaseId());
         requireWorkspaceAccess(
                 user.getUserKey(), knowledgeBase.getWorkspaceId(), WorkspaceRole.KNOWLEDGE_USER);
 
@@ -272,7 +273,8 @@ public class ParseApplicationService {
         // 仅失败状态的任务可重试，避免误重试正在执行或已成功的任务（AC-008）
         if (originalTask.status() != TaskStatus.FAILED) {
             throw new TaskExecutionException(
-                    "TASK_NOT_RETRYABLE: 仅失败状态的任务可重试，当前状态: " + originalTask.status());
+                    Rag2OkfResultCode.TASK_NOT_RETRYABLE.getCode()
+                            + ": 仅失败状态的任务可重试，当前状态: " + originalTask.status());
         }
 
         KbSourceDocumentEntity document = sourceDocumentDomainService.getById(
@@ -280,7 +282,7 @@ public class ParseApplicationService {
         if (document == null) {
             throw new TaskExecutionException("Document not found for task: " + taskKey);
         }
-        KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBase(document.getKnowledgeBaseId());
+        KbKnowledgeBase knowledgeBase = requireKnowledgeBase(document.getKnowledgeBaseId());
         requireWorkspaceAccess(
                 user.getUserKey(), knowledgeBase.getWorkspaceId(), WorkspaceRole.ADMIN);
 
@@ -305,7 +307,7 @@ public class ParseApplicationService {
 
     // ────────────────────────────── 辅助方法 ──────────────────────────────
 
-    private ParsingChunkProfile resolveParsingChunkProfile(KbKnowledgeBaseEntity knowledgeBase) {
+    private ParsingChunkProfile resolveParsingChunkProfile(KbKnowledgeBase knowledgeBase) {
         String json = knowledgeBase.getChunkProfileJson();
         if (json == null || json.isBlank()) {
             return ParsingChunkProfile.DEFAULT_RECURSIVE;
@@ -318,7 +320,7 @@ public class ParseApplicationService {
         }
     }
 
-    private String resolveParserProfile(KbKnowledgeBaseEntity knowledgeBase) {
+    private String resolveParserProfile(KbKnowledgeBase knowledgeBase) {
         String profile = knowledgeBase.getParserProfile();
         return (profile == null || profile.isBlank()) ? DEFAULT_PARSER_PROFILE : profile;
     }
@@ -341,7 +343,7 @@ public class ParseApplicationService {
     }
 
     private ArtifactScope resolveScope(KbSourceDocumentEntity document,
-                                       KbKnowledgeBaseEntity knowledgeBase) {
+                                       KbKnowledgeBase knowledgeBase) {
         KbWorkspace workspace = workspaceDomainService.getById(knowledgeBase.getWorkspaceId());
         return new ArtifactScope(
                 workspace.getWorkspaceKey(),
@@ -367,8 +369,8 @@ public class ParseApplicationService {
         return document;
     }
 
-    private KbKnowledgeBaseEntity requireKnowledgeBase(Long knowledgeBaseId) {
-        KbKnowledgeBaseEntity knowledgeBase = knowledgeBaseDomainService.getById(knowledgeBaseId);
+    private KbKnowledgeBase requireKnowledgeBase(Long knowledgeBaseId) {
+        KbKnowledgeBase knowledgeBase = knowledgeBaseDomainService.getById(knowledgeBaseId);
         if (knowledgeBase == null) {
             throw new WorkspaceAccessDeniedException();
         }

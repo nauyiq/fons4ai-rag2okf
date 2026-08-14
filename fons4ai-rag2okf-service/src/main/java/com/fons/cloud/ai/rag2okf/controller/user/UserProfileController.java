@@ -1,12 +1,10 @@
 package com.fons.cloud.ai.rag2okf.controller.user;
 
 import com.fons.cloud.ai.rag2okf.application.user.UserProfileApplicationService;
-import com.fons.cloud.ai.rag2okf.common.request.UpdateUserProfileRequest;
-import com.fons.cloud.ai.rag2okf.common.response.UserProfileResponse;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbUser;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspace;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspaceMember;
+import com.fons.cloud.ai.rag2okf.common.request.user.UpdateUserProfileRequest;
+import com.fons.cloud.ai.rag2okf.common.response.user.UserProfileResponse;
 import com.fons.cloud.common.result.R;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -33,10 +31,7 @@ public class UserProfileController {
      */
     @GetMapping
     public R<UserProfileResponse> currentUser() {
-        KbUser user = userProfileApplicationService.currentUser();
-        KbWorkspace workspace = userProfileApplicationService.currentWorkspace(user);
-        KbWorkspaceMember membership = userProfileApplicationService.currentMembership(user, workspace);
-        return R.ok(UserProfileResponse.from(user, workspace, membership));
+        return R.ok(userProfileApplicationService.currentProfile());
     }
 
     /**
@@ -46,12 +41,9 @@ public class UserProfileController {
      * @return 更新后的用户资料
      */
     @PatchMapping
-    public R<UserProfileResponse> updateCurrentUser(@RequestBody UpdateUserProfileRequest request) {
-        KbUser user = userProfileApplicationService.updateCurrentUser(
-                request.displayName(), request.avatarUrl(), request.preferenceJson());
-        KbWorkspace workspace = userProfileApplicationService.currentWorkspace(user);
-        KbWorkspaceMember membership = userProfileApplicationService.currentMembership(user, workspace);
-        return R.ok(UserProfileResponse.from(user, workspace, membership));
+    public R<UserProfileResponse> updateCurrentUser(@RequestBody @Valid UpdateUserProfileRequest request) {
+        return R.ok(userProfileApplicationService.updateCurrentUser(
+                request.displayName(), request.avatarUrl(), request.preferenceJson()));
     }
 
 }

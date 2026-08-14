@@ -1,7 +1,7 @@
 package com.fons.cloud.ai.rag2okf.domain.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbModelBindingEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbModelBinding;
 import com.fons.cloud.ai.rag2okf.domain.mapper.KbModelBindingMapper;
 import com.fons.cloud.ai.rag2okf.domain.service.KbModelBindingDomainService;
 import org.springframework.stereotype.Service;
@@ -13,6 +13,6 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class KbModelBindingDomainServiceImpl
-        extends ServiceImpl<KbModelBindingMapper, KbModelBindingEntity>
+        extends ServiceImpl<KbModelBindingMapper, KbModelBinding>
         implements KbModelBindingDomainService {
 }

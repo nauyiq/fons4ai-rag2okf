@@ -1,5 +1,7 @@
 package com.fons.cloud.ai.rag2okf.common.dto;
 
+import com.fons.cloud.ai.rag2okf.common.constants.Rag2OkfResultCode;
+
 import java.util.List;
 
 /**
@@ -144,20 +146,38 @@ public interface PublicationProjectionPort {
      */
     class ProjectionException extends RuntimeException {
 
-        private final String errorCode;
+        private final Rag2OkfResultCode errorCode;
 
-        public ProjectionException(String errorCode, String message) {
+        /**
+         * 创建不携带底层原因的投影异常。
+         *
+         * @param errorCode 项目统一错误码
+         * @param message 内部诊断消息
+         */
+        public ProjectionException(Rag2OkfResultCode errorCode, String message) {
             super(message);
             this.errorCode = errorCode;
         }
 
-        public ProjectionException(String errorCode, String message, Throwable cause) {
+        /**
+         * 创建保留底层原因的投影异常。
+         *
+         * @param errorCode 项目统一错误码
+         * @param message 内部诊断消息
+         * @param cause 底层异常
+         */
+        public ProjectionException(Rag2OkfResultCode errorCode, String message, Throwable cause) {
             super(message, cause);
             this.errorCode = errorCode;
         }
 
+        /**
+         * 获取写入任务记录的 RF 错误码。
+         *
+         * @return RF 错误码
+         */
         public String errorCode() {
-            return errorCode;
+            return errorCode.getCode();
         }
     }
 }

@@ -1,5 +1,7 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.task;
 
+import com.fons.cloud.ai.rag2okf.common.constants.Rag2OkfResultCode;
+
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.common.exeception.TaskExecutionException;
 import com.fons.cloud.ai.rag2okf.common.dto.ProcessingTask;
@@ -102,7 +104,8 @@ public class DistributedLockedTaskExecutor {
         TaskExecutionPort port = portRegistry.get(task.taskType());
         if (port == null) {
             log.error("No TaskExecutionPort for type {}, marking task as FAILED", task.taskType());
-            task.markFailed("NO_EXECUTOR", "No executor registered for " + task.taskType(), new Date());
+            task.markFailed(Rag2OkfResultCode.NO_EXECUTOR.getCode(),
+                    "No executor registered for " + task.taskType(), new Date());
             taskApplicationService.updateTask(task);
             return;
         }
@@ -113,7 +116,8 @@ public class DistributedLockedTaskExecutor {
         } catch (Exception e) {
             log.error("Task execution threw exception: taskKey={}", taskKey, e);
             result = new TaskExecutionResult.RetryableFailure(
-                    "TASK_EXECUTION_ERROR", "执行异常: " + e.getClass().getSimpleName());
+                    Rag2OkfResultCode.TASK_EXECUTION_ERROR.getCode(),
+                    "执行异常: " + e.getClass().getSimpleName());
         }
 
         // 5. CAS 更新最终状态

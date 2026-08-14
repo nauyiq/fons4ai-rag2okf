@@ -21,6 +21,7 @@ import co.elastic.clients.elasticsearch.indices.IndexSettings;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fons.cloud.ai.rag2okf.common.constants.Rag2OkfResultCode;
 import com.fons.cloud.ai.rag2okf.common.dto.PublicationProjectionPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -69,17 +70,6 @@ public class ElasticsearchPublicationProjection implements PublicationProjection
     /** Mapping 资源路径。 */
     public static final String MAPPING_RESOURCE = "elasticsearch/kb-chunk-v1-mapping.json";
 
-    /** 错误码：写入失败。 */
-    public static final String ERR_PROJECTION_WRITE = "PROJECTION_WRITE_ERROR";
-    /** 错误码：清理失败。 */
-    public static final String ERR_PROJECTION_CLEANUP = "PROJECTION_CLEANUP_ERROR";
-    /** 错误码：查询失败。 */
-    public static final String ERR_PROJECTION_QUERY = "PROJECTION_QUERY_ERROR";
-    /** 错误码：索引启动失败。 */
-    public static final String ERR_PROJECTION_BOOTSTRAP = "PROJECTION_BOOTSTRAP_ERROR";
-    /** 错误码：校验失败。 */
-    public static final String ERR_PROJECTION_VERIFY = "PROJECTION_VERIFY_ERROR";
-
     private final ElasticsearchClient client;
     private final ObjectMapper objectMapper;
     private final int embeddingDims;
@@ -106,7 +96,7 @@ public class ElasticsearchPublicationProjection implements PublicationProjection
             log.info("Elasticsearch index bootstrapped: {}, aliases=[{}, {}], dims={}",
                     PHYSICAL_INDEX, READ_ALIAS, WRITE_ALIAS, embeddingDims);
         } catch (IOException e) {
-            throw new ProjectionException(ERR_PROJECTION_BOOTSTRAP,
+            throw new ProjectionException(Rag2OkfResultCode.PROJECTION_BOOTSTRAP_ERROR,
                     "Failed to bootstrap Elasticsearch index: " + PHYSICAL_INDEX, e);
         }
     }
@@ -125,17 +115,17 @@ public class ElasticsearchPublicationProjection implements PublicationProjection
         var record = response.get(PHYSICAL_INDEX);
         if (record == null || record.mappings() == null
                 || record.mappings().properties() == null) {
-            throw new ProjectionException(ERR_PROJECTION_BOOTSTRAP,
+            throw new ProjectionException(Rag2OkfResultCode.PROJECTION_BOOTSTRAP_ERROR,
                     "Existing index missing mapping: " + PHYSICAL_INDEX);
         }
         var vectorProps = record.mappings().properties().get("vector");
         if (vectorProps == null || !vectorProps.isDenseVector()) {
-            throw new ProjectionException(ERR_PROJECTION_BOOTSTRAP,
+            throw new ProjectionException(Rag2OkfResultCode.PROJECTION_BOOTSTRAP_ERROR,
                     "Existing index missing vector dense_vector mapping: " + PHYSICAL_INDEX);
         }
         Integer actualDims = vectorProps.denseVector().dims();
         if (actualDims == null || actualDims != embeddingDims) {
-            throw new ProjectionException(ERR_PROJECTION_BOOTSTRAP,
+            throw new ProjectionException(Rag2OkfResultCode.PROJECTION_BOOTSTRAP_ERROR,
                     "Existing index vector dims mismatch: expected=" + embeddingDims
                             + ", actual=" + actualDims + ", index=" + PHYSICAL_INDEX);
         }
@@ -145,7 +135,7 @@ public class ElasticsearchPublicationProjection implements PublicationProjection
     public ProjectionResult projectChunks(ProjectionRequest request) {
         Objects.requireNonNull(request, "request");
         if (request.chunks() == null || request.chunks().isEmpty()) {
-            throw new ProjectionException(ERR_PROJECTION_VERIFY,
+            throw new ProjectionException(Rag2OkfResultCode.PROJECTION_VERIFY_ERROR,
                     "Empty chunk projection rejected: publicationRevisionKey=" + request.publicationRevisionKey());
         }
 
@@ -156,7 +146,7 @@ public class ElasticsearchPublicationProjection implements PublicationProjection
                 String firstError = extractFirstError(response.items());
                 log.error("Bulk projection had failures: publicationRevisionKey={}, errors={}",
                         request.publicationRevisionKey(), firstError);
-                throw new ProjectionException(ERR_PROJECTION_WRITE,
+                throw new ProjectionException(Rag2OkfResultCode.PROJECTION_WRITE_ERROR,
                         "Bulk projection had failures: " + firstError);
             }
 
@@ -166,7 +156,7 @@ public class ElasticsearchPublicationProjection implements PublicationProjection
             return new ProjectionResult(PHYSICAL_INDEX, written, request.contentHash());
 
         } catch (IOException e) {
-            throw new ProjectionException(ERR_PROJECTION_WRITE,
+            throw new ProjectionException(Rag2OkfResultCode.PROJECTION_WRITE_ERROR,
                     "Failed to bulk project chunks: " + e.getMessage(), e);
         }
     }
@@ -186,7 +176,7 @@ public class ElasticsearchPublicationProjection implements PublicationProjection
                     publicationRevisionKey, deleted);
             return deleted;
         } catch (IOException e) {
-            throw new ProjectionException(ERR_PROJECTION_CLEANUP,
+            throw new ProjectionException(Rag2OkfResultCode.PROJECTION_CLEANUP_ERROR,
                     "Failed to delete projection: " + e.getMessage(), e);
         }
     }
@@ -201,7 +191,7 @@ public class ElasticsearchPublicationProjection implements PublicationProjection
             CountResponse response = client.count(request);
             return response.count();
         } catch (IOException e) {
-            throw new ProjectionException(ERR_PROJECTION_QUERY,
+            throw new ProjectionException(Rag2OkfResultCode.PROJECTION_QUERY_ERROR,
                     "Failed to count projection: " + e.getMessage(), e);
         }
     }

@@ -1,21 +1,22 @@
 package com.fons.cloud.ai.rag2okf.application.publication;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.fons.cloud.ai.rag2okf.common.dto.CredentialCipher;
-import com.fons.cloud.ai.rag2okf.common.dto.EncryptedCredential;
-import com.fons.cloud.ai.rag2okf.common.dto.ModelClientFactory;
-import com.fons.cloud.ai.rag2okf.common.dto.ResolvedModelDescriptor;
-import com.fons.cloud.ai.rag2okf.common.dto.ResolvedUserModel;
-import com.fons.cloud.ai.rag2okf.common.dto.UserModelResolver;
-import com.fons.cloud.ai.rag2okf.common.constants.ModelProfileStatus;
+import com.fons.cloud.ai.rag2okf.common.model.user.EncryptedCredential;
+import com.fons.cloud.ai.rag2okf.common.model.user.ResolvedModelDescriptor;
+import com.fons.cloud.ai.rag2okf.common.model.user.ResolvedUserModel;
+import com.fons.cloud.ai.rag2okf.application.user.UserModelResolver;
+import com.fons.cloud.ai.rag2okf.common.constants.Rag2OkfResultCode;
+import com.fons.cloud.ai.rag2okf.common.constants.user.ModelProfileStatus;
 import com.fons.cloud.ai.rag2okf.common.constants.ModelUsageType;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBaseEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbModelBindingEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbModelProfileEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBase;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbModelBinding;
+import com.fons.cloud.ai.rag2okf.domain.entity.user.KbModelProfile;
 import com.fons.cloud.ai.rag2okf.common.dto.PublicationProjectionPort.ChunkProjection;
 import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbModelBindingDomainService;
-import com.fons.cloud.ai.rag2okf.domain.service.KbModelProfileDomainService;
+import com.fons.cloud.ai.rag2okf.domain.service.user.KbModelProfileDomainService;
+import com.fons.cloud.ai.rag2okf.infrastructure.adapter.user.AesGcmCredentialCipher;
+import com.fons.cloud.ai.rag2okf.infrastructure.client.user.LangChain4jModelClientFactory;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
@@ -33,7 +34,7 @@ import java.util.Map;
 /**
  * 发布时同步向量化分块投影（CR-013，D-007）。
  *
- * <p>从知识库 EMBEDDING 绑定解析用户配置的模型，使用 {@link ModelClientFactory}
+ * <p>从知识库 EMBEDDING 绑定解析用户配置的模型，使用 {@link LangChain4jModelClientFactory}
  * 创建动态 EmbeddingModel 客户端，批量计算分块向量并填充到 {@link ChunkProjection}。
  *
  * <p>设计约束：
@@ -51,21 +52,12 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class EmbeddingProjectionService {
 
-    /** 错误码：知识库不存在。 */
-    public static final String ERR_KB_NOT_FOUND = "EMBEDDING_KB_NOT_FOUND";
-    /** 错误码：模型档案不可用。 */
-    public static final String ERR_PROFILE_UNAVAILABLE = "EMBEDDING_PROFILE_UNAVAILABLE";
-    /** 错误码：向量维度不匹配（FatalFailure）。 */
-    public static final String ERR_DIMS_MISMATCH = "EMBEDDING_DIMS_MISMATCH";
-    /** 错误码：模型调用失败（RetryableFailure）。 */
-    public static final String ERR_MODEL_INVOCATION = "EMBEDDING_MODEL_ERROR";
-
     private final KbKnowledgeBaseDomainService knowledgeBaseDomainService;
     private final KbModelBindingDomainService modelBindingDomainService;
     private final KbModelProfileDomainService modelProfileDomainService;
     private final UserModelResolver userModelResolver;
-    private final CredentialCipher credentialCipher;
-    private final ModelClientFactory modelClientFactory;
+    private final AesGcmCredentialCipher credentialCipher;
+    private final LangChain4jModelClientFactory modelClientFactory;
 
     @Value("${sys.embedding.dims:1024}")
     private int embeddingDims;
@@ -82,18 +74,18 @@ public class EmbeddingProjectionService {
      * @throws EmbeddingException 向量化失败
      */
     public List<ChunkProjection> embedProjections(String knowledgeBaseKey, List<ChunkProjection> projections) {
-        KbKnowledgeBaseEntity kb = knowledgeBaseDomainService.getOne(
-                Wrappers.<KbKnowledgeBaseEntity>lambdaQuery()
-                        .eq(KbKnowledgeBaseEntity::getKnowledgeBaseKey, knowledgeBaseKey));
+        KbKnowledgeBase kb = knowledgeBaseDomainService.getOne(
+                Wrappers.<KbKnowledgeBase>lambdaQuery()
+                        .eq(KbKnowledgeBase::getKnowledgeBaseKey, knowledgeBaseKey));
         if (kb == null) {
-            throw new EmbeddingException(ERR_KB_NOT_FOUND,
+            throw new EmbeddingException(Rag2OkfResultCode.EMBEDDING_KB_NOT_FOUND,
                     "知识库不存在: " + knowledgeBaseKey, true);
         }
 
-        KbModelBindingEntity binding = modelBindingDomainService.getOne(
-                Wrappers.<KbModelBindingEntity>lambdaQuery()
-                        .eq(KbModelBindingEntity::getKnowledgeBaseId, kb.getId())
-                        .eq(KbModelBindingEntity::getUsageType, ModelUsageType.EMBEDDING));
+        KbModelBinding binding = modelBindingDomainService.getOne(
+                Wrappers.<KbModelBinding>lambdaQuery()
+                        .eq(KbModelBinding::getKnowledgeBaseId, kb.getId())
+                        .eq(KbModelBinding::getUsageType, ModelUsageType.EMBEDDING));
 
         // 无 EMBEDDING 绑定 -> 降级 BM25-only
         if (binding == null) {
@@ -101,9 +93,9 @@ public class EmbeddingProjectionService {
             return projections;
         }
 
-        KbModelProfileEntity profile = modelProfileDomainService.getById(binding.getModelProfileId());
+        KbModelProfile profile = modelProfileDomainService.getById(binding.getModelProfileId());
         if (profile == null || profile.getStatus() != ModelProfileStatus.ACTIVE) {
-            throw new EmbeddingException(ERR_PROFILE_UNAVAILABLE,
+            throw new EmbeddingException(Rag2OkfResultCode.EMBEDDING_PROFILE_UNAVAILABLE,
                     "向量化模型档案不可用", true);
         }
 
@@ -148,12 +140,12 @@ public class EmbeddingProjectionService {
         } catch (RuntimeException e) {
             log.warn("Embedding model invocation failed: knowledgeBaseKey={}, error={}",
                     knowledgeBaseKey, e.getClass().getSimpleName());
-            throw new EmbeddingException(ERR_MODEL_INVOCATION,
+            throw new EmbeddingException(Rag2OkfResultCode.EMBEDDING_MODEL_ERROR,
                     "向量化模型调用失败: " + e.getClass().getSimpleName(), false, e);
         }
 
         if (response == null || response.content() == null || response.content().isEmpty()) {
-            throw new EmbeddingException(ERR_MODEL_INVOCATION,
+            throw new EmbeddingException(Rag2OkfResultCode.EMBEDDING_MODEL_ERROR,
                     "向量化模型返回空结果", false);
         }
 
@@ -164,7 +156,7 @@ public class EmbeddingProjectionService {
         if (actualDims != embeddingDims) {
             log.error("Embedding dims mismatch: expected={}, actual={}, knowledgeBaseKey={}",
                     embeddingDims, actualDims, knowledgeBaseKey);
-            throw new EmbeddingException(ERR_DIMS_MISMATCH,
+            throw new EmbeddingException(Rag2OkfResultCode.EMBEDDING_TASK_DIMS_MISMATCH,
                     "向量维度不匹配: expected=" + embeddingDims + ", actual=" + actualDims, true);
         }
 
@@ -196,25 +188,50 @@ public class EmbeddingProjectionService {
      */
     public static class EmbeddingException extends RuntimeException {
 
-        private final String errorCode;
+        private final Rag2OkfResultCode errorCode;
         private final boolean fatal;
 
-        public EmbeddingException(String errorCode, String message, boolean fatal) {
+        /**
+         * 创建不携带底层异常的向量化失败。
+         *
+         * @param errorCode 稳定错误分类
+         * @param message 内部诊断消息
+         * @param fatal 是否为不可重试失败
+         */
+        public EmbeddingException(Rag2OkfResultCode errorCode, String message, boolean fatal) {
             super(message);
             this.errorCode = errorCode;
             this.fatal = fatal;
         }
 
-        public EmbeddingException(String errorCode, String message, boolean fatal, Throwable cause) {
+        /**
+         * 创建保留底层原因的向量化失败。
+         *
+         * @param errorCode 稳定错误分类
+         * @param message 内部诊断消息
+         * @param fatal 是否为不可重试失败
+         * @param cause 底层异常
+         */
+        public EmbeddingException(Rag2OkfResultCode errorCode, String message, boolean fatal, Throwable cause) {
             super(message, cause);
             this.errorCode = errorCode;
             this.fatal = fatal;
         }
 
+        /**
+         * 获取兼容任务失败记录的字符串错误码。
+         *
+         * @return 稳定错误码
+         */
         public String errorCode() {
-            return errorCode;
+            return errorCode.getCode();
         }
 
+        /**
+         * 判断失败是否不可重试。
+         *
+         * @return {@code true} 表示不可重试
+         */
         public boolean fatal() {
             return fatal;
         }

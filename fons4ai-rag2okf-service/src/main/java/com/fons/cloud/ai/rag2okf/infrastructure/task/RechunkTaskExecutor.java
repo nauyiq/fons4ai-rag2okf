@@ -1,5 +1,7 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.task;
 
+import com.fons.cloud.ai.rag2okf.common.constants.Rag2OkfResultCode;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fons.cloud.ai.rag2okf.common.dto.RechunkTaskPayload;
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
@@ -77,7 +79,7 @@ public class RechunkTaskExecutor implements TaskExecutionPort {
         } catch (Exception e) {
             log.error("Failed to deserialize rechunk payload: taskKey={}", task.taskKey(), e);
             return new TaskExecutionResult.FatalFailure(
-                    "PAYLOAD_INVALID", "任务输入快照解析失败");
+                    Rag2OkfResultCode.PAYLOAD_INVALID.getCode(), "任务输入快照解析失败");
         }
 
         ArtifactScope scope = new ArtifactScope(
@@ -111,11 +113,12 @@ public class RechunkTaskExecutor implements TaskExecutionPort {
             log.warn("Rechunk failed (artifact): taskKey={}, message={}",
                     task.taskKey(), e.getMessage());
             return new TaskExecutionResult.RetryableFailure(
-                    "RECHUNK_ARTIFACT_ERROR", safeMessage(e.getMessage()));
+                    Rag2OkfResultCode.RECHUNK_ARTIFACT_ERROR.getCode(), safeMessage(e.getMessage()));
         } catch (Exception e) {
             log.error("Rechunk failed (unexpected): taskKey={}", task.taskKey(), e);
             return new TaskExecutionResult.RetryableFailure(
-                    "RECHUNK_UNEXPECTED_ERROR", "重新分块执行异常: " + e.getClass().getSimpleName());
+                    Rag2OkfResultCode.RECHUNK_UNEXPECTED_ERROR.getCode(),
+                    "重新分块执行异常: " + e.getClass().getSimpleName());
         }
     }
 

@@ -2,14 +2,14 @@ package com.fons.cloud.ai.rag2okf.application.document;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
+import com.fons.cloud.ai.rag2okf.infrastructure.adapter.user.SaTokenCurrentUserContext;
 import com.fons.cloud.ai.rag2okf.common.dto.FileValidationPolicy;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
 import com.fons.cloud.ai.rag2okf.application.parsing.ParseApplicationService;
-import com.fons.cloud.ai.rag2okf.common.constants.WorkspaceRole;
+import com.fons.cloud.ai.rag2okf.common.constants.user.WorkspaceRole;
 import com.fons.cloud.ai.rag2okf.common.exeception.DocumentArtifactException;
 import com.fons.cloud.ai.rag2okf.common.exeception.KnowledgeBaseConflictException;
-import com.fons.cloud.ai.rag2okf.common.exeception.WorkspaceAccessDeniedException;
+import com.fons.cloud.ai.rag2okf.common.exception.user.WorkspaceAccessDeniedException;
 import com.fons.cloud.ai.rag2okf.common.response.DocumentDetailResponse;
 import com.fons.cloud.ai.rag2okf.common.response.DocumentSummaryResponse;
 import com.fons.cloud.ai.rag2okf.common.response.DocumentTaskSummaryResponse;
@@ -24,15 +24,15 @@ import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactType;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.OriginalArtifactRequest;
 import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.StoredArtifact;
 import com.fons.cloud.ai.rag2okf.common.utils.BusinessKeyGenerator;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBaseEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBase;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbProcessingTaskEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbUser;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspace;
+import com.fons.cloud.ai.rag2okf.domain.entity.user.KbUser;
+import com.fons.cloud.ai.rag2okf.domain.entity.user.KbWorkspace;
 import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbSourceDocumentDomainService;
-import com.fons.cloud.ai.rag2okf.domain.service.KbWorkspaceDomainService;
-import com.fons.cloud.ai.rag2okf.infrastructure.identity.WorkspaceAccessPolicy;
+import com.fons.cloud.ai.rag2okf.domain.service.user.KbWorkspaceDomainService;
+import com.fons.cloud.ai.rag2okf.infrastructure.support.user.WorkspaceAccessPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
@@ -66,7 +66,7 @@ public class DocumentApplicationService {
     private static final String PARSE_STATUS_NOT_STARTED = "NOT_STARTED";
     private static final String PUBLISH_STATUS_UNPUBLISHED = "UNPUBLISHED";
 
-    private final CurrentUserContext currentUserContext;
+    private final SaTokenCurrentUserContext currentUserContext;
     private final WorkspaceAccessPolicy workspaceAccessPolicy;
     private final KbKnowledgeBaseDomainService knowledgeBaseDomainService;
     private final KbSourceDocumentDomainService sourceDocumentDomainService;
@@ -94,7 +94,7 @@ public class DocumentApplicationService {
      */
     public DocumentUploadResponse uploadDocument(String knowledgeBaseKey, MultipartFile file, String parseMode, String folderPath) {
         KbUser user = currentUserContext.requireCurrentUser();
-        KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBaseAccess(
+        KbKnowledgeBase knowledgeBase = requireKnowledgeBaseAccess(
                 user.getUserKey(), knowledgeBaseKey, WorkspaceRole.ADMIN);
         KbWorkspace workspace = requireWorkspace(knowledgeBase.getWorkspaceId());
 
@@ -129,7 +129,7 @@ public class DocumentApplicationService {
      */
     @Transactional(rollbackFor = Exception.class)
     public DocumentUploadResponse persistNewDocument(
-            KbKnowledgeBaseEntity knowledgeBase, String documentKey, String fileToken,
+            KbKnowledgeBase knowledgeBase, String documentKey, String fileToken,
             Long workspaceId, Long uploadActorId,
             FileValidationPolicy.ValidatedFile validatedFile, String fileExtension,
             StoredArtifact storedArtifact, ArtifactScope scope, String folderPath) {
@@ -169,7 +169,7 @@ public class DocumentApplicationService {
             String documentKey, MultipartFile file, String parseMode, String expectedCurrentFileToken) {
         KbUser user = currentUserContext.requireCurrentUser();
         KbSourceDocumentEntity document = requireDocument(documentKey);
-        KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBaseAccess(
+        KbKnowledgeBase knowledgeBase = requireKnowledgeBaseAccess(
                 user.getUserKey(), document.getKnowledgeBaseId(), WorkspaceRole.ADMIN, documentKey);
         KbWorkspace workspace = requireWorkspace(knowledgeBase.getWorkspaceId());
 
@@ -260,7 +260,7 @@ public class DocumentApplicationService {
     public PageResponse<DocumentSummaryResponse> listDocuments(
             String knowledgeBaseKey, int page, int size, String folderPath) {
         KbUser user = currentUserContext.requireCurrentUser();
-        KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBaseAccess(
+        KbKnowledgeBase knowledgeBase = requireKnowledgeBaseAccess(
                 user.getUserKey(), knowledgeBaseKey, WorkspaceRole.KNOWLEDGE_USER);
         int safePage = Math.max(0, page);
         int safeSize = Math.min(100, Math.max(1, size));
@@ -289,7 +289,7 @@ public class DocumentApplicationService {
     public DocumentDetailResponse getDocumentDetail(String documentKey) {
         KbUser user = currentUserContext.requireCurrentUser();
         KbSourceDocumentEntity document = requireDocument(documentKey);
-        KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBase(
+        KbKnowledgeBase knowledgeBase = requireKnowledgeBase(
                 document.getKnowledgeBaseId());
         requireWorkspaceAccess(
                 user.getUserKey(), knowledgeBase.getWorkspaceId(), WorkspaceRole.KNOWLEDGE_USER);
@@ -325,7 +325,7 @@ public class DocumentApplicationService {
     public DocumentFileContent downloadDocumentFile(String documentKey) {
         KbUser user = currentUserContext.requireCurrentUser();
         KbSourceDocumentEntity document = requireDocument(documentKey);
-        KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBase(
+        KbKnowledgeBase knowledgeBase = requireKnowledgeBase(
                 document.getKnowledgeBaseId());
         KbWorkspace workspace = requireWorkspaceAccess(
                 user.getUserKey(), knowledgeBase.getWorkspaceId(), WorkspaceRole.KNOWLEDGE_USER);
@@ -359,11 +359,11 @@ public class DocumentApplicationService {
         }
     }
 
-    private KbKnowledgeBaseEntity requireKnowledgeBaseAccess(
+    private KbKnowledgeBase requireKnowledgeBaseAccess(
             String userKey, String knowledgeBaseKey, WorkspaceRole requiredRole) {
-        KbKnowledgeBaseEntity knowledgeBase = knowledgeBaseDomainService.getOne(
-                Wrappers.<KbKnowledgeBaseEntity>lambdaQuery()
-                        .eq(KbKnowledgeBaseEntity::getKnowledgeBaseKey, knowledgeBaseKey));
+        KbKnowledgeBase knowledgeBase = knowledgeBaseDomainService.getOne(
+                Wrappers.<KbKnowledgeBase>lambdaQuery()
+                        .eq(KbKnowledgeBase::getKnowledgeBaseKey, knowledgeBaseKey));
         if (knowledgeBase == null) {
             throw new WorkspaceAccessDeniedException();
         }
@@ -373,16 +373,16 @@ public class DocumentApplicationService {
     }
 
     /** 通过知识库主键校验访问权限的重载，用于文档更新/下载场景。 */
-    private KbKnowledgeBaseEntity requireKnowledgeBaseAccess(
+    private KbKnowledgeBase requireKnowledgeBaseAccess(
             String userKey, Long knowledgeBaseId, WorkspaceRole requiredRole, String documentKey) {
-        KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBase(knowledgeBaseId);
+        KbKnowledgeBase knowledgeBase = requireKnowledgeBase(knowledgeBaseId);
         workspaceAccessPolicy.checkAccess(userKey,
                 resolveWorkspaceKey(knowledgeBase.getWorkspaceId()), requiredRole);
         return knowledgeBase;
     }
 
-    private KbKnowledgeBaseEntity requireKnowledgeBase(Long knowledgeBaseId) {
-        KbKnowledgeBaseEntity knowledgeBase = knowledgeBaseDomainService.getById(knowledgeBaseId);
+    private KbKnowledgeBase requireKnowledgeBase(Long knowledgeBaseId) {
+        KbKnowledgeBase knowledgeBase = knowledgeBaseDomainService.getById(knowledgeBaseId);
         if (knowledgeBase == null) {
             throw new WorkspaceAccessDeniedException();
         }

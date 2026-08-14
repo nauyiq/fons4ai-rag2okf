@@ -1,6 +1,7 @@
 package com.fons.cloud.ai.rag2okf.common.dto;
 
 import com.fons.cloud.ai.rag2okf.common.exeception.KnowledgeBaseException;
+import com.fons.cloud.ai.rag2okf.common.request.ChunkProfileRequest;
 
 /**
  * 知识库分块配置值对象。
@@ -40,5 +41,14 @@ public record ChunkProfile(
         if (titleLevel != null && (titleLevel < 1 || titleLevel > MAX_TITLE_LEVEL)) {
             throw new KnowledgeBaseException();
         }
+    }
+
+    public ChunkProfile(ChunkProfileRequest chunkProfileRequest) {
+        this(
+                chunkProfileRequest.strategy(),
+                chunkProfileRequest.chunkSize(),
+                chunkProfileRequest.overlap(),
+                chunkProfileRequest.titleLevel()
+        );
     }
 }

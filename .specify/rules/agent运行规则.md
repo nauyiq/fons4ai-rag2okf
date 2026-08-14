@@ -2,7 +2,7 @@
 
 > 适用范围：Rag2OKF 仓库（`fons4ai-rag2okf/`）
 > 知识状态：基线已建立
-> 更新日期：2026-07-31
+> 更新日期：2026-08-13
 
 ## 项目适用范围
 
@@ -22,6 +22,26 @@
 7. **确认后再动**：删除文件、覆盖文档、大范围重构、修改数据库结构前必须确认；业务方案和技术方案确认前不编码。
 8. **DDD-lite 分层**：后端按 `controller` → `application` → `domain` → `infrastructure` 分层；领域对象不依赖 MyBatis、MinIO、Elasticsearch 或 LangChain4j 类型，这些依赖只出现在基础设施适配器。
 9. **安全硬约束**：密码明文禁止日志/持久化/回显；API Key 明文仅短暂存在于请求/调用内存；日志不记录完整邮箱、token、Authorization 头和第三方完整错误。
+10. **增量治理存量代码**：新规则默认约束新增代码和发生实质修改的相关代码；未经用户确认，不得据此批量搬包、重写持久化实体或迁移全部存量代码。
+
+## 用户域执行边界
+
+- 用户域规则以 `.specify/memory/domains/user/` 为事实来源；项目级旧文档与该领域文档冲突时，必须先标记冲突，不得沿用旧边界继续实现。
+- `LocalUser`、`Workspace`、`WorkspaceMember`、`WorkspaceInvitation`、`ModelConnection` 和 `ModelProfile` 归用户域；`ModelBinding` 归知识库域。下游域只能引用用户域标识并通过内部端口请求身份、授权、模型档案校验或模型能力解析。
+- 邮箱密码是当前唯一认证标准。登录成功只证明当前身份，不授予任何全局业务角色；访问 Workspace 资源必须重新校验账号、空间、成员关系及目标动作。
+- Workspace 有唯一所有者；所有者同时具有 ADMIN 成员角色，但删除、移交等高风险动作必须显式校验所有权。角色覆盖必须使用显式权限或动作映射，禁止依赖枚举声明顺序或 `ordinal()`。
+- `WorkspaceInvitation` 与 `WorkspaceMember` 必须分离，只有邀请接受成功后才能创建生效成员关系。邀请接口、唯一键、并发接受、超时和通知机制尚未完成 SDD，本规则不得被视为邀请功能的实现授权。
+- `ModelConnection` 和 `ModelProfile` 的所有权、凭证与协议适配由用户域管理；知识库域不得读取或解密 API Key，不得直接查询用户域持久化实现，只能通过 `ModelProfileValidationPort`、`ModelCapabilityResolutionPort` 或等价内部契约协作。
+- OpenAI-compatible 只是当前代表性协议适配，不得写成用户域唯一模型协议或不可替换的领域规则。
+
+## 用户域后端改造门禁
+
+- 登录注册链路是用户域后端的代表性代码风格：Controller 保持精简，外部 Request 转为用例 Command，Application Service 按业务步骤编排，领域对象通过行为方法或工厂维护初始化与不变量，事务边界必须显式且可验证。
+- 代表性风格不等于允许复制现有耦合。新增或实质修改的 Application Service 不得直接依赖 MyBatis `Mapper`、`Wrapper`、Redis 客户端、Sa-Token 静态工具或具体模型 SDK；应依赖 Repository、身份、会话、频控、加密和协议端口。
+- 用户域优化按“行为回归测试与缺口修复 → 端口和依赖方向收敛 → 应用服务拆分 → 包结构和持久化模型清理”渐进执行。大范围搬包、实体与持久化对象完全拆分或公共契约调整必须另行确认。
+- 认证、注册、Workspace 授权、凭证处理和跨域模型能力属于高风险链路；修改前必须建立对应特征测试或失败测试，至少覆盖事务回滚、统一认证错误、越权拒绝、显式权限、敏感信息不回显和跨域端口边界。
+- 外部入口的必填、格式、长度和字段一致性优先使用 Jakarta Validation 或入口适配；依赖账号状态、数据唯一性、权限、事务、幂等和领域状态的校验必须留在应用或领域层，不得伪装为普通参数注解。
+- `common` 只承载稳定、无领域归属的共享契约或纯工具。用户身份、Workspace、模型资源的 Request、Command、Response、状态、策略和端口应进入所属用户域能力包，不得继续无边界堆入 `common`。
 
 ## 实现者与裁判分离
 

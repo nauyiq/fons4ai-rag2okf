@@ -1,5 +1,7 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.task;
 
+import com.fons.cloud.ai.rag2okf.common.constants.Rag2OkfResultCode;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fons.cloud.ai.rag2okf.common.dto.PublicationTaskPayload;
 import com.fons.cloud.ai.rag2okf.application.task.OutboxApplicationService;
@@ -117,7 +119,7 @@ public class PublicationTaskExecutor implements TaskExecutionPort {
         } catch (Exception e) {
             log.error("Failed to deserialize publish payload: taskKey={}", task.taskKey(), e);
             return new TaskExecutionResult.FatalFailure(
-                    "PAYLOAD_INVALID", "任务输入快照解析失败");
+                    Rag2OkfResultCode.PAYLOAD_INVALID.getCode(), "任务输入快照解析失败");
         }
 
         ArtifactScope scope = new ArtifactScope(
@@ -134,7 +136,7 @@ public class PublicationTaskExecutor implements TaskExecutionPort {
             // AC-018 / 拒绝空产物：childCount=0 不发布
             if (chunkManifest.childCount() == 0 || chunkManifest.chunks().isEmpty()) {
                 return new TaskExecutionResult.FatalFailure(
-                        "PUBLISH_EMPTY_CHUNKS", "分块产物为空，拒绝发布");
+                        Rag2OkfResultCode.PUBLISH_EMPTY_CHUNKS.getCode(), "分块产物为空，拒绝发布");
             }
 
             // 2. 构建 PublicationManifest 与 ChunkProjection 列表
@@ -165,7 +167,7 @@ public class PublicationTaskExecutor implements TaskExecutionPort {
                 log.error("Projection count mismatch: expected={}, actual={}, publicationRevisionKey={}",
                         projections.size(), projectionResult.projectionCount(), publicationRevisionKey);
                 return new TaskExecutionResult.RetryableFailure(
-                        "PROJECTION_COUNT_MISMATCH", "投影写入数量不一致");
+                        Rag2OkfResultCode.PROJECTION_COUNT_MISMATCH.getCode(), "投影写入数量不一致");
             }
 
             // 4. 事务内创建 PublicationRevision，CAS 切换指针，写 Outbox（§5.6 第 5-6 步）
@@ -194,22 +196,23 @@ public class PublicationTaskExecutor implements TaskExecutionPort {
                     task.taskKey(), publicationRevisionKey, e);
             scheduleStaleProjectionCleanup(publicationRevisionKey);
             return new TaskExecutionResult.RetryableFailure(
-                    "PUBLISH_CAS_CONFLICT", "发布指针切换冲突，已安排清理");
+                    Rag2OkfResultCode.PUBLISH_CAS_CONFLICT.getCode(), "发布指针切换冲突，已安排清理");
         } catch (PublicationProjectionPort.ProjectionException e) {
             // ES 写入或查询失败：不切指针，旧发布保持（AC-018）
             log.warn("Publish failed (projection): taskKey={}, errorCode={}, message={}",
                     task.taskKey(), e.errorCode(), e.getMessage());
             return new TaskExecutionResult.RetryableFailure(
-                    "PUBLISH_PROJECTION_ERROR", safeMessage(e.getMessage()));
+                    Rag2OkfResultCode.PUBLISH_PROJECTION_ERROR.getCode(), safeMessage(e.getMessage()));
         } catch (DocumentArtifactException e) {
             log.warn("Publish failed (artifact): taskKey={}, message={}",
                     task.taskKey(), e.getMessage());
             return new TaskExecutionResult.RetryableFailure(
-                    "PUBLISH_ARTIFACT_ERROR", safeMessage(e.getMessage()));
+                    Rag2OkfResultCode.PUBLISH_ARTIFACT_ERROR.getCode(), safeMessage(e.getMessage()));
         } catch (Exception e) {
             log.error("Publish failed (unexpected): taskKey={}", task.taskKey(), e);
             return new TaskExecutionResult.RetryableFailure(
-                    "PUBLISH_UNEXPECTED_ERROR", "发布执行异常: " + e.getClass().getSimpleName());
+                    Rag2OkfResultCode.PUBLISH_UNEXPECTED_ERROR.getCode(),
+                    "发布执行异常: " + e.getClass().getSimpleName());
         }
     }
 

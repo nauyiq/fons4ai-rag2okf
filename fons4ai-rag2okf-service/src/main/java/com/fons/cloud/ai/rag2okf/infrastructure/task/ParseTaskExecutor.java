@@ -1,5 +1,7 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.task;
 
+import com.fons.cloud.ai.rag2okf.common.constants.Rag2OkfResultCode;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fons.cloud.ai.rag2okf.common.dto.ParseTaskPayload;
 import com.fons.cloud.ai.rag2okf.application.parsing.ParseApplicationService;
@@ -85,7 +87,7 @@ public class ParseTaskExecutor implements TaskExecutionPort {
         } catch (Exception e) {
             log.error("Failed to deserialize parse payload: taskKey={}", task.taskKey(), e);
             return new TaskExecutionResult.FatalFailure(
-                    "PAYLOAD_INVALID", "任务输入快照解析失败");
+                    Rag2OkfResultCode.PAYLOAD_INVALID.getCode(), "任务输入快照解析失败");
         }
 
         // 标记文档解析状态为执行中，前端据此继续轮询；异常不中断解析流程
@@ -137,11 +139,12 @@ public class ParseTaskExecutor implements TaskExecutionPort {
             log.warn("Parse failed (document artifact): taskKey={}, message={}",
                     task.taskKey(), e.getMessage());
             return new TaskExecutionResult.RetryableFailure(
-                    "PARSE_ARTIFACT_ERROR", safeMessage(e.getMessage()));
+                    Rag2OkfResultCode.PARSE_ARTIFACT_ERROR.getCode(), safeMessage(e.getMessage()));
         } catch (Exception e) {
             log.error("Parse failed (unexpected): taskKey={}", task.taskKey(), e);
             return new TaskExecutionResult.RetryableFailure(
-                    "PARSE_UNEXPECTED_ERROR", "解析执行异常: " + e.getClass().getSimpleName());
+                    Rag2OkfResultCode.PARSE_UNEXPECTED_ERROR.getCode(),
+                    "解析执行异常: " + e.getClass().getSimpleName());
         }
     }
 

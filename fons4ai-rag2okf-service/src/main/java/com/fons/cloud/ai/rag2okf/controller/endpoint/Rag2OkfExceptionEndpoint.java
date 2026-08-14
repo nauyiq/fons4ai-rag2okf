@@ -1,21 +1,24 @@
 package com.fons.cloud.ai.rag2okf.controller.endpoint;
 
 import cn.dev33.satoken.exception.NotLoginException;
-import com.fons.cloud.ai.rag2okf.common.exeception.AuthenticationDeniedException;
-import com.fons.cloud.ai.rag2okf.common.exeception.AuthenticationRateLimitedException;
-import com.fons.cloud.ai.rag2okf.common.exeception.InvalidUserProfileException;
+import com.fons.cloud.ai.rag2okf.common.exception.user.AuthenticationDeniedException;
+import com.fons.cloud.ai.rag2okf.common.exception.user.AuthenticationRateLimitedException;
+import com.fons.cloud.ai.rag2okf.common.exception.user.InvalidUserProfileException;
 import com.fons.cloud.ai.rag2okf.common.exeception.KnowledgeBaseConflictException;
 import com.fons.cloud.ai.rag2okf.common.exeception.KnowledgeBaseException;
-import com.fons.cloud.ai.rag2okf.common.exeception.ModelAccessDeniedException;
-import com.fons.cloud.ai.rag2okf.common.exeception.ModelConfigurationException;
-import com.fons.cloud.ai.rag2okf.common.exeception.WorkspaceAccessDeniedException;
+import com.fons.cloud.ai.rag2okf.common.exception.user.ModelAccessDeniedException;
+import com.fons.cloud.ai.rag2okf.common.exception.user.ModelConfigurationException;
+import com.fons.cloud.ai.rag2okf.common.exception.user.WorkspaceAccessDeniedException;
 import com.fons.cloud.common.result.R;
 import com.fons.cloud.common.result.ResultCode;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.BindException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -90,6 +93,18 @@ public class Rag2OkfExceptionEndpoint {
     @ExceptionHandler({InvalidUserProfileException.class, ModelConfigurationException.class,
             KnowledgeBaseException.class, HttpMessageNotReadableException.class})
     public R<Void> handleInvalidRequest(Exception exception) {
+        return R.failed(ResultCode.PARAMS_ERROR);
+    }
+
+    /**
+     * 收敛 @Valid 注解触发的请求体校验失败，避免走兜底 500。
+     *
+     * @param exception 请求体校验异常
+     * @return 统一参数错误响应
+     */
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class, ConstraintViolationException.class})
+    public R<Void> handleValidationFailure(Exception exception) {
         return R.failed(ResultCode.PARAMS_ERROR);
     }
 

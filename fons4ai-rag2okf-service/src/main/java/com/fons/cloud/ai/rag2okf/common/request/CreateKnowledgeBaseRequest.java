@@ -1,5 +1,10 @@
 package com.fons.cloud.ai.rag2okf.common.request;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+
 import java.util.List;
 
 /**
@@ -16,12 +21,20 @@ import java.util.List;
  * @author hongqy
  */
 public record CreateKnowledgeBaseRequest(
+        @NotBlank(message = "知识库名称不能为空")
+        @Size(max = 128, message = "知识库名称不能超过128个字符")
         String name,
+        @Size(max = 1000, message = "知识库描述不能超过1000个字符")
         String description,
         Boolean autoParse,
         Boolean autoPublish,
+        @NotBlank(message = "解析策略标识不能为空")
+        @Size(max = 64, message = "解析策略标识不能超过64个字符")
         String parserProfile,
+        @NotNull(message = "分块配置不能为空")
+        @Valid
         ChunkProfileRequest chunkProfile,
+        @Valid
         List<ModelBindingItem> modelBindings,
         int revision
 ) {

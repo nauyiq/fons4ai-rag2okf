@@ -2,11 +2,11 @@ package com.fons.cloud.ai.rag2okf.controller.user;
 
 import com.fons.cloud.ai.rag2okf.application.user.UserAuthApplicationService;
 import com.fons.cloud.ai.rag2okf.common.constants.Rag2OkfResultCode;
-import com.fons.cloud.ai.rag2okf.common.dto.LoginCommand;
-import com.fons.cloud.ai.rag2okf.common.dto.RegistrationCommand;
-import com.fons.cloud.ai.rag2okf.common.request.LoginRequest;
-import com.fons.cloud.ai.rag2okf.common.request.RegistrationRequest;
-import com.fons.cloud.ai.rag2okf.common.response.LoginResponse;
+import com.fons.cloud.ai.rag2okf.common.model.user.LoginCommand;
+import com.fons.cloud.ai.rag2okf.common.model.user.RegistrationCommand;
+import com.fons.cloud.ai.rag2okf.common.request.user.LoginRequest;
+import com.fons.cloud.ai.rag2okf.common.request.user.RegistrationRequest;
+import com.fons.cloud.ai.rag2okf.common.response.user.LoginResponse;
 import com.fons.cloud.common.result.R;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

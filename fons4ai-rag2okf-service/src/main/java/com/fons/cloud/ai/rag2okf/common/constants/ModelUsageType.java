@@ -1,6 +1,7 @@
 package com.fons.cloud.ai.rag2okf.common.constants;
 
 import com.baomidou.mybatisplus.annotation.EnumValue;
+import com.fons.cloud.ai.rag2okf.common.constants.user.ModelType;
 
 /**
  * 知识库模型用途。

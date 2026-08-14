@@ -18,6 +18,7 @@
         <spring-boot.version>3.5.8</spring-boot.version>
         <fons4cloud.version>1.0.0</fons4cloud.version>
         <fons4ai.version>1.0.0</fons4ai.version>
+        <fastjson2.version>2.0.42</fastjson2.version>
     </properties>
 
     <dependencyManagement>
@@ -33,6 +34,12 @@
     </dependencyManagement>
 
     <dependencies>
+        <dependency>
+            <groupId>com.alibaba.fastjson2</groupId>
+            <artifactId>fastjson2</artifactId>
+            <version>${fastjson2.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>

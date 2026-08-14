@@ -1,32 +1,34 @@
 package com.fons.cloud.ai.rag2okf.application.publication;
 
+import com.fons.cloud.ai.rag2okf.common.constants.Rag2OkfResultCode;
+
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fons.cloud.ai.rag2okf.common.dto.CurrentUserContext;
+import com.fons.cloud.ai.rag2okf.infrastructure.adapter.user.SaTokenCurrentUserContext;
 import com.fons.cloud.ai.rag2okf.common.dto.PublicationTaskPayload;
 import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
-import com.fons.cloud.ai.rag2okf.common.constants.WorkspaceRole;
+import com.fons.cloud.ai.rag2okf.common.constants.user.WorkspaceRole;
 import com.fons.cloud.ai.rag2okf.common.exeception.KnowledgeBaseConflictException;
 import com.fons.cloud.ai.rag2okf.common.exeception.TaskExecutionException;
-import com.fons.cloud.ai.rag2okf.common.exeception.WorkspaceAccessDeniedException;
+import com.fons.cloud.ai.rag2okf.common.exception.user.WorkspaceAccessDeniedException;
 import com.fons.cloud.ai.rag2okf.common.response.PublicationResponse;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbChunkRevisionEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBaseEntity;
+import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBase;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbProcessingTaskEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbPublicationRevisionEntity;
 import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbUser;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbWorkspace;
+import com.fons.cloud.ai.rag2okf.domain.entity.user.KbUser;
+import com.fons.cloud.ai.rag2okf.domain.entity.user.KbWorkspace;
 import com.fons.cloud.ai.rag2okf.common.dto.PublicationManifest;
 import com.fons.cloud.ai.rag2okf.domain.service.KbChunkRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbProcessingTaskDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbPublicationRevisionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.KbSourceDocumentDomainService;
-import com.fons.cloud.ai.rag2okf.domain.service.KbWorkspaceDomainService;
+import com.fons.cloud.ai.rag2okf.domain.service.user.KbWorkspaceDomainService;
 import com.fons.cloud.ai.rag2okf.common.dto.TaskStatus;
 import com.fons.cloud.ai.rag2okf.common.dto.TaskType;
-import com.fons.cloud.ai.rag2okf.infrastructure.identity.WorkspaceAccessPolicy;
+import com.fons.cloud.ai.rag2okf.infrastructure.support.user.WorkspaceAccessPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -65,7 +67,7 @@ public class PublicationApplicationService {
     /** 解析状态：已成功。 */
     private static final String PARSE_STATUS_SUCCEEDED = "SUCCEEDED";
 
-    private final CurrentUserContext currentUserContext;
+    private final SaTokenCurrentUserContext currentUserContext;
     private final WorkspaceAccessPolicy workspaceAccessPolicy;
     private final KbSourceDocumentDomainService sourceDocumentDomainService;
     private final KbKnowledgeBaseDomainService knowledgeBaseDomainService;
@@ -87,7 +89,7 @@ public class PublicationApplicationService {
     public PublicationResponse triggerPublish(String documentKey, String triggerType) {
         KbUser user = currentUserContext.requireCurrentUser();
         KbSourceDocumentEntity document = requireDocument(documentKey);
-        KbKnowledgeBaseEntity knowledgeBase = requireKnowledgeBase(document.getKnowledgeBaseId());
+        KbKnowledgeBase knowledgeBase = requireKnowledgeBase(document.getKnowledgeBaseId());
         KbWorkspace workspace = requireWorkspace(knowledgeBase.getWorkspaceId());
         workspaceAccessPolicy.checkAccess(
                 user.getUserKey(), workspace.getWorkspaceKey(), WorkspaceRole.ADMIN);
@@ -96,13 +98,13 @@ public class PublicationApplicationService {
         if (!PARSE_STATUS_SUCCEEDED.equals(document.getParseStatus())
                 || document.getCurrentParseRevisionId() == null
                 || document.getCurrentChunkRevisionId() == null) {
-            throw new TaskExecutionException("PUBLISH_PARSE_NOT_SUCCEEDED");
+            throw new TaskExecutionException(Rag2OkfResultCode.PUBLISH_PARSE_NOT_SUCCEEDED.getCode());
         }
 
         KbChunkRevisionEntity chunkRevision = chunkRevisionDomainService.getById(
                 document.getCurrentChunkRevisionId());
         if (chunkRevision == null || !"SUCCEEDED".equals(chunkRevision.getStatus())) {
-            throw new TaskExecutionException("PUBLISH_CHUNK_NOT_SUCCEEDED");
+            throw new TaskExecutionException(Rag2OkfResultCode.PUBLISH_CHUNK_NOT_SUCCEEDED.getCode());
         }
 
         // §5.6 第 1 步：同一文档存在 RUNNING 发布任务时拒绝重复触发
@@ -208,8 +210,8 @@ public class PublicationApplicationService {
         return document;
     }
 
-    private KbKnowledgeBaseEntity requireKnowledgeBase(Long knowledgeBaseId) {
-        KbKnowledgeBaseEntity knowledgeBase = knowledgeBaseDomainService.getById(knowledgeBaseId);
+    private KbKnowledgeBase requireKnowledgeBase(Long knowledgeBaseId) {
+        KbKnowledgeBase knowledgeBase = knowledgeBaseDomainService.getById(knowledgeBaseId);
         if (knowledgeBase == null) {
             throw new WorkspaceAccessDeniedException();
         }

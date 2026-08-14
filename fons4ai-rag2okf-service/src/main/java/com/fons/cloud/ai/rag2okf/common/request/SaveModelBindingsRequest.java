@@ -1,5 +1,7 @@
 package com.fons.cloud.ai.rag2okf.common.request;
 
+import jakarta.validation.Valid;
+
 import java.util.List;
 
 /**
@@ -11,6 +13,7 @@ import java.util.List;
  * @author hongqy
  */
 public record SaveModelBindingsRequest(
+        @Valid
         List<ModelBindingItem> modelBindings
 ) {
 }
