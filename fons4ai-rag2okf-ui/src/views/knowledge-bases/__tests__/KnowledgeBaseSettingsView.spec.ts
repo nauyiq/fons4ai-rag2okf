@@ -122,6 +122,23 @@ describe('KnowledgeBaseSettingsView', () => {
     }))
   })
 
+  it('allows automatic publishing after a manual parse', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="edit-automation"]').trigger('click')
+    await nextTick()
+    await body().get('[data-test="auto-parse-input"]').trigger('click')
+    await body().get('[data-test="auto-publish-input"]').trigger('click')
+    await body().get('[data-test="save-automation"]').trigger('click')
+    await flushPromises()
+
+    expect(updateKnowledgeBase).toHaveBeenCalledWith('loan-policy', expect.objectContaining({
+      autoParse: false,
+      autoPublish: true,
+      revision: 3,
+    }))
+  })
+
   it('模型绑定下拉为空时显示前往模型设置入口并跳转', async () => {
     const wrapper = mountView()
     await flushPromises()

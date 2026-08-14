@@ -191,11 +191,6 @@ function openModelBinding(): void {
 }
 
 async function saveAutomation(): Promise<void> {
-  // 自动发布依赖自动解析，在提交前拦截
-  if (draft.autoPublish && !draft.autoParse) {
-    feedback.automation.error = '自动发布依赖自动解析，请先开启自动解析。'
-    return
-  }
   const input = buildSaveInput({ autoParse: draft.autoParse, autoPublish: draft.autoPublish })
   if (input) await persist('automation', input)
 }
@@ -313,8 +308,8 @@ onMounted(loadSettings)
           <a-switch v-model:checked="draft.autoParse" data-test="auto-parse-input" />
         </div>
         <div class="toggle-row">
-          <div><strong>自动发布</strong><span>仅当解析成功时，自动发布为可检索知识。</span></div>
-          <a-switch v-model:checked="draft.autoPublish" :disabled="!draft.autoParse" data-test="auto-publish-input" />
+          <div><strong>自动发布</strong><span>自动或手动解析成功后，发布为可检索知识。</span></div>
+          <a-switch v-model:checked="draft.autoPublish" data-test="auto-publish-input" />
         </div>
         <a-alert v-if="feedback.automation.error" type="error" :message="feedback.automation.error" show-icon />
         <footer class="dialog-actions">

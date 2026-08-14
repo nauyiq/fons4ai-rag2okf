@@ -2,33 +2,27 @@ package com.fons.cloud.ai.rag2okf.application.knowledgebase;
 
 import cn.hutool.core.lang.Assert;
 import com.alibaba.fastjson2.JSON;
-import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fons.cloud.ai.rag2okf.domain.entity.user.UserWorkspaceAggregate;
+import com.fons.cloud.ai.rag2okf.common.constants.knowledgebase.ModelUsageType;
+import com.fons.cloud.ai.rag2okf.common.constants.Rag2OkfResultCode;
 import com.fons.cloud.ai.rag2okf.common.constants.user.ModelProfileStatus;
 import com.fons.cloud.ai.rag2okf.common.constants.user.ModelType;
-import com.fons.cloud.ai.rag2okf.common.constants.ModelUsageType;
-import com.fons.cloud.ai.rag2okf.common.constants.Rag2OkfResultCode;
 import com.fons.cloud.ai.rag2okf.common.constants.user.WorkspaceRole;
-import com.fons.cloud.ai.rag2okf.common.dto.ChunkProfile;
+import com.fons.cloud.ai.rag2okf.common.model.knowledgebase.ChunkProfile;
 import com.fons.cloud.ai.rag2okf.infrastructure.adapter.user.SaTokenCurrentUserContext;
-import com.fons.cloud.ai.rag2okf.common.exception.user.WorkspaceAccessDeniedException;
-import com.fons.cloud.ai.rag2okf.common.request.CreateKnowledgeBaseRequest;
-import com.fons.cloud.ai.rag2okf.common.request.ModelBindingItem;
-import com.fons.cloud.ai.rag2okf.common.request.PageKnowledgeBaseRequest;
-import com.fons.cloud.ai.rag2okf.common.request.SaveModelBindingsRequest;
-import com.fons.cloud.ai.rag2okf.common.request.UpdateKnowledgeBaseRequest;
-import com.fons.cloud.ai.rag2okf.common.response.ChunkProfileResponse;
-import com.fons.cloud.ai.rag2okf.common.response.KnowledgeBaseResponse;
-import com.fons.cloud.ai.rag2okf.common.response.KnowledgeBaseSummaryResponse;
-import com.fons.cloud.ai.rag2okf.common.response.ModelBindingResponse;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbKnowledgeBase;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbModelBinding;
+import com.fons.cloud.ai.rag2okf.common.request.knowledgebase.CreateKnowledgeBaseRequest;
+import com.fons.cloud.ai.rag2okf.common.request.knowledgebase.ModelBindingItem;
+import com.fons.cloud.ai.rag2okf.common.request.knowledgebase.SaveModelBindingsRequest;
+import com.fons.cloud.ai.rag2okf.common.request.knowledgebase.UpdateKnowledgeBaseRequest;
+import com.fons.cloud.ai.rag2okf.common.response.knowledgebase.ChunkProfileResponse;
+import com.fons.cloud.ai.rag2okf.common.response.knowledgebase.KnowledgeBaseResponse;
+import com.fons.cloud.ai.rag2okf.common.response.knowledgebase.KnowledgeBaseSummaryResponse;
+import com.fons.cloud.ai.rag2okf.common.response.knowledgebase.ModelBindingResponse;
+import com.fons.cloud.ai.rag2okf.domain.entity.knowledgebase.KbKnowledgeBase;
+import com.fons.cloud.ai.rag2okf.domain.entity.knowledgebase.KbModelBinding;
 import com.fons.cloud.ai.rag2okf.domain.entity.user.KbModelProfile;
-import com.fons.cloud.ai.rag2okf.domain.entity.user.KbUser;
-import com.fons.cloud.ai.rag2okf.domain.entity.user.KbWorkspace;
-import com.fons.cloud.ai.rag2okf.domain.service.KbKnowledgeBaseDomainService;
-import com.fons.cloud.ai.rag2okf.domain.service.KbModelBindingDomainService;
+import com.fons.cloud.ai.rag2okf.domain.entity.user.UserWorkspaceAggregate;
+import com.fons.cloud.ai.rag2okf.domain.service.knowledgebase.KbKnowledgeBaseDomainService;
+import com.fons.cloud.ai.rag2okf.domain.service.knowledgebase.KbModelBindingDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.user.KbModelProfileDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.user.KbUserDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.user.KbWorkspaceDomainService;
@@ -55,7 +49,7 @@ import java.util.stream.Collectors;
 /**
  * 知识库创建、列表、详情、设置编辑与模型用途绑定的应用服务。
  *
- * <p>遵循 DDD-lite：领域规则（ChunkProfile 校验、autoPublish 依赖 autoParse）下沉到实体，
+ * <p>遵循 DDD-lite：领域规则（ChunkProfile 校验、自动化策略组合）下沉到实体，
  * 应用服务负责编排、事务、权限校验和持久化协调。Controller 不承载业务规则。</p>
  *
  * <p>设置只形成后续操作默认快照，修改设置不会批量重处理已有文档或任务。</p>
@@ -88,28 +82,28 @@ public class KnowledgeBaseApplicationService {
      * @return 分页知识库摘要
      */
     public R<PageResult<KnowledgeBaseSummaryResponse>> pageKnowledgeBases(String workspaceKey, int page, int size) {
-        KbUser user = currentUserContext.requireCurrentUser();
-        UserWorkspaceAggregate aggregate = workspaceDomainService.findUserWorkspaceAggregate(user.getId(), workspaceKey);
-        if (aggregate == null) {
+        Long currentUserId = currentUserContext.requireCurrentUserId();
+        UserWorkspaceAggregate workspace = workspaceDomainService.findUserWorkspaceAggregate(
+                currentUserId, workspaceKey);
+        if (workspace == null) {
             return R.failed(Rag2OkfResultCode.WORKSPACE_NOT_FOUND);
         }
-        if (!aggregate.hasWorkspaceAccess(WorkspaceRole.KNOWLEDGE_USER)) {
+        if (!workspace.hasWorkspaceAccess(WorkspaceRole.KNOWLEDGE_USER)) {
             return R.failed(Rag2OkfResultCode.WORKSPACE_NOT_FOUND);
         }
 
-        PageKnowledgeBaseRequest request = PageKnowledgeBaseRequest.builder()
-                .page(page)
-                .size(size)
-                .workspaceId(aggregate.workspace().getId())
-                .build();
-        Page<KbKnowledgeBase> result = knowledgeBaseDomainService.pageQueryKnowledgeBases(request);
+        PageResult<KbKnowledgeBase> result = knowledgeBaseDomainService.pageByWorkspaceId(
+                workspace.workspace().getId(), page, size);
 
         // 批量查询知识库创建者，避免逐条 N+1 查 kb_user
-        Map<Long, KbUser> ownerMap = loadOwnerUserMap(result.getRecords());
-        List<KnowledgeBaseSummaryResponse> records = result.getRecords().stream()
-                .map(entity -> toSummaryResponse(entity, user.getId(), ownerMap))
+        Map<Long, String> ownerMap = loadOwnerUserMap(result.getResultList());
+        List<KnowledgeBaseSummaryResponse> records = result.getResultList().stream()
+                .map(entity -> toSummaryResponse(entity, currentUserId, ownerMap))
                 .toList();
-        return R.ok(new PageResult<>((int) result.getPages(), (int) result.getSize(), result.getTotal(), records));
+        PageResult<KnowledgeBaseSummaryResponse> response = new PageResult<>(
+                result.getCurrentPage(), result.getPageSize(), result.getTotal(), records);
+        response.setPages(result.getPages());
+        return R.ok(response);
     }
 
 
@@ -121,25 +115,28 @@ public class KnowledgeBaseApplicationService {
      * @return 知识库详情响应
      */
     public R<KnowledgeBaseResponse> createKnowledgeBase(String workspaceKey, CreateKnowledgeBaseRequest request) {
-        KbUser user = currentUserContext.requireCurrentUser();
-        UserWorkspaceAggregate aggregate = workspaceDomainService.findUserWorkspaceAggregate(user.getId(), workspaceKey);
-        if (aggregate == null) {
+        Long currentUserId = currentUserContext.requireCurrentUserId();
+        UserWorkspaceAggregate workspace = workspaceDomainService.findUserWorkspaceAggregate(
+                currentUserId, workspaceKey);
+        if (workspace == null) {
             return R.failed(Rag2OkfResultCode.WORKSPACE_NOT_FOUND);
         }
-        if (!aggregate.hasWorkspaceAccess(WorkspaceRole.ADMIN)) {
+        if (!workspace.hasWorkspaceAccess(WorkspaceRole.ADMIN)) {
             return R.failed(Rag2OkfResultCode.NOT_PERMISSION_CREATE_DATABASES);
         }
 
         // 判断知识库名称是否已存在
-        if (knowledgeBaseDomainService.existsKnowledgeBase(aggregate.workspace().getId(), request.name())) {
+        if (knowledgeBaseDomainService.existsByWorkspaceIdAndName(
+                workspace.workspace().getId(), request.name())) {
             return R.failed(Rag2OkfResultCode.KNOWLEDGE_BASE_NAME_DUPLICATED);
         }
 
-        // 领域规则（autoPublish 依赖 autoParse、ChunkProfile 校验）下沉到实体工厂方法
-        KbKnowledgeBase kbKnowledgeBase = KbKnowledgeBase.create(user.getId(), aggregate.workspace().getId(), request);
+        // 自动解析与自动发布可独立组合；ChunkProfile 校验由实体工厂方法负责
+        KbKnowledgeBase kbKnowledgeBase = KbKnowledgeBase.create(
+                currentUserId, workspace.workspace().getId(), request);
 
         // 事务外校验绑定项，校验失败直接返回具体错误码
-        R<Map<String, KbModelProfile>> validation = validateAllBindings(request.modelBindings(), aggregate.workspace().getOwnerUserId());
+        R<Map<String, KbModelProfile>> validation = validateAllBindings(request.modelBindings(), workspace.workspace().getOwnerUserId());
         if (!validation.isSuccess()) {
             return R.failed(validation);
         }
@@ -150,7 +147,8 @@ public class KnowledgeBaseApplicationService {
             try {
                 Assert.isTrue(knowledgeBaseDomainService.save(kbKnowledgeBase), () -> BusinessRuntimeException.of(ResultCode.INSERT_FAILED));
                 if (CollectionUtils.isNotEmpty(request.modelBindings())) {
-                    bindingResponses.addAll(persistBindings(kbKnowledgeBase.getId(), request.modelBindings(), profileMap));
+                    bindingResponses.addAll(replaceBindings(
+                            kbKnowledgeBase.getId(), request.modelBindings(), profileMap));
                 }
                 return true;
             } catch (Exception e) {
@@ -163,7 +161,8 @@ public class KnowledgeBaseApplicationService {
         if (Boolean.FALSE.equals(execute)) {
             return R.failed(ResultCode.SYSTEM_BUSY);
         }
-        return R.ok(toResponse(kbKnowledgeBase, aggregate.workspace().getWorkspaceKey(), bindingResponses));
+        return R.ok(toResponse(
+                kbKnowledgeBase, workspace.workspace().getWorkspaceKey(), bindingResponses));
     }
 
 
@@ -176,17 +175,18 @@ public class KnowledgeBaseApplicationService {
      * @return 知识库详情响应
      */
     public R<KnowledgeBaseResponse> getKnowledgeBase(String knowledgeBaseKey) {
-        KbUser user = currentUserContext.requireCurrentUser();
+        Long currentUserId = currentUserContext.requireCurrentUserId();
         KbKnowledgeBase entity = knowledgeBaseDomainService.findByKnowledgeBaseKey(knowledgeBaseKey);
         if (entity == null) {
             return R.failed(Rag2OkfResultCode.KNOWLEDGE_BASE_NOT_FOUND);
         }
-        UserWorkspaceAggregate aggregate = workspaceDomainService.findUserWorkspaceAggregate(user.getId(), entity.getWorkspaceId());
-        if (aggregate == null || !aggregate.hasWorkspaceAccess(WorkspaceRole.KNOWLEDGE_USER)) {
+        UserWorkspaceAggregate workspace = workspaceDomainService.findUserWorkspaceAggregate(
+                currentUserId, entity.getWorkspaceId());
+        if (workspace == null || !workspace.hasWorkspaceAccess(WorkspaceRole.KNOWLEDGE_USER)) {
             return R.failed(Rag2OkfResultCode.WORKSPACE_NOT_FOUND);
         }
         List<ModelBindingResponse> bindings = loadBindings(entity.getId());
-        return R.ok(toResponse(entity, aggregate.workspace().getWorkspaceKey(), bindings));
+        return R.ok(toResponse(entity, workspace.workspace().getWorkspaceKey(), bindings));
     }
 
     /**
@@ -201,24 +201,26 @@ public class KnowledgeBaseApplicationService {
      * @return 更新后的知识库详情响应
      */
     public R<KnowledgeBaseResponse> updateKnowledgeBase(String knowledgeBaseKey, UpdateKnowledgeBaseRequest request) {
-        KbUser user = currentUserContext.requireCurrentUser();
+        Long currentUserId = currentUserContext.requireCurrentUserId();
         KbKnowledgeBase entity = knowledgeBaseDomainService.findByKnowledgeBaseKey(knowledgeBaseKey);
         if (entity == null) {
             return R.failed(Rag2OkfResultCode.KNOWLEDGE_BASE_NOT_FOUND);
         }
-        UserWorkspaceAggregate aggregate = workspaceDomainService.findUserWorkspaceAggregate(user.getId(), entity.getWorkspaceId());
-        if (aggregate == null || !aggregate.hasWorkspaceAccess(WorkspaceRole.ADMIN)) {
+        UserWorkspaceAggregate workspace = workspaceDomainService.findUserWorkspaceAggregate(
+                currentUserId, entity.getWorkspaceId());
+        if (workspace == null || !workspace.hasWorkspaceAccess(WorkspaceRole.ADMIN)) {
             return R.failed(Rag2OkfResultCode.WORKSPACE_NOT_FOUND);
         }
         if (entity.getVersion() != request.revision()) {
             return R.failed(Rag2OkfResultCode.KB_VERSION_CONFLICT);
         }
 
-        // 领域规则（ChunkProfile 校验、autoPublish 依赖 autoParse）下沉到实体
+        // 自动化策略独立更新；ChunkProfile 校验由实体负责
         entity.applyUpdate(request);
 
         // 事务外校验绑定项，校验失败直接透传错误码
-        R<Map<String, KbModelProfile>> validation = validateAllBindings(request.modelBindings(), aggregate.workspace().getOwnerUserId());
+        R<Map<String, KbModelProfile>> validation = validateAllBindings(
+                request.modelBindings(), workspace.workspace().getOwnerUserId());
         if (!validation.isSuccess()) {
             return R.failed(validation);
         }
@@ -230,7 +232,7 @@ public class KnowledgeBaseApplicationService {
                 Assert.isTrue(knowledgeBaseDomainService.updateById(entity),
                         () -> BusinessRuntimeException.of(ResultCode.UPDATE_FAILED));
                 if (request.modelBindings() != null) {
-                    bindingResponses.addAll(persistBindings(
+                    bindingResponses.addAll(replaceBindings(
                             entity.getId(), request.modelBindings(), profileMap));
                 } else {
                     bindingResponses.addAll(loadBindings(entity.getId()));
@@ -247,7 +249,7 @@ public class KnowledgeBaseApplicationService {
             return R.failed(ResultCode.SYSTEM_BUSY);
         }
 
-        return R.ok(toResponse(entity, aggregate.workspace().getWorkspaceKey(), bindingResponses));
+        return R.ok(toResponse(entity, workspace.workspace().getWorkspaceKey(), bindingResponses));
     }
 
     /**
@@ -259,13 +261,14 @@ public class KnowledgeBaseApplicationService {
      * @return 模型用途绑定列表
      */
     public R<List<ModelBindingResponse>> getModelBindings(String knowledgeBaseKey) {
-        KbUser user = currentUserContext.requireCurrentUser();
-        KbKnowledgeBase entity = findKnowledgeBase(knowledgeBaseKey);
+        Long currentUserId = currentUserContext.requireCurrentUserId();
+        KbKnowledgeBase entity = knowledgeBaseDomainService.findByKnowledgeBaseKey(knowledgeBaseKey);
         if (entity == null) {
             return R.failed(Rag2OkfResultCode.WORKSPACE_NOT_FOUND);
         }
-        UserWorkspaceAggregate aggregate = findAggregate(user.getId(), entity.getWorkspaceId());
-        if (aggregate == null || !aggregate.hasWorkspaceAccess(WorkspaceRole.KNOWLEDGE_USER)) {
+        UserWorkspaceAggregate workspace = workspaceDomainService.findUserWorkspaceAggregate(
+                currentUserId, entity.getWorkspaceId());
+        if (workspace == null || !workspace.hasWorkspaceAccess(WorkspaceRole.KNOWLEDGE_USER)) {
             return R.failed(Rag2OkfResultCode.WORKSPACE_NOT_FOUND);
         }
         return R.ok(loadBindings(entity.getId()));
@@ -275,27 +278,29 @@ public class KnowledgeBaseApplicationService {
      * 整体保存知识库模型用途绑定。
      *
      * <p>需要 ADMIN 权限。同一用途最多一个有效绑定；档案必须属于工作空间所有者且为 ACTIVE，
-     * 且模型类型与用途兼容。保存前先删除现有绑定。</p>
+     * 且模型类型与用途兼容。保存时按用途整体同步，已有用途原位更新。</p>
      *
      * @param knowledgeBaseKey 知识库业务标识
      * @param request 保存请求
      * @return 保存后的模型用途绑定列表
      */
     public R<List<ModelBindingResponse>> saveModelBindings(String knowledgeBaseKey, SaveModelBindingsRequest request) {
-        KbUser user = currentUserContext.requireCurrentUser();
-        KbKnowledgeBase entity = findKnowledgeBase(knowledgeBaseKey);
+        Long currentUserId = currentUserContext.requireCurrentUserId();
+        KbKnowledgeBase entity = knowledgeBaseDomainService.findByKnowledgeBaseKey(knowledgeBaseKey);
         if (entity == null) {
             return R.failed(Rag2OkfResultCode.WORKSPACE_NOT_FOUND);
         }
-        UserWorkspaceAggregate aggregate = findAggregate(user.getId(), entity.getWorkspaceId());
-        if (aggregate == null || !aggregate.hasWorkspaceAccess(WorkspaceRole.ADMIN)) {
+        UserWorkspaceAggregate workspace = workspaceDomainService.findUserWorkspaceAggregate(
+                currentUserId, entity.getWorkspaceId());
+        if (workspace == null || !workspace.hasWorkspaceAccess(WorkspaceRole.ADMIN)) {
             return R.failed(Rag2OkfResultCode.WORKSPACE_NOT_FOUND);
         }
 
         List<ModelBindingItem> items = request.modelBindings() != null ? request.modelBindings() : List.of();
 
         // 事务外校验绑定项，校验失败直接返回具体错误码
-        R<Map<String, KbModelProfile>> validation = validateAllBindings(items, aggregate.workspace().getOwnerUserId());
+        R<Map<String, KbModelProfile>> validation = validateAllBindings(
+                items, workspace.workspace().getOwnerUserId());
         if (!validation.isSuccess()) {
             return R.failed(validation);
         }
@@ -304,7 +309,7 @@ public class KnowledgeBaseApplicationService {
         List<ModelBindingResponse> bindingResponses = new ArrayList<>();
         Boolean execute = transactionTemplate.execute(status -> {
             try {
-                bindingResponses.addAll(persistBindings(entity.getId(), items, profileMap));
+                bindingResponses.addAll(replaceBindings(entity.getId(), items, profileMap));
                 return true;
             } catch (Exception e) {
                 log.error(e.getMessage(), e);
@@ -330,14 +335,14 @@ public class KnowledgeBaseApplicationService {
      * @return 统一响应包装
      */
     public R<Void> deleteKnowledgeBase(String knowledgeBaseKey) {
-        KbUser user = currentUserContext.requireCurrentUser();
-        KbKnowledgeBase entity = findKnowledgeBase(knowledgeBaseKey);
+        Long currentUserId = currentUserContext.requireCurrentUserId();
+        KbKnowledgeBase entity = knowledgeBaseDomainService.findByKnowledgeBaseKey(knowledgeBaseKey);
         // 不存在或已被软删除：幂等返回成功，避免泄露存在性与删除状态
         if (entity == null) {
             return R.ok(null);
         }
         // 仅创建者可删除，不匹配统一返回无权限
-        if (entity.getOwnerUserId() == null || !entity.getOwnerUserId().equals(user.getId())) {
+        if (entity.getOwnerUserId() == null || !entity.getOwnerUserId().equals(currentUserId)) {
             return R.failed(Rag2OkfResultCode.NOT_PERMISSION_DELETE_DATABASES);
         }
         knowledgeBaseDomainService.removeById(entity.getId());
@@ -345,7 +350,6 @@ public class KnowledgeBaseApplicationService {
     }
 
 
-    // ============================== 私有辅助方法 ==============================
 
 
     /**
@@ -357,7 +361,8 @@ public class KnowledgeBaseApplicationService {
      * @param workspaceOwnerUserId 工作空间所有者主键
      * @return 校验结果，成功时 data 为 profileKey 到模型档案的映射
      */
-    private R<Map<String, KbModelProfile>> validateAllBindings(List<ModelBindingItem> items, Long workspaceOwnerUserId) {
+    private R<Map<String, KbModelProfile>> validateAllBindings(
+            List<ModelBindingItem> items, Long workspaceOwnerUserId) {
         if (CollectionUtils.isEmpty(items)) {
             return R.ok(Map.of());
         }
@@ -372,9 +377,8 @@ public class KnowledgeBaseApplicationService {
         Set<String> profileKeys = items.stream()
                 .map(ModelBindingItem::modelProfileKey)
                 .collect(Collectors.toSet());
-        Map<String, KbModelProfile> profileMap = modelProfileDomainService.list(
-                        Wrappers.<KbModelProfile>lambdaQuery()
-                                .in(KbModelProfile::getProfileKey, profileKeys))
+        Map<String, KbModelProfile> profileMap = modelProfileDomainService
+                .listByProfileKeysAndOwnerUserId(profileKeys, workspaceOwnerUserId)
                 .stream()
                 .collect(Collectors.toMap(KbModelProfile::getProfileKey, Function.identity()));
         // 逐项校验档案归属/状态/兼容/维度
@@ -396,7 +400,8 @@ public class KnowledgeBaseApplicationService {
      * @param usageType 模型用途
      * @return 校验失败时返回错误码，通过时返回 null
      */
-    private Rag2OkfResultCode validateProfile(KbModelProfile profile, Long workspaceOwnerUserId, ModelUsageType usageType) {
+    private Rag2OkfResultCode validateProfile(
+            KbModelProfile profile, Long workspaceOwnerUserId, ModelUsageType usageType) {
         if (profile == null
                 || !workspaceOwnerUserId.equals(profile.getOwnerUserId())
                 || profile.getStatus() != ModelProfileStatus.ACTIVE
@@ -410,9 +415,7 @@ public class KnowledgeBaseApplicationService {
     }
 
     private boolean isModelUsageCompatible(ModelUsageType usageType, ModelType modelType) {
-        return usageType != null
-                && modelType != null
-                && usageType.getRequiredModelType().matches(modelType);
+        return usageType != null && usageType.getRequiredModelType().matches(modelType);
     }
 
     private boolean isEmbeddingDimensionsValid(ModelUsageType usageType, Integer profileDimensions) {
@@ -423,25 +426,35 @@ public class KnowledgeBaseApplicationService {
     }
 
     /**
-     * 事务内写入模型绑定。先删除现有绑定，再批量写入新绑定。
+     * 事务内整体替换模型绑定。
      *
-     * <p>校验已在事务外完成，此方法只负责持久化。</p>
+     * <p>校验已在事务外完成；领域服务按用途原位更新已有记录、停用缺失用途，
+     * 仅为首次出现的用途插入记录。</p>
      *
      * @param knowledgeBaseId 知识库主键
      * @param items 绑定项列表
      * @param profileMap 模型档案映射（由 {@link #validateAllBindings} 产出）
      * @return 保存后的绑定响应列表
      */
-    private List<ModelBindingResponse> persistBindings(Long knowledgeBaseId, List<ModelBindingItem> items, Map<String, KbModelProfile> profileMap) {
-        // 移除现有绑定
-        modelBindingDomainService.remove(Wrappers.<KbModelBinding>lambdaQuery().eq(KbModelBinding::getKnowledgeBaseId, knowledgeBaseId));
-
-        List<ModelBindingResponse> responses = new ArrayList<>();
+    private List<ModelBindingResponse> replaceBindings(
+            Long knowledgeBaseId,
+            List<ModelBindingItem> items,
+            Map<String, KbModelProfile> profileMap) {
+        List<KbModelBinding> requestedBindings = new ArrayList<>();
         for (ModelBindingItem item : items) {
             KbModelProfile profile = profileMap.get(item.modelProfileKey());
-            KbModelBinding binding = KbModelBinding.create(knowledgeBaseId, item.usageType(), profile.getId());
-            modelBindingDomainService.save(binding);
-            responses.add(new ModelBindingResponse(binding.getBindingKey(), item.usageType(), profile.getProfileKey()));
+            requestedBindings.add(KbModelBinding.create(
+                    knowledgeBaseId, item.usageType(), profile.getId()));
+        }
+        List<KbModelBinding> persistedBindings = modelBindingDomainService.replaceByKnowledgeBaseId(
+                knowledgeBaseId, requestedBindings);
+
+        List<ModelBindingResponse> responses = new ArrayList<>();
+        for (int index = 0; index < items.size(); index++) {
+            ModelBindingItem item = items.get(index);
+            KbModelBinding binding = persistedBindings.get(index);
+            responses.add(new ModelBindingResponse(
+                    binding.getBindingKey(), item.usageType(), item.modelProfileKey()));
         }
         return responses;
     }
@@ -453,9 +466,7 @@ public class KnowledgeBaseApplicationService {
      * @return 模型绑定响应列表
      */
     private List<ModelBindingResponse> loadBindings(Long knowledgeBaseId) {
-        List<KbModelBinding> bindings = modelBindingDomainService.list(
-                Wrappers.<KbModelBinding>lambdaQuery()
-                        .eq(KbModelBinding::getKnowledgeBaseId, knowledgeBaseId));
+        List<KbModelBinding> bindings = modelBindingDomainService.listByKnowledgeBaseId(knowledgeBaseId);
         if (bindings.isEmpty()) {
             return List.of();
         }
@@ -464,21 +475,19 @@ public class KnowledgeBaseApplicationService {
                 .map(KbModelBinding::getModelProfileId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        Map<Long, KbModelProfile> profileMap = profileIds.isEmpty()
+        Map<Long, String> profileMap = profileIds.isEmpty()
                 ? Map.of()
-                : modelProfileDomainService.listByIds(profileIds).stream()
-                        .collect(Collectors.toMap(KbModelProfile::getId, Function.identity()));
+                : modelProfileDomainService.findProfileKeysByIds(profileIds);
 
         return bindings.stream()
                 .map(binding -> toBindingResponse(binding, profileMap))
                 .toList();
     }
 
-    private ModelBindingResponse toBindingResponse(KbModelBinding binding, Map<Long, KbModelProfile> profileMap) {
-        KbModelProfile profile = binding.getModelProfileId() != null
+    private ModelBindingResponse toBindingResponse(KbModelBinding binding, Map<Long, String> profileMap) {
+        String profileKey = binding.getModelProfileId() != null
                 ? profileMap.get(binding.getModelProfileId())
                 : null;
-        String profileKey = profile != null ? profile.getProfileKey() : null;
         return new ModelBindingResponse(binding.getBindingKey(), binding.getUsageType(), profileKey);
     }
 
@@ -496,14 +505,10 @@ public class KnowledgeBaseApplicationService {
     }
 
     private KnowledgeBaseSummaryResponse toSummaryResponse(
-            KbKnowledgeBase entity, Long currentUserId, Map<Long, KbUser> ownerMap) {
-        String ownerUserKey = null;
-        if (entity.getOwnerUserId() != null) {
-            KbUser owner = ownerMap.get(entity.getOwnerUserId());
-            if (owner != null) {
-                ownerUserKey = owner.getUserKey();
-            }
-        }
+            KbKnowledgeBase entity, Long currentUserId, Map<Long, String> ownerMap) {
+        String ownerUserKey = entity.getOwnerUserId() != null
+                ? ownerMap.get(entity.getOwnerUserId())
+                : null;
         // canDelete 仅创建者可删除：owner_user_id 等于当前会话用户主键
         boolean canDelete = entity.getOwnerUserId() != null
                 && entity.getOwnerUserId().equals(currentUserId);
@@ -514,12 +519,12 @@ public class KnowledgeBaseApplicationService {
     }
 
     /**
-     * 批量加载知识库创建者用户，构造 ownerUserId -> KbUser 映射，避免逐条 N+1 查询。
+     * 批量加载知识库创建者业务标识，避免逐条 N+1 查询。
      *
      * @param knowledgeBases 当前页知识库实体
-     * @return ownerUserId 到用户实体的映射，无创建者时返回空映射
+     * @return ownerUserId 到 userKey 的映射，无创建者时返回空映射
      */
-    private Map<Long, KbUser> loadOwnerUserMap(List<KbKnowledgeBase> knowledgeBases) {
+    private Map<Long, String> loadOwnerUserMap(List<KbKnowledgeBase> knowledgeBases) {
         Set<Long> ownerUserIds = knowledgeBases.stream()
                 .map(KbKnowledgeBase::getOwnerUserId)
                 .filter(Objects::nonNull)
@@ -527,7 +532,6 @@ public class KnowledgeBaseApplicationService {
         if (ownerUserIds.isEmpty()) {
             return Map.of();
         }
-        return userDomainService.listByIds(ownerUserIds).stream()
-                .collect(Collectors.toMap(KbUser::getId, Function.identity()));
+        return userDomainService.findUserKeysByIds(ownerUserIds);
     }
 }

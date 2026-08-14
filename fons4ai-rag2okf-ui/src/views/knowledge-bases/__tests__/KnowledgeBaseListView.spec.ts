@@ -111,6 +111,39 @@ describe('KnowledgeBaseListView', () => {
     expect(wrapper.text()).toContain('风险策略研究库')
   })
 
+  it('allows manual parsing with automatic publishing when creating a knowledge base', async () => {
+    vi.mocked(createKnowledgeBase).mockResolvedValue({
+      knowledgeBaseKey: 'manual-parse-auto-publish',
+      workspaceKey: 'personal-space',
+      name: '手动解析知识库',
+      description: '',
+      autoParse: false,
+      autoPublish: true,
+      parserProfile: 'standard',
+      chunkProfile: { strategy: 'SEMANTIC', chunkSize: 800, overlap: 120, titleLevel: null },
+      modelBindings: [],
+      revision: 0,
+      updated: '2026-08-14T09:00:00.000+08:00',
+      ownerUserKey: 'user-001',
+      canDelete: true,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="create-knowledge-base"]').trigger('click')
+    await nextTick()
+    await body().get('[data-test="knowledge-base-name"]').setValue('手动解析知识库')
+    await body().get('[data-test="create-auto-parse-input"]').trigger('click')
+    await body().get('[data-test="create-auto-publish-input"]').trigger('click')
+    await body().get('form').trigger('submit')
+    await flushPromises()
+
+    expect(createKnowledgeBase).toHaveBeenCalledWith('personal-space', expect.objectContaining({
+      autoParse: false,
+      autoPublish: true,
+    }))
+  })
+
   it('keeps management actions hidden for a knowledge user', async () => {
     useWorkspaceStore().setWorkspace({
       key: 'shared-space',

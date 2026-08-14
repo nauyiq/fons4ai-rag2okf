@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.fons.cloud.ai.rag2okf.domain.entity.user.KbModelProfile;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * 用户模型档案领域服务。
@@ -11,6 +13,23 @@ import java.util.List;
  * @author hongqy
  */
 public interface KbModelProfileDomainService extends IService<KbModelProfile> {
+
+    /**
+     * 批量查询指定所有者名下的有效模型档案。
+     *
+     * @param profileKeys 模型档案业务标识集合
+     * @param ownerUserId 档案所有者用户主键
+     * @return 属于指定所有者且未删除的模型档案
+     */
+    List<KbModelProfile> listByProfileKeysAndOwnerUserId(Set<String> profileKeys, Long ownerUserId);
+
+    /**
+     * 批量查询模型档案主键对应的业务标识。
+     *
+     * @param profileIds 模型档案主键集合
+     * @return 模型档案主键到业务标识的映射
+     */
+    Map<Long, String> findProfileKeysByIds(Set<Long> profileIds);
 
     /**
      * 查询指定用户拥有的全部有效模型档案，并按更新时间倒序返回。
@@ -46,4 +65,5 @@ public interface KbModelProfileDomainService extends IService<KbModelProfile> {
      * @return 是否成功执行删除
      */
     boolean removeByConnectionIdAndOwnerUserId(Long connectionId, Long ownerUserId);
+
 }

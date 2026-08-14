@@ -4,6 +4,9 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.fons.cloud.ai.rag2okf.domain.entity.user.UserProfileAggregate;
 import com.fons.cloud.ai.rag2okf.domain.entity.user.KbUser;
 
+import java.util.Map;
+import java.util.Set;
+
 /**
  * 本地用户领域服务，负责用户实体查询、资料聚合恢复和用户资料持久化协调。
  *
@@ -12,6 +15,14 @@ import com.fons.cloud.ai.rag2okf.domain.entity.user.KbUser;
  * @author hongqy
  */
 public interface KbUserDomainService extends IService<KbUser> {
+
+    /**
+     * 批量查询用户主键对应的稳定业务标识。
+     *
+     * @param userIds 用户主键集合
+     * @return 用户主键到业务标识的映射
+     */
+    Map<Long, String> findUserKeysByIds(Set<Long> userIds);
 
     /**
      * 根据不可变用户业务标识查找用户。

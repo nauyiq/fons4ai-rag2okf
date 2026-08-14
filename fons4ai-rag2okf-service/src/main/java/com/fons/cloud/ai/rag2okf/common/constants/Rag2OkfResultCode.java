@@ -43,6 +43,12 @@ public enum Rag2OkfResultCode implements Result {
     PUBLISH_CHUNK_NOT_SUCCEEDED("RF300013", "发布前分块尚未成功"),
     TASK_NOT_RETRYABLE("RF300014", "当前任务状态不可重试"),
 
+    //  ==================== 权限异常 ====================
+    NOT_PERMISSION_CREATE_DATABASES("RF400001", "无权限创建工作空间"),
+    NOT_PERMISSION_UPDATE_DATABASES("RF400002", "无权限编辑知识库"),
+    NOT_PERMISSION_DELETE_DATABASES("RF400003", "无权限删除知识库"),
+
+
     //  ==================== 技术执行异常 ====================
     PROJECTION_WRITE_ERROR("RF500001", "检索投影写入失败"),
     PROJECTION_CLEANUP_ERROR("RF500002", "检索投影清理失败"),
@@ -64,10 +70,6 @@ public enum Rag2OkfResultCode implements Result {
     PUBLISH_UNEXPECTED_ERROR("RF500018", "发布执行异常"),
 
 
-    //  ==================== 权限异常 ====================
-    NOT_PERMISSION_CREATE_DATABASES("RF400001", "无权限创建工作空间"),
-    NOT_PERMISSION_UPDATE_DATABASES("RF400002", "无权限编辑知识库"),
-    NOT_PERMISSION_DELETE_DATABASES("RF400003", "无权限删除知识库"),
 
 
     ;

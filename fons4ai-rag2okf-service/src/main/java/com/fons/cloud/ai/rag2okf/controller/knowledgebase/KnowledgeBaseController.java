@@ -1,12 +1,12 @@
 package com.fons.cloud.ai.rag2okf.controller.knowledgebase;
 
 import com.fons.cloud.ai.rag2okf.application.knowledgebase.KnowledgeBaseApplicationService;
-import com.fons.cloud.ai.rag2okf.common.request.CreateKnowledgeBaseRequest;
-import com.fons.cloud.ai.rag2okf.common.request.SaveModelBindingsRequest;
-import com.fons.cloud.ai.rag2okf.common.request.UpdateKnowledgeBaseRequest;
-import com.fons.cloud.ai.rag2okf.common.response.KnowledgeBaseResponse;
-import com.fons.cloud.ai.rag2okf.common.response.KnowledgeBaseSummaryResponse;
-import com.fons.cloud.ai.rag2okf.common.response.ModelBindingResponse;
+import com.fons.cloud.ai.rag2okf.common.request.knowledgebase.CreateKnowledgeBaseRequest;
+import com.fons.cloud.ai.rag2okf.common.request.knowledgebase.SaveModelBindingsRequest;
+import com.fons.cloud.ai.rag2okf.common.request.knowledgebase.UpdateKnowledgeBaseRequest;
+import com.fons.cloud.ai.rag2okf.common.response.knowledgebase.KnowledgeBaseResponse;
+import com.fons.cloud.ai.rag2okf.common.response.knowledgebase.KnowledgeBaseSummaryResponse;
+import com.fons.cloud.ai.rag2okf.common.response.knowledgebase.ModelBindingResponse;
 import com.fons.cloud.common.result.PageResult;
 import com.fons.cloud.common.result.R;
 import jakarta.validation.Valid;

@@ -16,6 +16,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.Date;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 本地用户领域服务实现，使用用户域 Mapper 恢复用户资料聚合并持久化资料白名单字段。
@@ -28,6 +31,16 @@ public class KbUserDomainServiceImpl extends ServiceImpl<KbUserMapper, KbUser> i
 
     private final KbWorkspaceMapper workspaceMapper;
     private final KbWorkspaceMemberMapper workspaceMemberMapper;
+
+    @Override
+    public Map<Long, String> findUserKeysByIds(Set<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+        return listByIds(userIds).stream()
+                .filter(user -> !Boolean.TRUE.equals(user.getDeleted()))
+                .collect(Collectors.toMap(KbUser::getId, KbUser::getUserKey));
+    }
 
     @Override
     public KbUser findByUserKey(String userKey) {

@@ -116,10 +116,6 @@ async function submitCreate(): Promise<void> {
     formError.value = '请输入知识库名称。'
     return
   }
-  if (form.autoPublish && !form.autoParse) {
-    formError.value = '自动发布依赖自动解析，请先开启自动解析。'
-    return
-  }
   creating.value = true
   formError.value = ''
   try {
@@ -306,8 +302,8 @@ onBeforeUnmount(() => {
         <a-form-item label="描述">
           <a-textarea v-model:value="form.description" data-test="knowledge-base-description" :maxlength="500" :rows="3" />
         </a-form-item>
-        <div class="toggle-row"><div><strong>自动解析</strong><span>上传后创建解析任务</span></div><a-switch v-model:checked="form.autoParse" /></div>
-        <div class="toggle-row"><div><strong>自动发布</strong><span>解析成功后直接发布用于检索</span></div><a-switch v-model:checked="form.autoPublish" :disabled="!form.autoParse" /></div>
+        <div class="toggle-row"><div><strong>自动解析</strong><span>上传后创建解析任务</span></div><a-switch v-model:checked="form.autoParse" data-test="create-auto-parse-input" /></div>
+        <div class="toggle-row"><div><strong>自动发布</strong><span>自动或手动解析成功后发布用于检索</span></div><a-switch v-model:checked="form.autoPublish" data-test="create-auto-publish-input" /></div>
         <div class="form-columns">
           <a-form-item label="解析策略">
             <a-select v-model:value="form.parserProfile">

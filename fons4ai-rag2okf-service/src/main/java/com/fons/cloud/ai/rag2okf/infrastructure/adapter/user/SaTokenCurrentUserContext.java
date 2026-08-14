@@ -32,4 +32,13 @@ public class SaTokenCurrentUserContext {
         }
         return user;
     }
+
+    /**
+     * 获取当前可用用户的内部主键，避免跨域用例持有可变用户实体。
+     *
+     * @return 当前本地用户主键
+     */
+    public Long requireCurrentUserId() {
+        return requireCurrentUser().getId();
+    }
 }
