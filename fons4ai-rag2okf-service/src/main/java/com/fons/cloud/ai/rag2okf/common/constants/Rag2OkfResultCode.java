@@ -23,6 +23,12 @@ public enum Rag2OkfResultCode implements Result {
     WORKSPACE_NOT_FOUND("RF100004", "工作空间不存在"),
     KNOWLEDGE_BASE_NOT_FOUND("RF100005", "知识库不存在"),
     KNOWLEDGE_BASE_NAME_DUPLICATED("RF100006", "重复的知识库名称"),
+    //  ==================== 文档域参数异常 ====================
+    DOCUMENT_UNSUPPORTED_FILE_TYPE("RF100007", "文件类型尚不支持"),
+    DOCUMENT_FILE_SECURITY_REJECTED("RF100008", "文件未通过安全校验"),
+    DOCUMENT_FILE_LIMIT_EXCEEDED("RF100009", "文件、页数或时长超过限制"),
+    DOCUMENT_CURRENT_FILE_CONFLICT("RF100010", "当前文件已变化"),
+    CHUNK_POLICY_INVALID("RF100011", "分块参数不合法"),
 
 
     //  ==================== 业务异常 ====================
@@ -42,6 +48,17 @@ public enum Rag2OkfResultCode implements Result {
     PUBLISH_PARSE_NOT_SUCCEEDED("RF300012", "发布前解析尚未成功"),
     PUBLISH_CHUNK_NOT_SUCCEEDED("RF300013", "发布前分块尚未成功"),
     TASK_NOT_RETRYABLE("RF300014", "当前任务状态不可重试"),
+
+    //  ==================== 文档域业务异常 ====================
+    PARSER_NOT_AVAILABLE("RF300015", "解析器暂未开放"),
+    MODEL_CAPABILITY_MISSING("RF300016", "缺少必要模型能力"),
+    MODEL_CAPABILITY_PROTOCOL_UNSUPPORTED("RF300017", "模型协议不支持所需能力"),
+    PARSED_DOCUMENT_INVALID("RF300018", "解析结果不符合规范"),
+    SEMANTIC_EMBEDDING_UNAVAILABLE("RF300019", "语义分块向量能力不可用"),
+    TASK_INPUT_SUPERSEDED("RF300020", "任务输入已不是当前内容"),
+    PUBLICATION_EMBEDDING_UNAVAILABLE("RF300021", "发布所需向量能力不可用"),
+    DOCUMENT_DELETED("RF300022", "文档已删除"),
+    DOCUMENT_CLEANUP_FAILED("RF300023", "内容清理未完成"),
 
     //  ==================== 权限异常 ====================
     NOT_PERMISSION_CREATE_DATABASES("RF400001", "无权限创建工作空间"),
@@ -68,6 +85,10 @@ public enum Rag2OkfResultCode implements Result {
     PUBLISH_PROJECTION_ERROR("RF500016", "发布投影失败"),
     PUBLISH_ARTIFACT_ERROR("RF500017", "发布产物访问失败"),
     PUBLISH_UNEXPECTED_ERROR("RF500018", "发布执行异常"),
+
+    //  ==================== 文档域技术执行异常 ====================
+    MODEL_CAPABILITY_CALL_FAILED("RF500019", "模型能力调用失败"),
+    DOCUMENT_SOURCE_ARTIFACT_ERROR("RF500020", "源文件存储访问失败"),
 
 
 
