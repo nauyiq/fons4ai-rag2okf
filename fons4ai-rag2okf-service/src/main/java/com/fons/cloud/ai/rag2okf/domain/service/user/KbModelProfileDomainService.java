@@ -2,6 +2,7 @@ package com.fons.cloud.ai.rag2okf.domain.service.user;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.fons.cloud.ai.rag2okf.domain.entity.user.KbModelProfile;
+import com.fons.cloud.ai.rag2okf.domain.entity.user.UserModelAggregate;
 
 import java.util.List;
 import java.util.Map;
@@ -66,4 +67,10 @@ public interface KbModelProfileDomainService extends IService<KbModelProfile> {
      */
     boolean removeByConnectionIdAndOwnerUserId(Long connectionId, Long ownerUserId);
 
+    /**
+     * 查询用户模型配置聚合根
+     * @param profileKey  模型档案业务标识
+     * @param ownerUserId 档案所有者用户主键
+     */
+    UserModelAggregate findModelAggregateByOwnerUserId(String profileKey,  Long ownerUserId);
 }

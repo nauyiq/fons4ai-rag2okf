@@ -108,6 +108,6 @@ public class ModelConfigurationController {
     /** @param profileKey 档案标识 @return 不泄露 Provider 原始错误的测试结果 */
     @PostMapping("/model-profiles/{profileKey}/test")
     public R<ModelTestResponse> testProfile(@PathVariable("profileKey") @NotBlank String profileKey) {
-        return R.ok(modelConfigurationApplicationService.testProfile(profileKey));
+        return modelConfigurationApplicationService.testProfile(profileKey);
     }
 }

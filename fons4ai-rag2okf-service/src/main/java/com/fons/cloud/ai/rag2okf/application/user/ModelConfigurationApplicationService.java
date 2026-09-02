@@ -8,7 +8,6 @@ import com.fons.cloud.ai.rag2okf.common.constants.user.ModelTestStatus;
 import com.fons.cloud.ai.rag2okf.common.constants.user.ModelType;
 import com.fons.cloud.ai.rag2okf.common.model.user.EncryptedCredential;
 import com.fons.cloud.ai.rag2okf.common.model.user.ResolvedModelDescriptor;
-import com.fons.cloud.ai.rag2okf.common.model.user.ResolvedUserModel;
 import com.fons.cloud.ai.rag2okf.common.exception.user.ModelAccessDeniedException;
 import com.fons.cloud.ai.rag2okf.common.exception.user.ModelConfigurationException;
 import com.fons.cloud.ai.rag2okf.common.request.user.CreateModelConnectionRequest;
@@ -24,12 +23,14 @@ import com.fons.cloud.ai.rag2okf.common.utils.ModelEndpointValidator;
 import com.fons.cloud.ai.rag2okf.domain.entity.user.KbModelConnection;
 import com.fons.cloud.ai.rag2okf.domain.entity.user.KbModelProfile;
 import com.fons.cloud.ai.rag2okf.domain.entity.user.KbUser;
+import com.fons.cloud.ai.rag2okf.domain.entity.user.UserModelAggregate;
 import com.fons.cloud.ai.rag2okf.domain.service.user.KbModelConnectionDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.user.KbModelProfileDomainService;
 import com.fons.cloud.ai.rag2okf.infrastructure.adapter.user.AesGcmCredentialCipher;
 import com.fons.cloud.ai.rag2okf.infrastructure.adapter.user.SaTokenCurrentUserContext;
-import com.fons.cloud.ai.rag2okf.infrastructure.client.user.LangChain4jModelClientFactory;
-import com.fons.cloud.ai.rag2okf.infrastructure.support.user.ModelParameterCodec;
+import com.fons.cloud.ai.rag2okf.infrastructure.factory.LangChain4jModelClientFactory;
+import com.fons.cloud.ai.rag2okf.common.utils.ModelParameterCodec;
+import com.fons.cloud.common.result.R;
 import dev.langchain4j.data.embedding.Embedding;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -54,8 +55,6 @@ public class ModelConfigurationApplicationService {
     private final KbModelConnectionDomainService connectionDomainService;
     private final KbModelProfileDomainService profileDomainService;
     private final AesGcmCredentialCipher credentialCipher;
-    private final ModelParameterCodec parameterCodec;
-    private final UserModelResolver userModelResolver;
     private final LangChain4jModelClientFactory modelClientFactory;
 
     /**
@@ -202,7 +201,7 @@ public class ModelConfigurationApplicationService {
         KbModelProfile profile = KbModelProfile.create(
                 BusinessKeyGenerator.nextKey(), user.getId(), connection.getId(), request.modelType(),
                 request.modelName().trim(), request.dimensions(), request.contextWindowLength(),
-                parameterCodec.encode(request.timeoutSeconds(), request.temperature(), request.contextWindowLength()));
+                ModelParameterCodec.encode(request.timeoutSeconds(), request.temperature(), request.contextWindowLength()));
         profileDomainService.save(profile);
         return toProfileResponse(profile, connection);
     }
@@ -220,14 +219,14 @@ public class ModelConfigurationApplicationService {
         KbModelProfile profile = requireOwnedProfile(profileKey, user.getId());
         KbModelConnection connection = requireOwnedConnectionById(profile.getConnectionId(), user.getId());
         Integer dimensions = request.dimensions() == null ? profile.getDimensions() : request.dimensions();
-        ModelParameterCodec.ModelParameters currentParameters = parameterCodec.decode(profile.getParametersJson());
+        ModelParameterCodec.ModelParameters currentParameters = ModelParameterCodec.decode(profile.getParametersJson());
         Integer contextWindowLength = request.contextWindowLength() == null ? profile.getContextWindowLength() : request.contextWindowLength();
         Integer timeout = request.timeoutSeconds() == null ? currentParameters.timeoutSeconds() : request.timeoutSeconds();
         Double temperature = request.temperature() == null ? currentParameters.temperature() : request.temperature();
         validateProfileSemantics(profile.getModelType(), dimensions, temperature);
         String modelName = request.modelName() == null ? null : request.modelName().trim();
         profile.updateConfiguration(modelName, dimensions, contextWindowLength,
-                parameterCodec.encode(timeout, temperature, contextWindowLength), request.status());
+                ModelParameterCodec.encode(timeout, temperature, contextWindowLength), request.status());
         profileDomainService.updateById(profile);
         return toProfileResponse(profile, connection);
     }
@@ -252,22 +251,23 @@ public class ModelConfigurationApplicationService {
      * @param profileKey 档案业务标识
      * @return 安全化测试结果
      */
-    public ModelTestResponse testProfile(String profileKey) {
+    public R<ModelTestResponse> testProfile(String profileKey) {
         KbUser user = currentUserContext.requireCurrentUser();
-        ResolvedUserModel resolvedModel = userModelResolver.resolveOwnedActiveProfile(profileKey, user.getId());
-        KbModelProfile profile = resolvedModel.profile();
-        KbModelConnection connection = resolvedModel.connection();
+        UserModelAggregate aggregate = profileDomainService.findModelAggregateByOwnerUserId(profileKey, user.getId());
+        if (aggregate == null) {
+            return R.failed(Rag2OkfResultCode.MODEL_CAPABILITY_CALL_FAILED);
+        }
+        KbModelProfile profile = aggregate.getModelProfile();
+        KbModelConnection connection = aggregate.getModelConnection();
         try {
-            String apiKey = credentialCipher.decrypt(new EncryptedCredential(
-                    connection.getApiKeyCiphertext(), connection.getApiKeyNonce(), connection.getKeyVersion()
-            ));
-            Integer dimensions = invokeMinimalProbe(resolvedModel.descriptor(), apiKey);
+            String apiKey = credentialCipher.decrypt(new EncryptedCredential(connection.getApiKeyCiphertext(), connection.getApiKeyNonce(), connection.getKeyVersion()));
+            Integer dimensions = invokeMinimalProbe(aggregate.getModelDescriptor(), apiKey);
             updateTestResult(profile, connection, ModelTestStatus.SUCCEEDED, null);
-            return new ModelTestResponse(ModelTestStatus.SUCCEEDED, null, dimensions);
+            return R.ok(new ModelTestResponse(ModelTestStatus.SUCCEEDED, null, dimensions));
         } catch (RuntimeException exception) {
             String errorCode = Rag2OkfResultCode.MODEL_TEST_FAILED.getCode();
             updateTestResult(profile, connection, ModelTestStatus.FAILED, errorCode);
-            return new ModelTestResponse(ModelTestStatus.FAILED, errorCode, null);
+            return R.failed();
         }
     }
 
@@ -353,7 +353,7 @@ public class ModelConfigurationApplicationService {
     }
 
     private ModelProfileResponse toProfileResponse(KbModelProfile profile, KbModelConnection connection) {
-        ModelParameterCodec.ModelParameters parameters = parameterCodec.decode(profile.getParametersJson());
+        ModelParameterCodec.ModelParameters parameters = ModelParameterCodec.decode(profile.getParametersJson());
         // 读取别名兼容：旧数据 model_type=CHAT 读取时归一为 LLM 返回。
         ModelType responseType = profile.getModelType() == null ? null : profile.getModelType().canonical();
         return new ModelProfileResponse(profile.getProfileKey(), connection.getConnectionKey(), responseType,

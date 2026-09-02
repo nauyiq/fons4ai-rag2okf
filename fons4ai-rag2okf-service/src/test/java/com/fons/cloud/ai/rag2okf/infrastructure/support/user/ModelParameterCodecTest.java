@@ -1,6 +1,7 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.support.user;
 
 import com.fons.cloud.ai.rag2okf.common.exception.user.ModelConfigurationException;
+import com.fons.cloud.ai.rag2okf.common.utils.ModelParameterCodec;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

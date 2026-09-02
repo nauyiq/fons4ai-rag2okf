@@ -1,6 +1,7 @@
 package com.fons.cloud.ai.rag2okf.controller.endpoint;
 
 import cn.dev33.satoken.exception.NotLoginException;
+import com.fons.cloud.ai.rag2okf.common.exception.document.DocumentProcessingException;
 import com.fons.cloud.ai.rag2okf.common.exception.user.AuthenticationDeniedException;
 import com.fons.cloud.ai.rag2okf.common.exception.user.AuthenticationRateLimitedException;
 import com.fons.cloud.ai.rag2okf.common.exception.user.InvalidUserProfileException;
@@ -118,6 +119,20 @@ public class Rag2OkfExceptionEndpoint {
     @ExceptionHandler(KnowledgeBaseConflictException.class)
     public R<Void> handleKnowledgeBaseConflict(KnowledgeBaseConflictException exception) {
         return R.failed(ResultCode.FAILED);
+    }
+
+    /**
+     * 收敛文档域业务异常为稳定错误码响应。
+     *
+     * <p>作为应用服务 {@code R.failed} 之外的兜底：解析执行器、任务扫描等非 Controller
+     * 入口抛出的 {@link DocumentProcessingException} 也以安全错误码返回，不落成 500。</p>
+     *
+     * @param exception 文档处理业务异常
+     * @return 统一业务错误响应
+     */
+    @ExceptionHandler(DocumentProcessingException.class)
+    public R<Void> handleDocumentProcessing(DocumentProcessingException exception) {
+        return R.failed(exception.getCode(), exception.getMessage());
     }
 
     /**

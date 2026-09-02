@@ -93,7 +93,7 @@ public class KnowledgeBaseApplicationService {
         }
 
         PageResult<KbKnowledgeBase> result = knowledgeBaseDomainService.pageByWorkspaceId(
-                workspace.workspace().getId(), page, size);
+                workspace.getWorkspace().getId(), page, size);
 
         // 批量查询知识库创建者，避免逐条 N+1 查 kb_user
         Map<Long, String> ownerMap = loadOwnerUserMap(result.getResultList());
@@ -127,16 +127,16 @@ public class KnowledgeBaseApplicationService {
 
         // 判断知识库名称是否已存在
         if (knowledgeBaseDomainService.existsByWorkspaceIdAndName(
-                workspace.workspace().getId(), request.name())) {
+                workspace.getWorkspace().getId(), request.name())) {
             return R.failed(Rag2OkfResultCode.KNOWLEDGE_BASE_NAME_DUPLICATED);
         }
 
         // 自动解析与自动发布可独立组合；ChunkProfile 校验由实体工厂方法负责
         KbKnowledgeBase kbKnowledgeBase = KbKnowledgeBase.create(
-                currentUserId, workspace.workspace().getId(), request);
+                currentUserId, workspace.getWorkspace().getId(), request);
 
         // 事务外校验绑定项，校验失败直接返回具体错误码
-        R<Map<String, KbModelProfile>> validation = validateAllBindings(request.modelBindings(), workspace.workspace().getOwnerUserId());
+        R<Map<String, KbModelProfile>> validation = validateAllBindings(request.modelBindings(), workspace.getWorkspace().getOwnerUserId());
         if (!validation.isSuccess()) {
             return R.failed(validation);
         }
@@ -162,7 +162,7 @@ public class KnowledgeBaseApplicationService {
             return R.failed(ResultCode.SYSTEM_BUSY);
         }
         return R.ok(toResponse(
-                kbKnowledgeBase, workspace.workspace().getWorkspaceKey(), bindingResponses));
+                kbKnowledgeBase, workspace.getWorkspace().getWorkspaceKey(), bindingResponses));
     }
 
 
@@ -186,7 +186,7 @@ public class KnowledgeBaseApplicationService {
             return R.failed(Rag2OkfResultCode.WORKSPACE_NOT_FOUND);
         }
         List<ModelBindingResponse> bindings = loadBindings(entity.getId());
-        return R.ok(toResponse(entity, workspace.workspace().getWorkspaceKey(), bindings));
+        return R.ok(toResponse(entity, workspace.getWorkspace().getWorkspaceKey(), bindings));
     }
 
     /**
@@ -220,7 +220,7 @@ public class KnowledgeBaseApplicationService {
 
         // 事务外校验绑定项，校验失败直接透传错误码
         R<Map<String, KbModelProfile>> validation = validateAllBindings(
-                request.modelBindings(), workspace.workspace().getOwnerUserId());
+                request.modelBindings(), workspace.getWorkspace().getOwnerUserId());
         if (!validation.isSuccess()) {
             return R.failed(validation);
         }
@@ -249,7 +249,7 @@ public class KnowledgeBaseApplicationService {
             return R.failed(ResultCode.SYSTEM_BUSY);
         }
 
-        return R.ok(toResponse(entity, workspace.workspace().getWorkspaceKey(), bindingResponses));
+        return R.ok(toResponse(entity, workspace.getWorkspace().getWorkspaceKey(), bindingResponses));
     }
 
     /**
@@ -300,7 +300,7 @@ public class KnowledgeBaseApplicationService {
 
         // 事务外校验绑定项，校验失败直接返回具体错误码
         R<Map<String, KbModelProfile>> validation = validateAllBindings(
-                items, workspace.workspace().getOwnerUserId());
+                items, workspace.getWorkspace().getOwnerUserId());
         if (!validation.isSuccess()) {
             return R.failed(validation);
         }

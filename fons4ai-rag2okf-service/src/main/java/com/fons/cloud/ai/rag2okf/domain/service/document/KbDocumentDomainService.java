@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.fons.cloud.ai.rag2okf.common.constants.document.DocumentStatus;
 import com.fons.cloud.ai.rag2okf.common.exception.document.DocumentProcessingException;
 import com.fons.cloud.ai.rag2okf.domain.entity.document.KbDocument;
+import com.fons.cloud.common.result.PageResult;
 
 /**
  * 文档身份领域服务。
@@ -14,6 +15,17 @@ import com.fons.cloud.ai.rag2okf.domain.entity.document.KbDocument;
  * @author hongqy
  */
 public interface KbDocumentDomainService extends IService<KbDocument> {
+
+    /**
+     * 分页查询知识库下未删除的文档，按最近更新时间和主键倒序排列。
+     *
+     * @param knowledgeBaseId 知识库主键
+     * @param pageNumber      页码，从 1 开始
+     * @param pageSize        每页条数
+     * @return 文档分页结果
+     */
+    PageResult<KbDocument> pageActiveByKnowledgeBaseId(
+            Long knowledgeBaseId, int pageNumber, int pageSize);
 
     /**
      * 根据文档业务标识查询活跃文档。

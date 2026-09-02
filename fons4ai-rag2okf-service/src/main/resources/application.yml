@@ -90,3 +90,20 @@ sys:
     model-credential-key-version: ${SYS_MODEL_CREDENTIAL_KEY_VERSION:}
   embedding:
     dims: ${SYS_EMBEDDING_DIMS:1024}
+
+rag2okf:
+  document:
+    pdf:
+      ocr-probe:
+        max-pages: ${RAG2OKF_DOCUMENT_PDF_OCR_PROBE_MAX_PAGES:1000}
+        min-text-code-points: ${RAG2OKF_DOCUMENT_PDF_OCR_PROBE_MIN_TEXT_CODE_POINTS:20}
+        max-invalid-character-ratio: ${RAG2OKF_DOCUMENT_PDF_OCR_PROBE_MAX_INVALID_CHARACTER_RATIO:0.05}
+        max-source-bytes: ${RAG2OKF_DOCUMENT_PDF_OCR_PROBE_MAX_SOURCE_BYTES:104857600}
+    ocr:
+      official:
+        enabled: ${RAG2OKF_DOCUMENT_OCR_OFFICIAL_ENABLED:false}
+        base-uri: ${RAG2OKF_DOCUMENT_OCR_OFFICIAL_BASE_URI:https://paddleocr.aistudio-app.com}
+        access-token: ${RAG2OKF_DOCUMENT_OCR_OFFICIAL_ACCESS_TOKEN:}
+        request-timeout: ${RAG2OKF_DOCUMENT_OCR_OFFICIAL_REQUEST_TIMEOUT:30s}
+        poll-timeout: ${RAG2OKF_DOCUMENT_OCR_OFFICIAL_POLL_TIMEOUT:10m}
+        poll-interval: ${RAG2OKF_DOCUMENT_OCR_OFFICIAL_POLL_INTERVAL:3s}

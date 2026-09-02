@@ -1,9 +1,10 @@
 package com.fons.cloud.ai.rag2okf.controller;
 
-import com.fons.cloud.ai.rag2okf.application.chunking.RechunkApplicationService;
-import com.fons.cloud.ai.rag2okf.common.request.RechunkRequest;
-import com.fons.cloud.ai.rag2okf.common.response.RechunkResponse;
+import com.fons.cloud.ai.rag2okf.application.document.DocumentChunkApplicationService;
+import com.fons.cloud.ai.rag2okf.common.request.document.DocumentRechunkRequest;
+import com.fons.cloud.ai.rag2okf.common.response.document.DocumentRechunkResponse;
 import com.fons.cloud.common.result.R;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -11,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 重新分块接口（AC-019、AC-020、AC-021）。
+ * 基于当前 ParsedDocument 的重新分块接口。
  *
  * @author hongqy
  */
@@ -19,21 +20,19 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class RechunkController {
 
-    private final RechunkApplicationService rechunkApplicationService;
+    private final DocumentChunkApplicationService documentChunkApplicationService;
 
     /**
-     * 重新分块。明确确认后重建当前解析侧分块。
+     * 创建重新分块任务。请求携带当前结果版本，执行时会再次以版本和 stage 做 CAS 校验。
      *
      * @param documentKey 文档标识
      * @param request     重新分块请求
-     * @return 重新分块受理响应
+     * @return 重新分块任务受理响应
      */
     @PostMapping("/documents/{documentKey}/rechunk")
-    public R<RechunkResponse> triggerRechunk(
+    public R<DocumentRechunkResponse> triggerRechunk(
             @PathVariable String documentKey,
-            @RequestBody RechunkRequest request) {
-        return R.ok(rechunkApplicationService.triggerRechunk(
-                documentKey, request.confirmed(),
-                request.expectedChunkRevisionKey(), request.chunkProfile()));
+            @RequestBody @Valid DocumentRechunkRequest request) {
+        return documentChunkApplicationService.startRechunk(documentKey, request);
     }
 }

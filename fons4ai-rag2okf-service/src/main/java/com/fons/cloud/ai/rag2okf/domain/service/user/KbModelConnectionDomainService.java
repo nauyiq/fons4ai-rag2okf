@@ -2,6 +2,7 @@ package com.fons.cloud.ai.rag2okf.domain.service.user;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.fons.cloud.ai.rag2okf.domain.entity.user.KbModelConnection;
+import com.fons.cloud.ai.rag2okf.domain.entity.user.UserModelAggregate;
 
 import java.util.List;
 
@@ -37,4 +38,7 @@ public interface KbModelConnectionDomainService extends IService<KbModelConnecti
      * @return 匹配的连接；不存在或不属于该用户时返回 {@code null}
      */
     KbModelConnection findByIdAndOwnerUserId(Long connectionId, Long ownerUserId);
+
+
+
 }

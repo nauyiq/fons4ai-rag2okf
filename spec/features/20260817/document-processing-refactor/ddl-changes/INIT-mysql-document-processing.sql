@@ -2,7 +2,7 @@
 -- 文档处理流水线重构 TP-002 / T007：文档域 3 表执行型 DDL 草案
 -- ---------------------------------------------------------------------
 -- 结构依据：spec/features/20260817/document-processing-refactor/
---           文档处理流水线重构-技术设计说明书.md §5.3 结构变更详设（V2.0.2）
+--           文档处理流水线重构-技术设计说明书.md §5.3 结构变更详设（V2.0.3）
 -- 命名与列顺序：沿用 fons4ai-rag2okf-service/sql/init-schema.sql 中
 --           kb_source_document / kb_processing_task 的既有风格。
 -- 执行方式：项目无 Flyway，应用启动不执行 DDL；本草案由用户/DBA 审核
@@ -80,7 +80,7 @@ CREATE TABLE kb_document_result (
     parsed_markdown_object_key VARCHAR(512) NULL COMMENT '派生 Markdown 的 MinIO 对象键，可选',
     block_count INT NOT NULL DEFAULT 0 COMMENT '结构块数量，解析完成时写入',
     warning_count INT NOT NULL DEFAULT 0 COMMENT '解析警告数量，解析完成时写入',
-    boundary_type VARCHAR(20) NULL COMMENT '分块边界策略白名单：LENGTH、STRUCTURE、SEMANTIC；PARSE 后写入',
+    boundary_type VARCHAR(20) NULL COMMENT '分块边界策略白名单：RECURSIVE、MARKDOWN_HEADER、SEMANTIC；PARSE 后写入',
     hierarchy_type VARCHAR(20) NULL COMMENT '分块层级策略白名单：FLAT、PARENT_CHILD；PARSE 后写入',
     policy_snapshot_json JSON NULL COMMENT '任务创建时冻结的分块参数与语义模型引用快照',
     chunk_manifest_object_key VARCHAR(512) NULL COMMENT 'ChunkManifest v1 的 MinIO 对象键，分块成功并校验后写入',
@@ -115,10 +115,10 @@ CREATE TABLE kb_document_result (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='文档结果生命周期、源文件指针与制品登记，靠 stage 顺序推进';
 
 -- ---------------------------------------------------------------------
--- 3. kb_processing_task：异步任务、幂等、租约与安全失败原因
+-- 3. kb_processing_task：异步任务、租约与安全失败原因
 --    在旧表基础上重建：payload_json→snapshot_json、
---    input_revision_key→input_result_key、新增 snapshot_version 与
---    retry_of_task_id、task_type 扩展 DELETE_CLEANUP。
+--    input_revision_key→input_result_key、新增 retry_of_task_id、
+--    task_type 扩展 DELETE_CLEANUP。
 -- ---------------------------------------------------------------------
 DROP TABLE IF EXISTS kb_processing_task;
 CREATE TABLE kb_processing_task (
@@ -129,10 +129,8 @@ CREATE TABLE kb_processing_task (
     source_document_id BIGINT NOT NULL COMMENT '目标文档主键',
     task_type VARCHAR(32) NOT NULL COMMENT '任务类型严格枚举：PARSE、RECHUNK、PUBLISH、DELETE_CLEANUP，不接受未知类型',
     input_result_key CHAR(26) NULL COMMENT '任务输入 kb_document_result.result_key 引用',
-    idempotency_key VARCHAR(128) NOT NULL COMMENT '调用方幂等键，一次用户操作提供一个',
     retry_of_task_id BIGINT NULL COMMENT '重新发起或清理重试时关联的原失败任务主键，用于追溯',
-    snapshot_version VARCHAR(16) NOT NULL COMMENT '任务快照版本号，与 snapshot_json 的 schemaVersion 一致，如 1.0',
-    snapshot_json JSON NULL COMMENT '任务输入版本化最小快照，只冻结非秘密引用',
+    snapshot_json JSON NULL COMMENT '任务输入最小快照，只冻结非秘密引用',
     status VARCHAR(20) NOT NULL COMMENT '任务状态：QUEUED、RUNNING、SUCCEEDED、RETRY_WAIT、FAILED',
     stage VARCHAR(32) NULL COMMENT '当前执行阶段',
     progress INT NOT NULL DEFAULT 0 COMMENT '进度百分比，范围 0 到 100',
@@ -151,12 +149,10 @@ CREATE TABLE kb_processing_task (
     PRIMARY KEY (id),
     -- 业务标识唯一
     UNIQUE KEY uk_kb_processing_task_key (task_key),
-    -- 场景：幂等创建查重，同一文档同一类型同一幂等键只允许一个任务
-    UNIQUE KEY uk_kb_processing_task_idempotency (source_document_id, task_type, idempotency_key),
     -- 场景：调度器扫描到期任务（status + next_run_at）
     KEY idx_kb_processing_task_status_next_run (status, next_run_at),
     -- 场景：详情页 latestTasks 按文档取每类型最近一条任务
     KEY idx_kb_processing_task_document_created (source_document_id, created),
     -- 场景：重新发起或清理重试时按原失败任务追溯链路
     KEY idx_kb_processing_task_retry_of (retry_of_task_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='异步任务、幂等、租约恢复与安全失败原因事实';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='异步任务、租约恢复与安全失败原因事实';

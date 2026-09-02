@@ -9,13 +9,15 @@ import com.fons.cloud.ai.rag2okf.common.exception.document.DocumentProcessingExc
  *
  * <p>严格枚举（设计 §5.3）：数据库列与请求参数只接受本枚举值，未知类型
  * 直接拒绝，不得默认回落 PARSE。任务默认最大执行次数按类型区分
- * （设计 §4.5）：PARSE/RECHUNK/PUBLISH 为 3 次，DELETE_CLEANUP 为 10 次。</p>
+ * （设计 §4.5）：PARSE/CHUNK/RECHUNK/PUBLISH 为 3 次，DELETE_CLEANUP 为 10 次。</p>
  *
  * @author hongqy
  */
 public enum ProcessingTaskType {
-    /** 解析加首次分块任务：一次任务串联解析与首次分块，用户视角解析完成等于分块完成。 */
+    /** 仅解析并产出 ParsedDocument 的任务。 */
     PARSE("PARSE"),
+    /** 首次分块任务：基于 PARSE 阶段的 ParsedDocument 生成 ChunkManifest。 */
+    CHUNK("CHUNK"),
     /** 重新分块任务：基于已有 ParsedDocument 重新分块。 */
     RECHUNK("RECHUNK"),
     /** 发布任务：向量化并写入 ES 投影。 */

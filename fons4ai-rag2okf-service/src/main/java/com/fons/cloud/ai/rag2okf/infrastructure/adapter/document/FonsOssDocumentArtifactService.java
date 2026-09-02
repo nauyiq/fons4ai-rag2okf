@@ -8,6 +8,8 @@ import com.fons.cloud.file.common.request.OssUploadRequest;
 import com.fons.cloud.file.common.response.OssObjectResponse;
 import org.springframework.stereotype.Component;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
@@ -15,6 +17,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
@@ -52,6 +55,9 @@ public class FonsOssDocumentArtifactService {
 
     /** 对象键中不允许出现的路径逃逸段。 */
     private static final String PATH_ESCAPE_SEGMENT = "..";
+
+    /** 分块清单文件名，作为受控对象键末段。 */
+    private static final String CHUNK_MANIFEST_FILENAME = "chunk-manifest.json";
 
     private static final String CONTENT_TYPE_METADATA = "content-type";
     private static final String ORIGINAL_FILENAME_METADATA = "original-filename";
@@ -144,6 +150,149 @@ public class FonsOssDocumentArtifactService {
     }
 
     /**
+     * 写入不可变 ParsedDocument JSON 与可选 Markdown。
+     *
+     * <p>对象键由 workspace/kb/document/resultKey 构造；调用方不能指定路径。
+     * 任一写入失败会补偿删除本次两个目标键。</p>
+     */
+    public StoredParsedArtifacts storeParsed(ParsedArtifactCommand command) {
+        requireParsedCommand(command);
+        String prefix = "workspaces/%s/knowledge-bases/%s/documents/%s/parses/%s/".formatted(
+                command.workspaceKey(), command.knowledgeBaseKey(),
+                command.documentKey(), command.resultKey());
+        String jsonKey = prefix + "parsed-document.v1.json";
+        String markdownKey = command.markdown() == null
+                || command.markdown().length == 0 ? null : prefix + "parsed-document.md";
+        try {
+            uploadBytes(jsonKey, "parsed-document.v1.json", "application/json", command.json());
+            if (markdownKey != null) {
+                uploadBytes(markdownKey, "parsed-document.md", "text/markdown", command.markdown());
+            }
+            return new StoredParsedArtifacts(jsonKey, markdownKey);
+        } catch (RuntimeException exception) {
+            compensateParsed(jsonKey, markdownKey, exception);
+            throw new DocumentProcessingException(Rag2OkfResultCode.PARSE_ARTIFACT_ERROR, exception);
+        }
+    }
+
+    /** 打开已登记的 ParsedDocument JSON；调用方负责关闭流。 */
+    public SourceArtifactContent openParsed(String objectKey) {
+        validateObjectKey(objectKey);
+        if (!objectKey.contains("/parses/") || !objectKey.endsWith("/parsed-document.v1.json")) {
+            throw new DocumentProcessingException(Rag2OkfResultCode.PAYLOAD_INVALID);
+        }
+        try {
+            OssObjectResponse response = ossStoreService.download(
+                    OssObjectRequest.builder().objectKey(objectKey).build());
+            if (response == null || response.getInputStream() == null) {
+                throw new DocumentProcessingException(Rag2OkfResultCode.PARSE_ARTIFACT_ERROR);
+            }
+            return new SourceArtifactContent(objectKey, response.getInputStream());
+        } catch (DocumentProcessingException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new DocumentProcessingException(Rag2OkfResultCode.PARSE_ARTIFACT_ERROR, exception);
+        }
+    }
+
+    /** 删除本次尚未登记成功的解析制品，用于 CAS 失败补偿。 */
+    public void deleteParsed(StoredParsedArtifacts artifacts) {
+        if (artifacts == null) {
+            return;
+        }
+        RuntimeException failure = null;
+        for (String key : new String[]{artifacts.jsonObjectKey(), artifacts.markdownObjectKey()}) {
+            if (key == null) {
+                continue;
+            }
+            validateObjectKey(key);
+            try {
+                ossStoreService.delete(OssObjectRequest.builder().objectKey(key).build());
+            } catch (RuntimeException exception) {
+                if (failure == null) {
+                    failure = exception;
+                } else {
+                    failure.addSuppressed(exception);
+                }
+            }
+        }
+        if (failure != null) {
+            throw new DocumentProcessingException(Rag2OkfResultCode.PARSE_ARTIFACT_ERROR, failure);
+        }
+    }
+
+    /**
+     * 写入不可变 ChunkManifest JSON。
+     *
+     * <p>对象键由 workspace/kb/document/resultKey 构造，调用方无法指定存储路径。
+     * 清单仅在结果 CAS 登记成功后成为当前制品；CAS 失败时调用方应调用
+     * {@link #deleteChunk(StoredChunkArtifact)} 补偿本次写入。</p>
+     *
+     * @param command 分块清单写入命令
+     * @return 已写入清单的受控对象键
+     */
+    public StoredChunkArtifact storeChunk(ChunkArtifactCommand command) {
+        requireChunkCommand(command);
+        String artifactKey = UUID.randomUUID().toString();
+        String objectKey = "workspaces/%s/knowledge-bases/%s/documents/%s/chunks/%s/%s/%s".formatted(
+                command.workspaceKey, command.knowledgeBaseKey, command.documentKey,
+                command.resultKey, artifactKey, CHUNK_MANIFEST_FILENAME);
+        try {
+            uploadBytes(objectKey, CHUNK_MANIFEST_FILENAME, "application/json", command.json);
+            return new StoredChunkArtifact(objectKey);
+        } catch (RuntimeException exception) {
+            try {
+                deleteChunk(new StoredChunkArtifact(objectKey));
+            } catch (RuntimeException cleanupFailure) {
+                exception.addSuppressed(cleanupFailure);
+            }
+            throw new DocumentProcessingException(Rag2OkfResultCode.RECHUNK_ARTIFACT_ERROR, exception);
+        }
+    }
+
+    /**
+     * 打开已登记的 ChunkManifest JSON；调用方负责关闭返回流。
+     *
+     * @param objectKey 结果表登记的清单对象键
+     * @return 受控读取流
+     */
+    public SourceArtifactContent openChunk(String objectKey) {
+        validateObjectKey(objectKey);
+        if (!objectKey.contains("/chunks/") || !objectKey.endsWith("/" + CHUNK_MANIFEST_FILENAME)) {
+            throw new DocumentProcessingException(Rag2OkfResultCode.PAYLOAD_INVALID);
+        }
+        try {
+            OssObjectResponse response = ossStoreService.download(
+                    OssObjectRequest.builder().objectKey(objectKey).build());
+            if (response == null || response.getInputStream() == null) {
+                throw new DocumentProcessingException(Rag2OkfResultCode.RECHUNK_ARTIFACT_ERROR);
+            }
+            return new SourceArtifactContent(objectKey, response.getInputStream());
+        } catch (DocumentProcessingException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new DocumentProcessingException(Rag2OkfResultCode.RECHUNK_ARTIFACT_ERROR, exception);
+        }
+    }
+
+    /**
+     * 删除本次尚未登记成功的分块清单，用于 CAS 失败补偿。
+     *
+     * @param artifact 本服务写入的清单描述
+     */
+    public void deleteChunk(StoredChunkArtifact artifact) {
+        if (artifact == null || artifact.objectKey == null) {
+            return;
+        }
+        validateObjectKey(artifact.objectKey);
+        try {
+            ossStoreService.delete(OssObjectRequest.builder().objectKey(artifact.objectKey).build());
+        } catch (RuntimeException exception) {
+            throw new DocumentProcessingException(Rag2OkfResultCode.RECHUNK_ARTIFACT_ERROR, exception);
+        }
+    }
+
+    /**
      * 源文件写入命令；scope 各段与 fileToken 均为系统业务 key，
      * 文件内容以流传递，不得在日志或异常中输出正文。
      *
@@ -182,7 +331,81 @@ public class FonsOssDocumentArtifactService {
      * @param objectKey   已登记的源文件对象键
      * @param inputStream 读取流
      */
-    public record SourceArtifactContent(String objectKey, InputStream inputStream) {
+    public record SourceArtifactContent(String objectKey, InputStream inputStream) implements AutoCloseable {
+        @Override
+        public void close() throws IOException {
+            inputStream.close();
+        }
+    }
+
+    /** 解析制品写入命令；内容来自已校验 ParsedDocument，不得包含秘密。 */
+    public record ParsedArtifactCommand(
+            String workspaceKey,
+            String knowledgeBaseKey,
+            String documentKey,
+            String resultKey,
+            byte[] json,
+            byte[] markdown) {
+        public ParsedArtifactCommand {
+            json = json == null ? null : json.clone();
+            markdown = markdown == null ? null : markdown.clone();
+        }
+    }
+
+    /** 已写入解析制品的内部对象键，仅用于结果表登记和补偿。 */
+    public record StoredParsedArtifacts(String jsonObjectKey, String markdownObjectKey) {
+    }
+
+    /** 分块清单写入命令；只传入已校验 JSON，不含模型凭据或对象键。 */
+    public static class ChunkArtifactCommand {
+        /** 工作空间业务键。 */ private final String workspaceKey;
+        /** 知识库业务键。 */ private final String knowledgeBaseKey;
+        /** 文档业务键。 */ private final String documentKey;
+        /** 解析结果业务键。 */ private final String resultKey;
+        /** 已校验的清单 JSON。 */ private final byte[] json;
+
+        /** 创建写入命令。 */
+        public ChunkArtifactCommand(String workspaceKey, String knowledgeBaseKey, String documentKey,
+                                    String resultKey, byte[] json) {
+            this.workspaceKey = workspaceKey;
+            this.knowledgeBaseKey = knowledgeBaseKey;
+            this.documentKey = documentKey;
+            this.resultKey = resultKey;
+            this.json = json == null ? null : json.clone();
+        }
+    }
+
+    /** 已写入分块清单的受控描述，仅可用于结果登记和失败补偿。 */
+    public static class StoredChunkArtifact {
+        /** 系统生成的内部清单对象键。 */ private final String objectKey;
+
+        /** 创建清单描述。 */
+        public StoredChunkArtifact(String objectKey) {
+            this.objectKey = objectKey;
+        }
+
+        /** @return 系统生成的内部清单对象键。 */
+        public String getObjectKey() {
+            return objectKey;
+        }
+    }
+
+    private void uploadBytes(String objectKey, String filename, String contentType, byte[] content) {
+        Map<String, String> metadata = Map.of(CONTENT_TYPE_METADATA, contentType);
+        ossStoreService.upload(OssUploadRequest.builder()
+                .objectKey(objectKey)
+                .filename(filename)
+                .inputStream(new ByteArrayInputStream(content))
+                .metadata(metadata)
+                .build());
+    }
+
+    private void compensateParsed(String jsonKey, String markdownKey, RuntimeException original) {
+        try {
+            deleteParsed(new StoredParsedArtifacts(jsonKey, markdownKey));
+        } catch (RuntimeException cleanupFailure) {
+            original.addSuppressed(cleanupFailure);
+        }
     }
 
     private StoredSourceArtifact upload(String objectKey, String sanitizedFilename, InputStream inputStream,
@@ -256,6 +479,26 @@ public class FonsOssDocumentArtifactService {
         validateBusinessKey(command.fileToken());
     }
 
+    private void requireParsedCommand(ParsedArtifactCommand command) {
+        if (command == null || command.json() == null || command.json().length == 0) {
+            throw new DocumentProcessingException(Rag2OkfResultCode.PAYLOAD_INVALID);
+        }
+        validateBusinessKey(command.workspaceKey());
+        validateBusinessKey(command.knowledgeBaseKey());
+        validateBusinessKey(command.documentKey());
+        validateBusinessKey(command.resultKey());
+    }
+
+    private void requireChunkCommand(ChunkArtifactCommand command) {
+        if (command == null || command.json == null || command.json.length == 0) {
+            throw new DocumentProcessingException(Rag2OkfResultCode.PAYLOAD_INVALID);
+        }
+        validateBusinessKey(command.workspaceKey);
+        validateBusinessKey(command.knowledgeBaseKey);
+        validateBusinessKey(command.documentKey);
+        validateBusinessKey(command.resultKey);
+    }
+
     /**
      * 校验读取/存在校验传入的对象键：必须位于受控命名空间前缀内，
      * 不含路径逃逸段、反斜杠与控制字符，且不超过登记列长度。
@@ -302,7 +545,7 @@ public class FonsOssDocumentArtifactService {
         }
 
         @Override
-        public int read() throws java.io.IOException {
+        public int read() throws IOException {
             int value = delegate.read();
             if (value >= 0) {
                 count++;
@@ -311,7 +554,7 @@ public class FonsOssDocumentArtifactService {
         }
 
         @Override
-        public int read(byte[] bytes, int offset, int length) throws java.io.IOException {
+        public int read(byte[] bytes, int offset, int length) throws IOException {
             int read = delegate.read(bytes, offset, length);
             if (read > 0) {
                 count += read;
@@ -320,7 +563,7 @@ public class FonsOssDocumentArtifactService {
         }
 
         @Override
-        public void close() throws java.io.IOException {
+        public void close() throws IOException {
             delegate.close();
         }
 

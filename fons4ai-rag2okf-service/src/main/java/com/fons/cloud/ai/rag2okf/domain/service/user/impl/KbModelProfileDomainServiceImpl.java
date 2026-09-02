@@ -2,9 +2,13 @@ package com.fons.cloud.ai.rag2okf.domain.service.user.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.fons.cloud.ai.rag2okf.domain.entity.user.KbModelConnection;
 import com.fons.cloud.ai.rag2okf.domain.entity.user.KbModelProfile;
+import com.fons.cloud.ai.rag2okf.domain.entity.user.UserModelAggregate;
+import com.fons.cloud.ai.rag2okf.domain.mapper.user.KbModelConnectionMapper;
 import com.fons.cloud.ai.rag2okf.domain.mapper.user.KbModelProfileMapper;
 import com.fons.cloud.ai.rag2okf.domain.service.user.KbModelProfileDomainService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -18,9 +22,9 @@ import java.util.stream.Collectors;
  * @author hongqy
  */
 @Service
-public class KbModelProfileDomainServiceImpl
-        extends ServiceImpl<KbModelProfileMapper, KbModelProfile>
-        implements KbModelProfileDomainService {
+@RequiredArgsConstructor
+public class KbModelProfileDomainServiceImpl extends ServiceImpl<KbModelProfileMapper, KbModelProfile> implements KbModelProfileDomainService {
+    private final KbModelConnectionMapper kbModelConnectionMapper;;
 
     @Override
     public List<KbModelProfile> listByProfileKeysAndOwnerUserId(
@@ -77,4 +81,24 @@ public class KbModelProfileDomainServiceImpl
                 .eq(KbModelProfile::getDeleted, false));
     }
 
+    @Override
+    public UserModelAggregate findModelAggregateByOwnerUserId(String profileKey, Long ownerUserId) {
+        KbModelProfile profile = this.findByProfileKeyAndOwnerUserId(profileKey, ownerUserId);
+        if (profile == null) {
+            return null;
+        }
+        // 查找用户模型连接
+        KbModelConnection connection = kbModelConnectionMapper.selectOne(Wrappers.<KbModelConnection>lambdaQuery()
+                .eq(KbModelConnection::getId, profile.getConnectionId())
+                .eq(KbModelConnection::getOwnerUserId, ownerUserId)
+                .eq(KbModelConnection::getDeleted, false));
+        if (connection == null) {
+            return null;
+        }
+
+        return UserModelAggregate.builder()
+                .modelProfile(profile)
+                .modelConnection(connection)
+                .build();
+    }
 }

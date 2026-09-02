@@ -17,11 +17,10 @@ import java.io.Serial;
 import java.util.Date;
 
 /**
- * 异步处理任务、幂等、租约恢复与安全失败原因持久化实体。
+ * 异步处理任务、租约恢复与安全失败原因持久化实体。
  *
  * <p>任务事实底座（设计 §4.4/§5.3）：以
- * {@code (source_document_id, task_type, idempotency_key)} 唯一约束实现幂等创建；
- * {@code snapshot_json} 保存版本化最小快照，只冻结非秘密引用；
+ * {@code snapshot_json} 保存最小快照，只冻结非秘密引用；
  * {@code error_code/error_message} 是安全化失败原因的事实源，结果表不复制。
  * 终态失败后不改写旧任务，通过重新发起新任务并以
  * {@code retry_of_task_id} 关联原失败任务追溯。</p>
@@ -64,16 +63,11 @@ public class KbProcessingTask extends CommonEntity {
     /** 任务输入 {@code kb_document_result.result_key} 引用，执行前校验仍为当前结果。 */
     private String inputResultKey;
 
-    /** 调用方幂等键，一次用户操作提供一个，参与唯一约束。 */
-    private String idempotencyKey;
-
     /** 重新发起或清理重试时关联的原失败任务主键，用于追溯，首次创建为空。 */
     private Long retryOfTaskId;
 
-    /** 任务快照结构版本，与 {@code snapshot_json} 内 schemaVersion 一致，如 1.0。 */
-    private String snapshotVersion;
-
-    /** 任务输入版本化最小快照 JSON，只冻结非秘密引用。 */
+    /** 任务输入最小快照 JSON，只冻结非秘密引用。 */
+    @ToString.Exclude
     private String snapshotJson;
 
     /** 任务状态，按 {@link ProcessingTaskStatus} 白名单流转。 */
@@ -114,16 +108,14 @@ public class KbProcessingTask extends CommonEntity {
      *
      * <p>初始状态为 QUEUED，进度 0，已执行 0 次，最大执行次数取任务类型
      * 默认值（PARSE/RECHUNK/PUBLISH 为 3，DELETE_CLEANUP 为 10）。
-     * 幂等由数据库唯一约束与领域服务查重兜底，不在实体内判断。</p>
+     * 每次调用均创建一条独立任务事实。</p>
      *
      * @param workspaceId      所属工作空间主键
      * @param knowledgeBaseId  所属知识库主键
      * @param sourceDocumentId 目标文档主键
      * @param taskType         任务类型
      * @param inputResultKey   任务输入 result_key 引用，可为 {@code null}
-     * @param idempotencyKey   调用方幂等键
-     * @param snapshotVersion  快照结构版本，与 snapshot_json 的 schemaVersion 一致
-     * @param snapshotJson     版本化最小快照 JSON
+     * @param snapshotJson     最小快照 JSON
      * @param retryOfTaskId    关联的原失败任务主键，首次创建传 {@code null}
      * @return 已初始化的任务实体
      */
@@ -133,8 +125,6 @@ public class KbProcessingTask extends CommonEntity {
             Long sourceDocumentId,
             ProcessingTaskType taskType,
             String inputResultKey,
-            String idempotencyKey,
-            String snapshotVersion,
             String snapshotJson,
             Long retryOfTaskId) {
         KbProcessingTask task = new KbProcessingTask();
@@ -144,9 +134,7 @@ public class KbProcessingTask extends CommonEntity {
         task.setSourceDocumentId(sourceDocumentId);
         task.setTaskType(taskType);
         task.setInputResultKey(inputResultKey);
-        task.setIdempotencyKey(idempotencyKey);
         task.setRetryOfTaskId(retryOfTaskId);
-        task.setSnapshotVersion(snapshotVersion);
         task.setSnapshotJson(snapshotJson);
         task.setStatus(ProcessingTaskStatus.QUEUED);
         task.setProgress(0);

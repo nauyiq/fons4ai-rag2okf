@@ -177,72 +177,6 @@ CREATE TABLE kb_source_document (
     KEY idx_kb_source_document_active_publication (active_publication_revision_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='源文档逻辑身份、文件元数据与当前指针';
 
-CREATE TABLE kb_parse_revision (
-    id BIGINT NOT NULL AUTO_INCREMENT COMMENT '自增主键',
-    parse_revision_key CHAR(26) NOT NULL COMMENT '解析 Revision 业务标识',
-    source_document_id BIGINT NOT NULL COMMENT '源文档主键',
-    parser_profile_json JSON NOT NULL COMMENT '解析器 Profile 输入快照',
-    parser_trace_json JSON NULL COMMENT '解析器选择与执行轨迹',
-    manifest_object_key VARCHAR(512) NULL COMMENT '解析结果 manifest 对象 key',
-    anchor_manifest_object_key VARCHAR(512) NULL COMMENT '来源锚点 manifest 对象 key',
-    block_count INT NOT NULL DEFAULT 0 COMMENT '解析块数量',
-    status VARCHAR(20) NOT NULL COMMENT '解析 Revision 状态',
-    error_code VARCHAR(64) NULL COMMENT '安全化错误码',
-    error_message VARCHAR(500) NULL COMMENT '安全化错误摘要',
-    created DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
-    updated DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
-    deleted TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除标记',
-    version INT NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_kb_parse_revision_key (parse_revision_key),
-    KEY idx_kb_parse_revision_document_created (source_document_id, created)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='不可变解析结果及执行轨迹';
-
-CREATE TABLE kb_chunk_revision (
-    id BIGINT NOT NULL AUTO_INCREMENT COMMENT '自增主键',
-    chunk_revision_key CHAR(26) NOT NULL COMMENT '分块 Revision 业务标识',
-    source_document_id BIGINT NOT NULL COMMENT '源文档主键',
-    parse_revision_id BIGINT NOT NULL COMMENT '所属解析 Revision 主键',
-    chunk_profile_json JSON NOT NULL COMMENT '分块策略输入快照',
-    manifest_object_key VARCHAR(512) NULL COMMENT '分块 manifest 对象 key',
-    parent_count INT NOT NULL DEFAULT 0 COMMENT '父分块数量',
-    child_count INT NOT NULL DEFAULT 0 COMMENT '子分块数量',
-    content_hash CHAR(64) NULL COMMENT '规范化分块集合内容摘要',
-    status VARCHAR(20) NOT NULL COMMENT '分块 Revision 状态',
-    created DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
-    updated DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
-    deleted TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除标记',
-    version INT NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_kb_chunk_revision_key (chunk_revision_key),
-    KEY idx_kb_chunk_revision_document_created (source_document_id, created),
-    KEY idx_kb_chunk_revision_parse_status (parse_revision_id, status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='解析侧可替换分块集合';
-
-CREATE TABLE kb_publication_revision (
-    id BIGINT NOT NULL AUTO_INCREMENT COMMENT '自增主键',
-    publication_revision_key CHAR(26) NOT NULL COMMENT '发布 Revision 业务标识',
-    source_document_id BIGINT NOT NULL COMMENT '源文档主键',
-    parse_revision_id BIGINT NOT NULL COMMENT '发布快照解析 Revision 主键',
-    chunk_revision_id BIGINT NOT NULL COMMENT '发布快照分块 Revision 主键',
-    manifest_object_key VARCHAR(512) NULL COMMENT '发布 manifest 对象 key',
-    projection_index VARCHAR(128) NULL COMMENT 'ES 物理投影索引',
-    projection_count INT NOT NULL DEFAULT 0 COMMENT '写入 ES 的分块数量',
-    status VARCHAR(20) NOT NULL COMMENT '发布状态',
-    trigger_type VARCHAR(20) NOT NULL COMMENT '触发方式：MANUAL 或 AUTO',
-    error_code VARCHAR(64) NULL COMMENT '安全化错误码',
-    error_message VARCHAR(500) NULL COMMENT '安全化错误摘要',
-    published_at DATETIME(3) NULL COMMENT '成功发布时间',
-    created DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
-    updated DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
-    deleted TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除标记',
-    version INT NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_kb_publication_revision_key (publication_revision_key),
-    KEY idx_kb_publication_revision_document_created (source_document_id, created),
-    KEY idx_kb_publication_revision_status_updated (status, updated)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='发布快照与 Elasticsearch 投影元数据';
-
 CREATE TABLE kb_processing_task (
     id BIGINT NOT NULL AUTO_INCREMENT COMMENT '自增主键',
     task_key CHAR(26) NOT NULL COMMENT '异步任务业务标识',
@@ -251,7 +185,6 @@ CREATE TABLE kb_processing_task (
     source_document_id BIGINT NOT NULL COMMENT '目标源文档主键',
     task_type VARCHAR(32) NOT NULL COMMENT '任务类型：PARSE、RECHUNK 或 PUBLISH',
     input_revision_key CHAR(26) NULL COMMENT '任务输入 Revision 业务标识',
-    idempotency_key VARCHAR(128) NOT NULL COMMENT '调用方幂等键',
     status VARCHAR(20) NOT NULL COMMENT '任务状态',
     stage VARCHAR(32) NULL COMMENT '当前执行阶段',
     progress INT NOT NULL DEFAULT 0 COMMENT '进度百分比，范围 0 到 100',
@@ -270,10 +203,9 @@ CREATE TABLE kb_processing_task (
     version INT NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
     PRIMARY KEY (id),
     UNIQUE KEY uk_kb_processing_task_key (task_key),
-    UNIQUE KEY uk_kb_processing_task_idempotency (source_document_id, task_type, idempotency_key),
     KEY idx_kb_processing_task_status_next_run (status, next_run_at),
     KEY idx_kb_processing_task_document_created (source_document_id, created)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='异步处理、幂等和崩溃恢复事实';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='异步处理和崩溃恢复事实';
 
 CREATE TABLE kb_outbox_event (
     id BIGINT NOT NULL AUTO_INCREMENT COMMENT '自增主键',

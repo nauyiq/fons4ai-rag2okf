@@ -1,33 +1,37 @@
 package com.fons.cloud.ai.rag2okf.application.document;
 
 import com.alibaba.fastjson2.JSON;
-import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fons.cloud.ai.rag2okf.common.constants.Rag2OkfResultCode;
+import com.fons.cloud.ai.rag2okf.common.constants.document.DocumentStatus;
 import com.fons.cloud.ai.rag2okf.common.constants.document.ParserType;
+import com.fons.cloud.ai.rag2okf.common.constants.document.ChunkBoundaryType;
+import com.fons.cloud.ai.rag2okf.common.constants.document.ChunkHierarchyType;
 import com.fons.cloud.ai.rag2okf.common.constants.document.ProcessingMode;
 import com.fons.cloud.ai.rag2okf.common.constants.document.ProcessingTaskType;
 import com.fons.cloud.ai.rag2okf.common.constants.knowledgebase.ModelBindingStatus;
 import com.fons.cloud.ai.rag2okf.common.constants.user.WorkspaceRole;
-import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore;
-import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactContent;
-import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactReference;
-import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactScope;
-import com.fons.cloud.ai.rag2okf.common.dto.DocumentArtifactStore.ArtifactType;
 import com.fons.cloud.ai.rag2okf.common.exception.document.DocumentProcessingException;
-import com.fons.cloud.ai.rag2okf.common.model.document.ParseTaskSnapshotV1;
+import com.fons.cloud.ai.rag2okf.common.model.document.ParseTaskSnapshot;
+import com.fons.cloud.ai.rag2okf.common.model.document.ChunkPolicy;
+import com.fons.cloud.ai.rag2okf.common.model.document.ModelProfileReference;
+import com.fons.cloud.ai.rag2okf.common.model.document.DocumentFileContent;
+import com.fons.cloud.ai.rag2okf.common.model.document.DocumentUploadIntent;
+import com.fons.cloud.ai.rag2okf.common.model.document.DocumentUploadOutcome;
+import com.fons.cloud.ai.rag2okf.common.model.document.DocumentPrecheckedFile;
+import com.fons.cloud.ai.rag2okf.common.model.document.DocumentReadBatch;
+import com.fons.cloud.ai.rag2okf.common.model.document.DocumentUploadAccessContext;
 import com.fons.cloud.ai.rag2okf.common.request.document.DocumentUploadRequest;
-import com.fons.cloud.ai.rag2okf.common.response.PageResponse;
+import com.fons.cloud.ai.rag2okf.common.request.document.ChunkPolicyRequest;
+import com.fons.cloud.common.result.PageResult;
 import com.fons.cloud.ai.rag2okf.common.response.document.BatchDocumentUploadItemResponse;
+import com.fons.cloud.ai.rag2okf.common.response.document.DocumentDetailResponse;
+import com.fons.cloud.ai.rag2okf.common.response.document.DocumentSummaryResponse;
+import com.fons.cloud.ai.rag2okf.common.response.document.DocumentTaskSummaryResponse;
 import com.fons.cloud.ai.rag2okf.common.response.document.DocumentUploadResponse;
-import com.fons.cloud.ai.rag2okf.common.response.DocumentDetailResponse;
-import com.fons.cloud.ai.rag2okf.common.response.DocumentSummaryResponse;
-import com.fons.cloud.ai.rag2okf.common.response.DocumentTaskSummaryResponse;
 import com.fons.cloud.ai.rag2okf.common.utils.BusinessKeyGenerator;
-import com.fons.cloud.ai.rag2okf.application.task.TaskApplicationService;
+import com.fons.cloud.ai.rag2okf.infrastructure.document.parser.DocumentParserRegistry;
 import com.fons.cloud.common.base.exception.BusinessRuntimeException;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbProcessingTaskEntity;
-import com.fons.cloud.ai.rag2okf.domain.entity.KbSourceDocumentEntity;
+import com.fons.cloud.common.result.R;
 import com.fons.cloud.ai.rag2okf.domain.entity.document.KbDocument;
 import com.fons.cloud.ai.rag2okf.domain.entity.document.KbDocumentResult;
 import com.fons.cloud.ai.rag2okf.domain.entity.document.KbProcessingTask;
@@ -35,7 +39,7 @@ import com.fons.cloud.ai.rag2okf.domain.entity.knowledgebase.KbKnowledgeBase;
 import com.fons.cloud.ai.rag2okf.domain.entity.knowledgebase.KbModelBinding;
 import com.fons.cloud.ai.rag2okf.domain.entity.user.KbUser;
 import com.fons.cloud.ai.rag2okf.domain.entity.user.KbWorkspace;
-import com.fons.cloud.ai.rag2okf.domain.service.KbSourceDocumentDomainService;
+import com.fons.cloud.ai.rag2okf.domain.entity.user.UserWorkspaceAggregate;
 import com.fons.cloud.ai.rag2okf.domain.service.document.KbDocumentDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.document.KbDocumentResultDomainService;
 import com.fons.cloud.ai.rag2okf.domain.service.document.KbProcessingTaskDomainService;
@@ -45,7 +49,6 @@ import com.fons.cloud.ai.rag2okf.domain.service.user.KbModelProfileDomainService
 import com.fons.cloud.ai.rag2okf.domain.service.user.KbWorkspaceDomainService;
 import com.fons.cloud.ai.rag2okf.infrastructure.adapter.document.FonsOssDocumentArtifactService;
 import com.fons.cloud.ai.rag2okf.infrastructure.adapter.user.SaTokenCurrentUserContext;
-import com.fons.cloud.ai.rag2okf.infrastructure.support.user.WorkspaceAccessPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -53,19 +56,17 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 文档上传与批量上传的应用服务（TP-002 T011 新上传契约）。
+ * 文档上传、批量上传、列表、详情与源文件下载的应用服务（TP-002 T011～T012）。
  *
- * <p>遵循 DDD-lite：应用服务负责权限校验、幂等、事务边界、跨域资源解析、任务创建、
+ * <p>遵循 DDD-lite：应用服务负责权限校验、事务边界、跨域资源解析、任务创建、
  * MinIO/MySQL 显式补偿与 DTO 转换；文档身份与状态规则归 {@link KbDocument}，
  * 结果生命周期归 {@link KbDocumentResult}，任务事实归 {@link KbProcessingTask}。</p>
  *
@@ -74,15 +75,14 @@ import java.util.stream.Collectors;
  *   <li>ADMIN 权限校验后解析上传意图：解析器可用性预检（MINERU 在任何 IO 前拒绝）、
  *       chunkPolicy 合法性校验（非法值拒绝无回退）、processingMode 与知识库
  *       autoParse/autoPublish 合成任务创建决策。</li>
- *   <li>幂等重放：相同 Idempotency-Key 已存在同知识库 PARSE 任务时直接返回原结果，
- *       不写 MinIO、不新建文档；不同 key 即使同名同 hash 也创建新文档。</li>
+ *   <li>每次上传请求都创建独立文档；即使同名同 hash 也不合并。</li>
  *   <li>MinIO 先写（事务外流式写入并计算 SHA-256/大小）+ MySQL 事务
  *       （kb_document + kb_document_result + 可选 kb_processing_task）+ 失败补偿删除。</li>
  * </ol>
  *
- * <h3>过渡说明</h3>
- * <p>列表/详情/下载仍走旧读链路方法，由 T012 按新契约重写后删除；旧上传、替换与
- * 触发解析方法已随新契约移除（旧 Controller 仅保留读入口）。</p>
+ * <h3>当前边界</h3>
+ * <p>上传与读取均使用新三表模型；旧上传、替换与旧读链路已退出有效 Controller。
+ * 解析、重新分块、发布和删除入口由后续 Task Pack 交付。</p>
  *
  * @author hongqy
  */
@@ -92,17 +92,10 @@ import java.util.stream.Collectors;
 public class DocumentApplicationService {
 
     /** 分块策略缺省值：知识库默认策略暂无新模型字段，按未配置处理（设计 §3.2）。 */
-    private static final ParseTaskSnapshotV1.ChunkPolicySnapshot DEFAULT_CHUNK_POLICY =
-            new ParseTaskSnapshotV1.ChunkPolicySnapshot("STRUCTURE", "PARENT_CHILD", null);
-
-    /** 分块边界策略白名单：LENGTH、STRUCTURE、SEMANTIC。 */
-    private static final Set<String> BOUNDARY_TYPES = Set.of("LENGTH", "STRUCTURE", "SEMANTIC");
-
-    /** 分块层级策略白名单：FLAT、PARENT_CHILD。 */
-    private static final Set<String> HIERARCHY_TYPES = Set.of("FLAT", "PARENT_CHILD");
+    private static final ChunkPolicy DEFAULT_CHUNK_POLICY =
+            new ChunkPolicy(ChunkBoundaryType.RECURSIVE, ChunkHierarchyType.PARENT_CHILD, Map.of());
 
     private final SaTokenCurrentUserContext currentUserContext;
-    private final WorkspaceAccessPolicy workspaceAccessPolicy;
     private final KbKnowledgeBaseDomainService knowledgeBaseDomainService;
     private final KbWorkspaceDomainService workspaceDomainService;
     private final KbDocumentDomainService documentDomainService;
@@ -114,11 +107,6 @@ public class DocumentApplicationService {
     private final DocumentUploadPrecheckPolicy uploadPrecheckPolicy;
     private final DocumentParserRegistry parserRegistry;
     private final TransactionTemplate transactionTemplate;
-
-    /** 旧读链路依赖：仅列表/详情/下载过渡使用，T012 重写后移除。 */
-    private final KbSourceDocumentDomainService sourceDocumentDomainService;
-    private final TaskApplicationService taskApplicationService;
-    private final DocumentArtifactStore legacyArtifactStore;
 
     // ────────────────────────────── 新上传契约（T011） ──────────────────────────────
 
@@ -133,32 +121,37 @@ public class DocumentApplicationService {
      * @param knowledgeBaseKey 知识库业务标识
      * @param file             上传文件
      * @param request          上传请求契约，可为 {@code null}（按 DEFAULT 处理）
-     * @param idempotencyKey   调用方幂等键，空值时按无幂等处理
-     * @return 上传受理响应，不含数据库 id、objectKey 或凭证
-     * @throws DocumentProcessingException 权限、预检、解析器可用性或策略校验失败时抛出
+     * @return 上传受理响应，不含数据库 id、objectKey 或凭证；预期校验失败直接返回失败结果
      */
-    public DocumentUploadResponse uploadDocument(
+    public R<DocumentUploadResponse> uploadDocument(
             String knowledgeBaseKey, MultipartFile file,
-            DocumentUploadRequest request, String idempotencyKey) {
-        KbUser user = currentUserContext.requireCurrentUser();
-        KbKnowledgeBase knowledgeBase = requireKnowledgeBaseAccess(
-                user.getUserKey(), knowledgeBaseKey, WorkspaceRole.ADMIN);
-        KbWorkspace workspace = requireWorkspace(knowledgeBase.getWorkspaceId());
+            DocumentUploadRequest request) {
+        R<DocumentUploadAccessContext> accessResult = resolveUploadAccess(knowledgeBaseKey);
+        if (!accessResult.isSuccess()) {
+            return R.failed(accessResult);
+        }
+        return uploadDocument(accessResult.getData(), file, request);
+    }
+
+    private R<DocumentUploadResponse> uploadDocument(
+            DocumentUploadAccessContext accessContext, MultipartFile file, DocumentUploadRequest request) {
+        KbUser user = accessContext.getUser();
+        KbKnowledgeBase knowledgeBase = accessContext.getKnowledgeBase();
+        KbWorkspace workspace = accessContext.getWorkspace();
 
         DocumentUploadRequest effectiveRequest = request != null
                 ? request : new DocumentUploadRequest(ProcessingMode.DEFAULT, null, null);
-        UploadIntent intent = resolveUploadIntent(knowledgeBase, effectiveRequest);
-
-        String effectiveIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
-        if (intent.createParseTask()) {
-            DocumentUploadResponse replayed = replayIfIdempotent(
-                    knowledgeBase.getId(), effectiveIdempotencyKey, effectiveRequest.processingMode());
-            if (replayed != null) {
-                return replayed;
-            }
+        R<DocumentUploadIntent> intentResult = resolveUploadIntent(knowledgeBase, effectiveRequest);
+        if (!intentResult.isSuccess()) {
+            return R.failed(intentResult);
         }
+        DocumentUploadIntent intent = intentResult.getData();
 
-        DocumentUploadPrecheckPolicy.PrecheckedFile precheckedFile = precheckFile(file);
+        R<DocumentPrecheckedFile> precheckResult = precheckFile(file);
+        if (!precheckResult.isSuccess()) {
+            return R.failed(precheckResult);
+        }
+        DocumentPrecheckedFile precheckedFile = precheckResult.getData();
         String documentKey = BusinessKeyGenerator.nextKey();
         String fileToken = BusinessKeyGenerator.nextKey();
 
@@ -166,50 +159,56 @@ public class DocumentApplicationService {
         FonsOssDocumentArtifactService.StoredSourceArtifact storedArtifact =
                 documentArtifactService.storeSource(new FonsOssDocumentArtifactService.SourceArtifactCommand(
                         workspace.getWorkspaceKey(), knowledgeBase.getKnowledgeBaseKey(),
-                        documentKey, fileToken, precheckedFile.filename(),
-                        precheckedFile.contentType(), precheckedFile.inputStream()));
+                        documentKey, fileToken, precheckedFile.getFilename(),
+                        precheckedFile.getContentType(), precheckedFile.getInputStream()));
 
-        UploadOutcome outcome;
+        DocumentUploadOutcome outcome;
         try {
             outcome = transactionTemplate.execute(status -> persistUpload(
-                    knowledgeBase, workspace, user, precheckedFile, documentKey, fileToken,
-                    storedArtifact, intent, effectiveIdempotencyKey));
+                    knowledgeBase, workspace, user, precheckedFile, fileToken, storedArtifact, intent));
         } catch (RuntimeException exception) {
             compensateDeleteSource(storedArtifact.objectKey(), exception);
             throw exception;
         }
-        return toUploadResponse(outcome, effectiveRequest.processingMode());
+        return R.ok(toUploadResponse(outcome, effectiveRequest.getProcessingMode()));
     }
 
     /**
      * 批量上传：整批预检后逐项独立处理，单项失败不影响其他项（AC-002）。
      *
-     * <p>批量幂等以 request key + item index 区分（设计 §3.2）；文件数或总量超限时
-     * 整批预检拒绝，不进入逐项处理。失败项只携带稳定错误码与安全化摘要。</p>
+     * <p>文件数或总量超限时整批预检拒绝，不进入逐项处理。
+     * 失败项只携带稳定错误码与安全化摘要。</p>
      *
      * @param knowledgeBaseKey 知识库业务标识
      * @param files            上传文件列表，不可为空
      * @param request          上传请求契约，对批内每项一致生效
-     * @param requestKey       批量请求幂等键，空值时按无幂等处理
-     * @return 每项独立成功/失败结果，顺序与入参一致
-     * @throws DocumentProcessingException 列表为空、文件数或总大小超限时抛出
+     * @return 每项独立成功/失败结果，顺序与入参一致；整批预检失败直接返回失败结果
      */
-    public List<BatchDocumentUploadItemResponse> batchUploadDocuments(
+    public R<List<BatchDocumentUploadItemResponse>> batchUploadDocuments(
             String knowledgeBaseKey, List<MultipartFile> files,
-            DocumentUploadRequest request, String requestKey) {
-        uploadPrecheckPolicy.precheckBatch(files);
-        String baseKey = normalizeIdempotencyKey(requestKey);
+            DocumentUploadRequest request) {
+        R<Void> batchPrecheck = uploadPrecheckPolicy.precheckBatch(files);
+        if (!batchPrecheck.isSuccess()) {
+            return R.failed(batchPrecheck);
+        }
+        R<DocumentUploadAccessContext> accessResult = resolveUploadAccess(knowledgeBaseKey);
+        if (!accessResult.isSuccess()) {
+            return R.failed(accessResult);
+        }
+        DocumentUploadAccessContext accessContext = accessResult.getData();
         List<BatchDocumentUploadItemResponse> items = new ArrayList<>(files.size());
         for (int index = 0; index < files.size(); index++) {
             MultipartFile file = files.get(index);
             String filename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "unknown";
             try {
-                DocumentUploadResponse response = uploadDocument(
-                        knowledgeBaseKey, file, request, baseKey + ":" + index);
-                items.add(BatchDocumentUploadItemResponse.success(index, filename, response));
-            } catch (DocumentProcessingException exception) {
-                items.add(BatchDocumentUploadItemResponse.failure(
-                        index, filename, exception.getCode(), exception.getMessage()));
+                R<DocumentUploadResponse> upload = uploadDocument(accessContext, file, request);
+                if (upload.isSuccess()) {
+                    items.add(BatchDocumentUploadItemResponse.success(
+                            index, filename, upload.getData()));
+                } else {
+                    items.add(BatchDocumentUploadItemResponse.failure(
+                            index, filename, upload.getCode(), upload.getMessage()));
+                }
             } catch (BusinessRuntimeException exception) {
                 items.add(BatchDocumentUploadItemResponse.failure(
                         index, filename, exception.getCode(), exception.getMessage()));
@@ -221,7 +220,7 @@ public class DocumentApplicationService {
                         Rag2OkfResultCode.TASK_EXECUTION_ERROR.getMessage()));
             }
         }
-        return items;
+        return R.ok(items);
     }
 
     /**
@@ -230,14 +229,19 @@ public class DocumentApplicationService {
      * <p>解析器预检在任何 IO（任务、MinIO、模型、网络）前执行：MINERU 直接
      * {@code PARSER_NOT_AVAILABLE}，不创建文档与任务、不调用 Built-in（AC-003、AC-007）。
      * chunkPolicy 只要提供就严格校验，非法值拒绝且不做默认回退；未提供时使用
-     * 缺省 STRUCTURE+PARENT_CHILD。</p>
+     * 缺省 RECURSIVE+PARENT_CHILD。</p>
      */
-    private UploadIntent resolveUploadIntent(KbKnowledgeBase knowledgeBase, DocumentUploadRequest request) {
-        ProcessingMode mode = request.processingMode() != null
-                ? request.processingMode() : ProcessingMode.DEFAULT;
-        ParserType parserType = request.parserType() != null ? request.parserType() : ParserType.BUILT_IN;
-        parserRegistry.requireEnabled(parserType);
-        ParseTaskSnapshotV1.ChunkPolicySnapshot chunkPolicy = resolveChunkPolicy(request.chunkPolicy());
+    private R<DocumentUploadIntent> resolveUploadIntent(KbKnowledgeBase knowledgeBase, DocumentUploadRequest request) {
+        ProcessingMode mode = request.getProcessingMode() != null
+                ? request.getProcessingMode() : ProcessingMode.DEFAULT;
+        ParserType parserType = request.getParserType() != null ? request.getParserType() : ParserType.BUILT_IN;
+        if (!parserRegistry.isEnabled(parserType)) {
+            return R.failed(Rag2OkfResultCode.PARSER_NOT_AVAILABLE);
+        }
+        ChunkPolicy chunkPolicy = resolveChunkPolicy(request.getChunkPolicy());
+        if (chunkPolicy == null) {
+            return R.failed(Rag2OkfResultCode.CHUNK_POLICY_INVALID);
+        }
         boolean createParseTask = switch (mode) {
             case SKIP -> false;
             case PARSE -> true;
@@ -245,32 +249,29 @@ public class DocumentApplicationService {
         };
         // DEFAULT 冻结知识库默认；PARSE/SKIP 模式下 publishAfterSuccess 同样以知识库 autoPublish 为准（上传契约不含显式字段）
         boolean publishAfterSuccess = Boolean.TRUE.equals(knowledgeBase.getAutoPublish());
-        Map<String, ParseTaskSnapshotV1.ModelProfileRef> modelProfileRefs =
+        Map<String, ModelProfileReference> modelProfileRefs =
                 createParseTask ? freezeModelProfileRefs(knowledgeBase.getId()) : Map.of();
-        return new UploadIntent(createParseTask, parserType, chunkPolicy, publishAfterSuccess, modelProfileRefs);
+        return R.ok(new DocumentUploadIntent(createParseTask, parserType, chunkPolicy, publishAfterSuccess, modelProfileRefs));
     }
 
     /**
      * 解析并校验分块策略请求。
      *
-     * @param requested 请求分块策略，{@code null} 时返回缺省 STRUCTURE+PARENT_CHILD
-     * @return 已冻结的分块策略快照
-     * @throws DocumentProcessingException 边界或层级策略非法时抛出 {@code CHUNK_POLICY_INVALID}
+     * @param requested 请求分块策略，{@code null} 时返回缺省 RECURSIVE+PARENT_CHILD
+     * @return 已冻结的分块策略快照；边界或层级策略非法时返回 {@code null}
      */
-    private ParseTaskSnapshotV1.ChunkPolicySnapshot resolveChunkPolicy(
-            DocumentUploadRequest.ChunkPolicy requested) {
+    private ChunkPolicy resolveChunkPolicy(ChunkPolicyRequest requested) {
         if (requested == null) {
             return DEFAULT_CHUNK_POLICY;
         }
-        String boundaryType = requested.boundaryType();
-        String hierarchyType = requested.hierarchyType();
-        if (boundaryType == null || !BOUNDARY_TYPES.contains(boundaryType)
-                || hierarchyType == null || !HIERARCHY_TYPES.contains(hierarchyType)) {
-            throw new DocumentProcessingException(Rag2OkfResultCode.CHUNK_POLICY_INVALID);
+        ChunkBoundaryType boundaryType = requested.getBoundaryType();
+        ChunkHierarchyType hierarchyType = requested.getHierarchyType();
+        if (boundaryType == null || hierarchyType == null) {
+            return null;
         }
-        Map<String, Object> parameters = requested.parameters() == null
-                ? null : Map.copyOf(requested.parameters());
-        return new ParseTaskSnapshotV1.ChunkPolicySnapshot(boundaryType, hierarchyType, parameters);
+        Map<String, Object> parameters = requested.getParameters() == null
+                ? null : Map.copyOf(requested.getParameters());
+        return new ChunkPolicy(boundaryType, hierarchyType, parameters);
     }
 
     /**
@@ -280,7 +281,7 @@ public class DocumentApplicationService {
      * 的绑定跳过（上传不因缺少解析资源被拒绝，AC-004），运行期引用失效由任务执行
      * fail-closed 处理。</p>
      */
-    private Map<String, ParseTaskSnapshotV1.ModelProfileRef> freezeModelProfileRefs(Long knowledgeBaseId) {
+    private Map<String, ModelProfileReference> freezeModelProfileRefs(Long knowledgeBaseId) {
         List<KbModelBinding> bindings = modelBindingDomainService.listByKnowledgeBaseId(knowledgeBaseId);
         List<KbModelBinding> activeBindings = bindings == null ? List.of() : bindings.stream()
                 .filter(binding -> binding.getStatus() == ModelBindingStatus.ACTIVE
@@ -291,12 +292,12 @@ public class DocumentApplicationService {
         }
         Map<Long, String> profileKeys = modelProfileDomainService.findProfileKeysByIds(
                 activeBindings.stream().map(KbModelBinding::getModelProfileId).collect(Collectors.toSet()));
-        Map<String, ParseTaskSnapshotV1.ModelProfileRef> refs = new LinkedHashMap<>();
+        Map<String, ModelProfileReference> refs = new LinkedHashMap<>();
         for (KbModelBinding binding : activeBindings) {
             String profileKey = profileKeys.get(binding.getModelProfileId());
             if (profileKey != null) {
                 refs.put(binding.getUsageType().getValue(),
-                        new ParseTaskSnapshotV1.ModelProfileRef(profileKey, null));
+                        new ModelProfileReference(profileKey, null));
             }
         }
         return Map.copyOf(refs);
@@ -305,93 +306,59 @@ public class DocumentApplicationService {
     /**
      * 单文件预检：文件名净化、扩展名白名单、大小与魔数（设计 §4.2 校验顺序）。
      */
-    private DocumentUploadPrecheckPolicy.PrecheckedFile precheckFile(MultipartFile file) {
+    private R<DocumentPrecheckedFile> precheckFile(MultipartFile file) {
         if (file == null) {
-            throw new DocumentProcessingException(Rag2OkfResultCode.PAYLOAD_INVALID);
+            return R.failed(Rag2OkfResultCode.PAYLOAD_INVALID);
         }
         try {
             return uploadPrecheckPolicy.precheck(
                     file.getOriginalFilename(), file.getInputStream(), file.getSize());
         } catch (IOException exception) {
-            throw new DocumentProcessingException(
-                    Rag2OkfResultCode.DOCUMENT_FILE_SECURITY_REJECTED, exception);
+            return R.failed(Rag2OkfResultCode.DOCUMENT_FILE_SECURITY_REJECTED);
         }
     }
 
     /**
      * 事务内持久化上传结果：文档身份、结果底座与可选 PARSE 任务。
      *
-     * <p>创建任务时把同一份 ParseTaskSnapshotV1 JSON 冻结到任务快照列与结果表的
+     * <p>创建任务时把同一份 ParseTaskSnapshot JSON 冻结到任务快照列与结果表的
      * 解析器快照列，保证两侧冻结事实一致；任务保持 QUEUED（TP-002 无执行器，
      * 属已知中间态）。文档初始状态 UPLOADED、结果初始阶段 INIT 由实体工厂保证。</p>
      */
-    private UploadOutcome persistUpload(
+    private DocumentUploadOutcome persistUpload(
             KbKnowledgeBase knowledgeBase, KbWorkspace workspace, KbUser user,
-            DocumentUploadPrecheckPolicy.PrecheckedFile precheckedFile,
-            String documentKey, String fileToken,
+            DocumentPrecheckedFile precheckedFile, String fileToken,
             FonsOssDocumentArtifactService.StoredSourceArtifact storedArtifact,
-            UploadIntent intent, String idempotencyKey) {
-        KbDocument document = KbDocument.create(knowledgeBase.getId(), precheckedFile.filename());
+            DocumentUploadIntent intent) {
+        KbDocument document = KbDocument.create(knowledgeBase.getId(), precheckedFile.getFilename());
         documentDomainService.save(document);
 
         KbDocumentResult result = KbDocumentResult.create(document.getId(), user.getId(),
                 new KbDocumentResult.SourceFilePointer(
-                        fileToken, storedArtifact.objectKey(), precheckedFile.filename(),
-                        precheckedFile.contentType(), storedArtifact.sizeBytes(), storedArtifact.sha256()));
+                        fileToken, storedArtifact.objectKey(), precheckedFile.getFilename(),
+                        precheckedFile.getContentType(), storedArtifact.sizeBytes(), storedArtifact.sha256()));
 
         KbProcessingTask task = null;
-        if (intent.createParseTask()) {
-            ParseTaskSnapshotV1 snapshot = ParseTaskSnapshotV1.of(
+        if (intent.isCreateParseTask()) {
+            ParseTaskSnapshot snapshot = ParseTaskSnapshot.of(
                     workspace.getWorkspaceKey(), knowledgeBase.getKnowledgeBaseKey(),
-                    document.getDocumentKey(), fileToken, intent.parserType(), null,
-                    intent.chunkPolicy(), intent.modelProfileRefs(),
-                    intent.publishAfterSuccess(), user.getId(), new Date());
+                    document.getDocumentKey(), fileToken, intent.getParserType(), null,
+                    intent.getChunkPolicy(), intent.getModelProfileRefs(),
+                    intent.isPublishAfterSuccess(), user.getId(), new Date());
             String snapshotJson = JSON.toJSONString(snapshot);
-            result.setParserType(intent.parserType());
-            result.setParserSnapshotJson(snapshotJson);
+            result.configureParse(
+                    intent.getParserType(), snapshotJson,
+                    intent.getChunkPolicy().boundaryType(), intent.getChunkPolicy().hierarchyType(),
+                    JSON.toJSONString(intent.getChunkPolicy()));
             documentResultDomainService.save(result);
-            task = processingTaskDomainService.createIfAbsent(KbProcessingTask.create(
+            task = processingTaskDomainService.create(KbProcessingTask.create(
                     workspace.getId(), knowledgeBase.getId(), document.getId(),
-                    ProcessingTaskType.PARSE, result.getResultKey(), idempotencyKey,
-                    ParseTaskSnapshotV1.SCHEMA_VERSION, snapshotJson, null));
+                    ProcessingTaskType.PARSE, result.getResultKey(),
+                    snapshotJson, null));
         } else {
             documentResultDomainService.save(result);
         }
-        return new UploadOutcome(document, result, task);
-    }
-
-    /**
-     * 幂等重放：同知识库同 Idempotency-Key 已创建 PARSE 任务时返回原受理结果。
-     *
-     * <p>原文档已删除或结果缺失时重放不可用，按新上传处理；幂等范围限定为
-     * 同一知识库的 PARSE 任务，跨知识库同 key 不互相影响。</p>
-     *
-     * @return 可重放的受理响应；无可重放任务时返回 {@code null}
-     */
-    private DocumentUploadResponse replayIfIdempotent(
-            Long knowledgeBaseId, String idempotencyKey, ProcessingMode processingMode) {
-        KbProcessingTask existing = processingTaskDomainService.findByIdempotencyKey(
-                knowledgeBaseId, ProcessingTaskType.PARSE, idempotencyKey);
-        if (existing == null) {
-            return null;
-        }
-        KbDocument document = documentDomainService.getById(existing.getSourceDocumentId());
-        KbDocumentResult result = documentResultDomainService.findCurrentByDocumentId(
-                existing.getSourceDocumentId());
-        if (document == null || result == null || Boolean.TRUE.equals(document.getDeleted())) {
-            return null;
-        }
-        return new DocumentUploadResponse(
-                document.getDocumentKey(), result.getSourceFileToken(),
-                document.getDisplayName(), modeValue(processingMode), existing.getTaskKey());
-    }
-
-    /** 幂等键规范化：空值生成唯一键，避免不同请求被误判为重复重放。 */
-    private String normalizeIdempotencyKey(String idempotencyKey) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            return BusinessKeyGenerator.nextKey();
-        }
-        return idempotencyKey.strip();
+        return new DocumentUploadOutcome(document, result, task);
     }
 
     /** MySQL 事务失败后补偿删除已写入的 MinIO 源对象；补偿失败不掩盖原始异常。 */
@@ -404,207 +371,205 @@ public class DocumentApplicationService {
         }
     }
 
-    private DocumentUploadResponse toUploadResponse(UploadOutcome outcome, ProcessingMode processingMode) {
+    private DocumentUploadResponse toUploadResponse(DocumentUploadOutcome outcome, ProcessingMode processingMode) {
         return new DocumentUploadResponse(
-                outcome.document().getDocumentKey(),
-                outcome.result().getSourceFileToken(),
-                outcome.document().getDisplayName(),
+                outcome.getDocument().getDocumentKey(),
+                outcome.getResult().getSourceFileToken(),
+                outcome.getDocument().getDisplayName(),
                 modeValue(processingMode),
-                outcome.task() != null ? outcome.task().getTaskKey() : null);
+                outcome.getTask() != null ? outcome.getTask().getTaskKey() : null);
     }
 
     private String modeValue(ProcessingMode processingMode) {
         return processingMode != null ? processingMode.getValue() : ProcessingMode.DEFAULT.getValue();
     }
 
-    /** 上传意图：任务创建决策与冻结进快照的解析输入。 */
-    private record UploadIntent(
-            boolean createParseTask,
-            ParserType parserType,
-            ParseTaskSnapshotV1.ChunkPolicySnapshot chunkPolicy,
-            boolean publishAfterSuccess,
-            Map<String, ParseTaskSnapshotV1.ModelProfileRef> modelProfileRefs) {
-    }
 
-    /** 事务内持久化完成的上传事实。 */
-    private record UploadOutcome(KbDocument document, KbDocumentResult result, KbProcessingTask task) {
-    }
-
-    // ────────────────────────────── 旧读链路（T012 重写后移除） ──────────────────────────────
+    // ────────────────────────────── 新读链路（T012） ──────────────────────────────
 
     /**
-     * 分页查询知识库下的当前文档视图（旧读链路过渡实现）。
+     * 分页查询知识库下的活跃文档视图。
      *
      * @param knowledgeBaseKey 知识库业务标识
-     * @param page 页码（从 0 开始）
+     * @param page 页码（从 1 开始）
      * @param size 每页条数
-     * @param folderPath 文件夹路径筛选，null 时不按文件夹过滤
      */
-    public PageResponse<DocumentSummaryResponse> listDocuments(
-            String knowledgeBaseKey, int page, int size, String folderPath) {
+    public R<PageResult<DocumentSummaryResponse>> listDocuments(String knowledgeBaseKey, int page, int size) {
         KbUser user = currentUserContext.requireCurrentUser();
-        KbKnowledgeBase knowledgeBase = requireKnowledgeBaseAccess(
-                user.getUserKey(), knowledgeBaseKey, WorkspaceRole.KNOWLEDGE_USER);
-        int safePage = Math.max(0, page);
-        int safeSize = Math.min(100, Math.max(1, size));
-        Page<KbSourceDocumentEntity> result = new Page<>(safePage + 1L, safeSize);
-        var query = Wrappers.<KbSourceDocumentEntity>lambdaQuery()
-                .eq(KbSourceDocumentEntity::getKnowledgeBaseId, knowledgeBase.getId());
-        if (folderPath != null && !folderPath.isBlank()) {
-            query.eq(KbSourceDocumentEntity::getFolderPath, folderPath);
+        KbKnowledgeBase knowledgeBase = findKnowledgeBaseByKey(knowledgeBaseKey);
+        if (knowledgeBase == null) {
+            return R.failed(Rag2OkfResultCode.KNOWLEDGE_BASE_NOT_FOUND);
         }
-        query.orderByDesc(KbSourceDocumentEntity::getUpdated);
-        sourceDocumentDomainService.page(result, query);
-        List<KbSourceDocumentEntity> documents = result.getRecords();
-        Map<Long, KbProcessingTaskEntity> latestTasks = taskApplicationService.findLatestByDocumentIds(
-                documents.stream().map(KbSourceDocumentEntity::getId).toList());
-        return new PageResponse<>(documents.stream()
-                .map(document -> toSummaryResponse(document, latestTasks.get(document.getId())))
-                .toList(), result.getTotal(), safePage, safeSize);
+        workspaceDomainService.findUserWorkspaceAggregate(user.getId(), knowledgeBase.getWorkspaceId())
+                .requireAccess(WorkspaceRole.KNOWLEDGE_USER);
+        int safePage = Math.max(1, page);
+        int safeSize = Math.min(100, Math.max(1, size));
+        PageResult<KbDocument> result = documentDomainService.pageActiveByKnowledgeBaseId(
+                knowledgeBase.getId(), safePage, safeSize);
+        List<KbDocument> documents = result.getResultList();
+        DocumentReadBatch readBatch = loadReadBatch(documents);
+        PageResult<DocumentSummaryResponse> response = new PageResult<>(safePage, safeSize, result.getTotal(), documents.stream()
+                .map(document -> toSummaryResponse(document,
+                        readBatch.getCurrentResult(document.getId()),
+                        readBatch.getTaskSummaries(document.getId())))
+                .toList());
+        response.setPages(result.getPages());
+        return R.ok(response);
     }
 
     /**
-     * 查询文档详情（旧读链路过渡实现）。需要 USER 权限。不返回版本列表（D-004）。
+     * 查询文档详情。需要 USER 权限，不返回对象键、数据库主键或任务快照。
      *
      * @param documentKey 文档业务标识
      * @return 文档详情响应
      */
-    public DocumentDetailResponse getDocumentDetail(String documentKey) {
+    public R<DocumentDetailResponse> getDocumentDetail(String documentKey) {
         KbUser user = currentUserContext.requireCurrentUser();
-        KbSourceDocumentEntity document = requireDocument(documentKey);
-        KbKnowledgeBase knowledgeBase = requireKnowledgeBase(
-                document.getKnowledgeBaseId());
-        requireWorkspaceAccess(
-                user.getUserKey(), knowledgeBase.getWorkspaceId(), WorkspaceRole.KNOWLEDGE_USER);
-
-        KbProcessingTaskEntity latestTask = taskApplicationService.findLatestByDocumentIds(List.of(document.getId())).get(document.getId());
-
-        return new DocumentDetailResponse(
-                document.getDocumentKey(),
-                knowledgeBase.getKnowledgeBaseKey(),
-                document.getDisplayName(),
-                document.getFolderPath(),
-                new DocumentDetailResponse.CurrentFileSummary(
-                        document.getOriginalFilename(),
-                        document.getContentType(),
-                        document.getSizeBytes()),
-                document.getFileToken(),
-                document.getParseStatus(),
-                document.getPublishStatus(),
-                document.getActivePublicationRevisionId() != null,
-                toTaskSummary(latestTask),
-                document.getUpdated()
-        );
+        KbDocument document = documentDomainService.findByDocumentKey(documentKey);
+        if (document == null || Boolean.TRUE.equals(document.getDeleted())) {
+            return R.failed(Rag2OkfResultCode.DOCUMENT_DELETED);
+        }
+        KbKnowledgeBase knowledgeBase = knowledgeBaseDomainService.getById(document.getKnowledgeBaseId());
+        if (knowledgeBase == null) {
+            return R.failed(Rag2OkfResultCode.KNOWLEDGE_BASE_NOT_FOUND);
+        }
+        WorkspaceRole actualRole = workspaceDomainService
+                .findUserWorkspaceAggregate(user.getId(), knowledgeBase.getWorkspaceId())
+                .requireAccess(WorkspaceRole.KNOWLEDGE_USER);
+        KbDocumentResult result = documentResultDomainService.findCurrentByDocumentId(document.getId());
+        if (result == null) {
+            return R.failed(Rag2OkfResultCode.DOCUMENT_SOURCE_ARTIFACT_ERROR);
+        }
+        List<DocumentTaskSummaryResponse> tasks = latestTasksByType(List.of(document.getId()))
+                .getOrDefault(document.getId(), List.of());
+        return R.ok(toDetailResponse(document, knowledgeBase, result, tasks, actualRole));
     }
 
     /**
-     * 打开文档当前原文件的读取流（旧读链路过渡实现）。需要 USER 权限。调用方负责关闭流。
+     * 打开文档当前源文件读取流。需要 USER 权限，调用方负责关闭流。
+     *
+     * <p>返回二进制流，无法使用 {@link R} 表达失败，因此校验失败以
+     * {@link DocumentProcessingException} 抛出，由全局异常端点统一转为 {@code R.failed}。</p>
      *
      * @param documentKey 文档业务标识
      * @return 文件内容与元数据
+     * @throws DocumentProcessingException 文档不存在、知识库/工作空间缺失或当前结果缺失时抛出
      */
     public DocumentFileContent downloadDocumentFile(String documentKey) {
         KbUser user = currentUserContext.requireCurrentUser();
-        KbSourceDocumentEntity document = requireDocument(documentKey);
-        KbKnowledgeBase knowledgeBase = requireKnowledgeBase(
-                document.getKnowledgeBaseId());
-        KbWorkspace workspace = requireWorkspaceAccess(
-                user.getUserKey(), knowledgeBase.getWorkspaceId(), WorkspaceRole.KNOWLEDGE_USER);
-
-        ArtifactScope scope = new ArtifactScope(
-                workspace.getWorkspaceKey(), knowledgeBase.getKnowledgeBaseKey(), documentKey);
-        ArtifactContent content = legacyArtifactStore.open(new ArtifactReference(
-                scope, ArtifactType.ORIGINAL, documentKey, document.getOriginalFilename()));
-
+        KbDocument document = documentDomainService.findByDocumentKey(documentKey);
+        if (document == null || Boolean.TRUE.equals(document.getDeleted())) {
+            throw new DocumentProcessingException(Rag2OkfResultCode.DOCUMENT_DELETED);
+        }
+        KbKnowledgeBase knowledgeBase = knowledgeBaseDomainService.getById(document.getKnowledgeBaseId());
+        if (knowledgeBase == null) {
+            throw new DocumentProcessingException(Rag2OkfResultCode.KNOWLEDGE_BASE_NOT_FOUND);
+        }
+        workspaceDomainService.findUserWorkspaceAggregate(user.getId(), knowledgeBase.getWorkspaceId())
+                .requireAccess(WorkspaceRole.KNOWLEDGE_USER);
+        KbDocumentResult result = documentResultDomainService.findCurrentByDocumentId(document.getId());
+        if (result == null) {
+            throw new DocumentProcessingException(Rag2OkfResultCode.DOCUMENT_SOURCE_ARTIFACT_ERROR);
+        }
+        FonsOssDocumentArtifactService.SourceArtifactContent content =
+                documentArtifactService.openSource(result.getSourceObjectKey());
         return new DocumentFileContent(
-                document.getOriginalFilename(),
-                document.getContentType(),
-                document.getSizeBytes(),
+                result.getSourceOriginalFilename(),
+                result.getSourceContentType(),
+                result.getSourceSizeBytes(),
                 content.inputStream());
     }
 
     // ────────────────────────────── 通用辅助 ──────────────────────────────
 
-    private KbKnowledgeBase requireKnowledgeBaseAccess(
-            String userKey, String knowledgeBaseKey, WorkspaceRole requiredRole) {
-        KbKnowledgeBase knowledgeBase = knowledgeBaseDomainService.getOne(
-                Wrappers.<KbKnowledgeBase>lambdaQuery()
-                        .eq(KbKnowledgeBase::getKnowledgeBaseKey, knowledgeBaseKey));
+    private KbKnowledgeBase findKnowledgeBaseByKey(String knowledgeBaseKey) {
+        return knowledgeBaseDomainService.findByKnowledgeBaseKey(knowledgeBaseKey);
+    }
+
+    /** 解析单次上传用例共享的用户、知识库和工作空间授权事实。 */
+    private R<DocumentUploadAccessContext> resolveUploadAccess(String knowledgeBaseKey) {
+        KbUser user = currentUserContext.requireCurrentUser();
+        KbKnowledgeBase knowledgeBase = findKnowledgeBaseByKey(knowledgeBaseKey);
         if (knowledgeBase == null) {
-            throw new DocumentProcessingException(Rag2OkfResultCode.KNOWLEDGE_BASE_NOT_FOUND);
+            return R.failed(Rag2OkfResultCode.KNOWLEDGE_BASE_NOT_FOUND);
         }
-        workspaceAccessPolicy.checkAccess(userKey,
-                resolveWorkspaceKey(knowledgeBase.getWorkspaceId()), requiredRole);
-        return knowledgeBase;
-    }
-
-    private KbKnowledgeBase requireKnowledgeBase(Long knowledgeBaseId) {
-        KbKnowledgeBase knowledgeBase = knowledgeBaseDomainService.getById(knowledgeBaseId);
-        if (knowledgeBase == null) {
-            throw new DocumentProcessingException(Rag2OkfResultCode.KNOWLEDGE_BASE_NOT_FOUND);
-        }
-        return knowledgeBase;
-    }
-
-    private KbSourceDocumentEntity requireDocument(String documentKey) {
-        KbSourceDocumentEntity document = sourceDocumentDomainService.getOne(
-                Wrappers.<KbSourceDocumentEntity>lambdaQuery()
-                        .eq(KbSourceDocumentEntity::getDocumentKey, documentKey));
-        if (document == null) {
-            throw new DocumentProcessingException(Rag2OkfResultCode.DOCUMENT_DELETED);
-        }
-        return document;
-    }
-
-    private KbWorkspace requireWorkspace(Long workspaceId) {
-        KbWorkspace workspace = workspaceDomainService.getById(workspaceId);
-        if (workspace == null) {
-            throw new DocumentProcessingException(Rag2OkfResultCode.WORKSPACE_NOT_FOUND);
-        }
-        return workspace;
-    }
-
-    private KbWorkspace requireWorkspaceAccess(
-            String userKey, Long workspaceId, WorkspaceRole requiredRole) {
-        KbWorkspace workspace = requireWorkspace(workspaceId);
-        workspaceAccessPolicy.checkAccess(userKey, workspace.getWorkspaceKey(), requiredRole);
-        return workspace;
-    }
-
-    private String resolveWorkspaceKey(Long workspaceId) {
-        KbWorkspace workspace = requireWorkspace(workspaceId);
-        return workspace.getWorkspaceKey();
+        UserWorkspaceAggregate userWorkspace = workspaceDomainService
+                .findUserWorkspaceAggregate(user.getId(), knowledgeBase.getWorkspaceId());
+        userWorkspace.requireAccess(WorkspaceRole.ADMIN);
+        return R.ok(new DocumentUploadAccessContext(user, knowledgeBase, userWorkspace));
     }
 
     private DocumentSummaryResponse toSummaryResponse(
-            KbSourceDocumentEntity document, KbProcessingTaskEntity latestTask) {
+            KbDocument document, KbDocumentResult result, List<DocumentTaskSummaryResponse> tasks) {
         return new DocumentSummaryResponse(document.getDocumentKey(), document.getDisplayName(),
-                document.getFolderPath(),
-                new DocumentSummaryResponse.CurrentFileSummary(document.getOriginalFilename(), document.getContentType(), document.getSizeBytes()),
-                document.getFileToken(), document.getParseStatus(), document.getPublishStatus(),
-                document.getActivePublicationRevisionId() != null, toTaskSummary(latestTask), document.getUpdated());
+                toCurrentFile(result), document.getStatus(), result != null ? result.getStage() : null,
+                tasks, document.getUpdated());
     }
 
-    private DocumentTaskSummaryResponse toTaskSummary(KbProcessingTaskEntity task) {
-        if (task == null) {
+    private DocumentDetailResponse toDetailResponse(
+            KbDocument document, KbKnowledgeBase knowledgeBase, KbDocumentResult result,
+            List<DocumentTaskSummaryResponse> tasks, WorkspaceRole actualRole) {
+        return new DocumentDetailResponse(
+                document.getDocumentKey(), knowledgeBase.getKnowledgeBaseKey(), document.getDisplayName(),
+                toCurrentFile(result), document.getStatus(), result.getStage(),
+                new DocumentDetailResponse.ParseSummary(
+                        result.getParserType(), result.getBlockCount(), result.getWarningCount()),
+                new DocumentDetailResponse.ChunkSummary(
+                        result.getBoundaryType() == null ? null : result.getBoundaryType().getValue(),
+                        result.getHierarchyType() == null ? null : result.getHierarchyType().getValue(),
+                        result.getParentCount(),
+                        result.getChildCount(), result.getTotalCount()),
+                new DocumentDetailResponse.PublicationSummary(
+                        result.getProjectionCount(), result.getPublishedAt()),
+                actualRole == WorkspaceRole.ADMIN ? document.getCleanupStatus() : null,
+                tasks, availableActions(document), document.getUpdated());
+    }
+
+    private DocumentSummaryResponse.CurrentFileSummary toCurrentFile(KbDocumentResult result) {
+        if (result == null) {
             return null;
         }
-        return new DocumentTaskSummaryResponse(task.getTaskKey(), task.getTaskType(), task.getStatus(), task.getStage(),
-                task.getProgress(), task.getAttempt(), task.getMaxAttempts(), task.getErrorCode(), task.getErrorMessage(), task.getUpdated());
+        return new DocumentSummaryResponse.CurrentFileSummary(
+                result.getSourceFileToken(), result.getSourceOriginalFilename(),
+                result.getSourceContentType(), result.getSourceSizeBytes(), result.getSourceSha256());
+    }
+
+    /** 当前 T012 已开放动作；后续任务包交付解析、分块、发布和删除入口时扩展。 */
+    private List<String> availableActions(KbDocument document) {
+        return document.getStatus() == DocumentStatus.DELETED
+                ? List.of() : List.of("DOWNLOAD");
     }
 
     /**
-     * 文件下载内容，调用方必须关闭 inputStream。
-     *
-     * @param filename 文件名
-     * @param contentType MIME 类型
-     * @param size 文件字节数
-     * @param inputStream 文件读取流
+     * 一页文档固定使用两次批量查询装配当前结果和每种类型最近任务，避免 N+1。
      */
-    public record DocumentFileContent(
-            String filename,
-            String contentType,
-            long size,
-            InputStream inputStream) {
+    private DocumentReadBatch loadReadBatch(List<KbDocument> documents) {
+        if (documents.isEmpty()) {
+            return DocumentReadBatch.empty();
+        }
+        List<Long> documentIds = documents.stream().map(KbDocument::getId).toList();
+        return new DocumentReadBatch(
+                documentResultDomainService.findCurrentByDocumentIds(documentIds),
+                latestTasksByType(documentIds));
     }
+
+    private Map<Long, List<DocumentTaskSummaryResponse>> latestTasksByType(List<Long> documentIds) {
+        if (documentIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, List<KbProcessingTask>> latest =
+                processingTaskDomainService.findLatestBySourceDocumentIds(documentIds);
+        Map<Long, List<DocumentTaskSummaryResponse>> summaries = new LinkedHashMap<>();
+        latest.forEach((documentId, tasks) -> summaries.put(documentId, tasks.stream()
+                .map(this::toTaskSummary)
+                .toList()));
+        return summaries;
+    }
+
+    private DocumentTaskSummaryResponse toTaskSummary(KbProcessingTask task) {
+        return new DocumentTaskSummaryResponse(
+                task.getTaskKey(), task.getTaskType(), task.getStatus(), task.getStage(),
+                task.getProgress(), task.getErrorCode(), task.getErrorMessage(), task.getUpdated());
+    }
+
 }

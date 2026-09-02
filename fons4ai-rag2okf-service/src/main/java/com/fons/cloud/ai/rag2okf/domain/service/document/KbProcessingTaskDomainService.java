@@ -6,16 +6,29 @@ import com.fons.cloud.ai.rag2okf.common.constants.document.ProcessingTaskType;
 import com.fons.cloud.ai.rag2okf.common.exception.document.DocumentProcessingException;
 import com.fons.cloud.ai.rag2okf.domain.entity.document.KbProcessingTask;
 
+import java.util.List;
+import java.util.Map;
+
 /**
  * 文档域异步处理任务领域服务。
  *
- * <p>只服务任务事实持久化、幂等创建、按业务键查询与状态 CAS 流转，
+ * <p>只服务任务事实持久化、按业务键查询与状态 CAS 流转，
  * 不包装分布式锁、调度或执行器；实现风格与
  * {@code KbKnowledgeBaseDomainService} 一致。</p>
  *
  * @author hongqy
  */
 public interface KbProcessingTaskDomainService extends IService<KbProcessingTask> {
+
+    /**
+     * 批量查询每个文档、每种任务类型的最近未删除任务。
+     *
+     * <p>返回任务按任务类型枚举声明顺序排列，并以文档主键分组。</p>
+     *
+     * @param sourceDocumentIds 源文档主键集合
+     * @return 文档主键到每种类型最近任务的索引；无匹配任务时为空 Map
+     */
+    Map<Long, List<KbProcessingTask>> findLatestBySourceDocumentIds(List<Long> sourceDocumentIds);
 
     /**
      * 根据任务业务标识查询任务记录。
@@ -26,46 +39,16 @@ public interface KbProcessingTaskDomainService extends IService<KbProcessingTask
     KbProcessingTask findByTaskKey(String taskKey);
 
     /**
-     * 按幂等唯一键查询已存在任务。
+     * 查询文档指定类型最近一条终态失败任务，供重新发起建立只读追溯关系。
      *
-     * <p>幂等键为 {@code (source_document_id, task_type, idempotency_key)}，
-     * 对应数据库唯一约束，最多命中一条。</p>
-     *
-     * @param sourceDocumentId 目标文档主键
-     * @param taskType         任务类型
-     * @param idempotencyKey   调用方幂等键
-     * @return 已存在任务；无匹配时返回 {@code null}
+     * @param sourceDocumentId 文档主键
+     * @param taskType 任务类型
+     * @return 最近失败任务；不存在时返回 {@code null}
      */
-    KbProcessingTask findIdempotent(Long sourceDocumentId, ProcessingTaskType taskType, String idempotencyKey);
+    KbProcessingTask findLatestFailed(Long sourceDocumentId, ProcessingTaskType taskType);
 
-    /**
-     * 按知识库与幂等键查询已存在任务（不含文档维度）。
-     *
-     * <p>用于上传链路的操作幂等判定：上传创建任务前以
-     * {@code (knowledge_base_id, task_type, idempotency_key)} 查重，命中说明
-     * 相同操作键的上传已经受理过，应返回原结果而非重复创建文档。
-     * 与数据库唯一约束 {@code (source_document_id, task_type, idempotency_key)}
-     * 不同维度：本查询不做唯一性保证，仅取最近一条。</p>
-     *
-     * @param knowledgeBaseId 所属知识库主键
-     * @param taskType        任务类型
-     * @param idempotencyKey  调用方幂等键
-     * @return 最近一条匹配任务；无匹配时返回 {@code null}
-     */
-    KbProcessingTask findByIdempotencyKey(Long knowledgeBaseId, ProcessingTaskType taskType, String idempotencyKey);
-
-    /**
-     * 幂等创建任务。
-     *
-     * <p>先按 {@code (source_document_id, task_type, idempotency_key)} 查重：
-     * 已存在则直接返回已有任务，不重复创建；不存在则保存新任务。并发下
-     * 两个请求同时通过查重时由数据库唯一约束兜底：保存冲突方重新查询
-     * 返回已存在任务，调用方感知为同一结果。</p>
-     *
-     * @param task 已按 {@link KbProcessingTask#create} 初始化的任务实体
-     * @return 实际生效的任务：新创建或幂等命中的已有任务
-     */
-    KbProcessingTask createIfAbsent(KbProcessingTask task);
+    /** 创建独立任务事实。 */
+    KbProcessingTask create(KbProcessingTask task);
 
     /**
      * 以当前状态为条件 CAS 流转任务状态。
@@ -82,4 +65,16 @@ public interface KbProcessingTaskDomainService extends IService<KbProcessingTask
      * @throws DocumentProcessingException 状态流转非法或条件更新未命中时抛出
      */
     void casTransitionStatus(Long taskId, ProcessingTaskStatus from, ProcessingTaskStatus to);
+
+    /** 查询待执行 PARSE 任务，按创建顺序限制数量。 */
+    List<KbProcessingTask> listQueuedParseTasks(int limit);
+
+    /** 查询待执行 CHUNK 任务，按创建顺序限制数量。 */
+    List<KbProcessingTask> listQueuedChunkTasks(int limit);
+
+    /** 查询待执行 RECHUNK 任务，按创建顺序限制数量。 */
+    List<KbProcessingTask> listQueuedRechunkTasks(int limit);
+
+    /** 从 RUNNING 原子失败并登记安全错误。 */
+    void failRunningTask(Long taskId, String errorCode, String safeMessage);
 }

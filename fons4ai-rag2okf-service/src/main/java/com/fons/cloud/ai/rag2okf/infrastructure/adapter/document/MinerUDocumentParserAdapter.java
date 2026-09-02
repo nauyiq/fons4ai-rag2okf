@@ -1,6 +1,6 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.adapter.document;
 
-import com.fons.cloud.ai.rag2okf.application.document.DocumentParser;
+import com.fons.cloud.ai.rag2okf.infrastructure.document.parser.strategy.DocumentParser;
 import com.fons.cloud.ai.rag2okf.common.constants.Rag2OkfResultCode;
 import com.fons.cloud.ai.rag2okf.common.constants.document.ParserAvailability;
 import com.fons.cloud.ai.rag2okf.common.constants.document.ParserType;

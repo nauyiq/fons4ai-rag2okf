@@ -2,6 +2,11 @@ package com.fons.cloud.ai.rag2okf.common.model.document;
 
 import java.util.List;
 import java.util.Objects;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.experimental.Accessors;
 
 /**
  * Built-in 文件能力描述。
@@ -21,22 +26,44 @@ import java.util.Objects;
  *
  * @author hongqy
  */
-public record DocumentFileCapability(
-    String category,
-    String extension,
-    List<String> mimeWhitelist,
-    String baseExtraction,
-    List<String> requiredCapabilities,
-    List<String> enhancementCapabilities
-) {
+@Getter
+@Setter
+@Accessors(fluent = true)
+@NoArgsConstructor
+@EqualsAndHashCode
+public class DocumentFileCapability {
 
-    /** 紧凑构造器，防御性拷贝列表参数并拒绝空值。 */
-    public DocumentFileCapability {
-        Objects.requireNonNull(category, "category must not be null");
-        Objects.requireNonNull(extension, "extension must not be null");
-        Objects.requireNonNull(baseExtraction, "baseExtraction must not be null");
-        mimeWhitelist = List.copyOf(Objects.requireNonNull(mimeWhitelist));
-        requiredCapabilities = List.copyOf(Objects.requireNonNull(requiredCapabilities));
-        enhancementCapabilities = List.copyOf(Objects.requireNonNull(enhancementCapabilities));
+    /** 文件类别，例如纯文本、PDF、图片或音频。 */
+    private String category;
+    /** 小写且不带点的文件扩展名。 */
+    private String extension;
+    /** 服务端允许的 MIME 类型白名单。 */
+    private List<String> mimeWhitelist;
+    /** 不依赖模型的确定性基础提取方式。 */
+    private String baseExtraction;
+    /** 缺失时必须令解析失败的模型能力。 */
+    private List<String> requiredCapabilities;
+    /** 缺失时允许保留基础结果并返回警告的模型能力。 */
+    private List<String> enhancementCapabilities;
+
+    /**
+     * 创建一项不可变能力清单。
+     *
+     * @param category 文件类别
+     * @param extension 文件扩展名
+     * @param mimeWhitelist MIME 白名单
+     * @param baseExtraction 基础提取方式
+     * @param requiredCapabilities 必要能力
+     * @param enhancementCapabilities 可选增强能力
+     */
+    public DocumentFileCapability(String category, String extension, List<String> mimeWhitelist,
+                                  String baseExtraction, List<String> requiredCapabilities,
+                                  List<String> enhancementCapabilities) {
+        this.category = Objects.requireNonNull(category, "category must not be null");
+        this.extension = Objects.requireNonNull(extension, "extension must not be null");
+        this.mimeWhitelist = List.copyOf(Objects.requireNonNull(mimeWhitelist));
+        this.baseExtraction = Objects.requireNonNull(baseExtraction, "baseExtraction must not be null");
+        this.requiredCapabilities = List.copyOf(Objects.requireNonNull(requiredCapabilities));
+        this.enhancementCapabilities = List.copyOf(Objects.requireNonNull(enhancementCapabilities));
     }
 }

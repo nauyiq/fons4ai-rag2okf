@@ -1,28 +1,23 @@
 # TP-003 Built-in解析与规范制品
 
-> TaskPack：`TP-003`  
-> Feature：`document-processing-refactor`  
-> PackStatus：draft  
-> ApprovalStatus：pending  
-> SourceChange：INIT  
-> DependsOn：TP-001、TP-002  
-> 覆盖 AC：AC-006、AC-007、AC-008、AC-009、AC-010、AC-011、AC-012、AC-013、AC-014、AC-015、AC-016、AC-017、AC-034  
-> 创建日期：2026-08-17  
-> 更新日期：2026-08-17
+> TaskPack：`TP-003`
+> Feature：`document-processing-refactor`
+> PackStatus：superseded
+> ApprovalStatus：approved（历史）
+> SourceChange：INIT
+> DependsOn：TP-001、TP-002
+> SupersededBy：TP-009
+> 创建日期：2026-08-17
+> 更新日期：2026-08-28
 
-## 1. 任务包目标
+## 1. 替代结论
 
-- 可感知交付结果：基于已验证契约实现 Built-in 确定性提取、按需模型增强和不可变 ParsedDocument 制品。
-- 当前状态：仅登记任务包元数据；待依赖完成并由用户明确要求展开后生成任务列表。
-- 不包含范围：MinerU 真实接入、分块任务、发布和页面实现。
-- 外部前置条件：TP-001、TP-002 完成。
-- 完成层级：Integration
+- 原计划的 T015～T021 未按本 Task Pack 完成，不得勾选为已完成。
+- 原候选实现与未闭合验证已由 TP-009 接续：T015～T019 由 T024 复核，T020～T021 由 T022～T025 替代。
+- TP-009 已完成；本包不再是实现来源，也不得恢复执行。
 
-## 2. 任务列表
+## 2. 历史处理边界
 
-待后续展开；当前文件不可执行。
-
-## 3. 风险与回滚
-
-- 风险：只允许实现 TP-001 已验证通过的文件与模型能力。
-- 回滚：待展开时定义。
+- 按用户于 2026-08-28 的明确要求，删除未执行的 T015～T021 任务清单，避免未执行任务长期停留在可执行列表中。
+- 任务替代关系、验证事实与历史说明保留在任务索引、TP-009 和实施报告中。
+- 新的解析/OCR/分块工作流由 CR-001 与 TP-010 规划和实施。

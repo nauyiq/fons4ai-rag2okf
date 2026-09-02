@@ -3,6 +3,8 @@ package com.fons.cloud.ai.rag2okf.domain.entity.document;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fons.cloud.ai.rag2okf.common.constants.Rag2OkfResultCode;
 import com.fons.cloud.ai.rag2okf.common.constants.document.ParserType;
+import com.fons.cloud.ai.rag2okf.common.constants.document.ChunkBoundaryType;
+import com.fons.cloud.ai.rag2okf.common.constants.document.ChunkHierarchyType;
 import com.fons.cloud.ai.rag2okf.common.constants.document.ResultStage;
 import com.fons.cloud.ai.rag2okf.common.exception.document.DocumentProcessingException;
 import com.fons.cloud.ai.rag2okf.common.utils.BusinessKeyGenerator;
@@ -49,6 +51,7 @@ public class KbDocumentResult extends CommonEntity {
     private String sourceFileToken;
 
     /** 当前源文件 MinIO 对象键，结构为 sources/{fileToken}/{sanitizedFilename}。 */
+    @ToString.Exclude
     private String sourceObjectKey;
 
     /** 上传时原始文件名。 */
@@ -73,12 +76,15 @@ public class KbDocumentResult extends CommonEntity {
     private ParserType parserType;
 
     /** 任务创建时冻结的解析器、模型引用与非秘密参数快照 JSON。 */
+    @ToString.Exclude
     private String parserSnapshotJson;
 
     /** ParsedDocument v1 JSON 的 MinIO 对象键，解析成功并通过校验后写入。 */
+    @ToString.Exclude
     private String parsedDocumentObjectKey;
 
     /** 派生 Markdown 的 MinIO 对象键，可选。 */
+    @ToString.Exclude
     private String parsedMarkdownObjectKey;
 
     /** 结构块数量，解析完成时写入。 */
@@ -87,16 +93,18 @@ public class KbDocumentResult extends CommonEntity {
     /** 解析警告数量，解析完成时写入。 */
     private Integer warningCount;
 
-    /** 分块边界策略白名单：LENGTH、STRUCTURE、SEMANTIC，PARSE 后写入。 */
-    private String boundaryType;
+    /** 分块边界策略，PARSE 任务创建时冻结。 */
+    private ChunkBoundaryType boundaryType;
 
-    /** 分块层级策略白名单：FLAT、PARENT_CHILD，PARSE 后写入。 */
-    private String hierarchyType;
+    /** 分块层级策略，PARSE 任务创建时冻结。 */
+    private ChunkHierarchyType hierarchyType;
 
     /** 任务创建时冻结的分块参数与语义模型引用快照 JSON。 */
+    @ToString.Exclude
     private String policySnapshotJson;
 
     /** ChunkManifest v1 的 MinIO 对象键，分块成功并校验后写入。 */
+    @ToString.Exclude
     private String chunkManifestObjectKey;
 
     /** 父分块数量。 */
@@ -118,6 +126,7 @@ public class KbDocumentResult extends CommonEntity {
     private Integer embeddingDimensions;
 
     /** ES 投影安全引用 JSON，writeProjection 成功后写入。 */
+    @ToString.Exclude
     private String projectionRefJson;
 
     /** 投影文档数，validateWrite 成功后写入。 */
@@ -173,6 +182,31 @@ public class KbDocumentResult extends CommonEntity {
         result.setSourceUploadActorId(uploadActorId);
         result.setStage(ResultStage.INIT);
         return result;
+    }
+
+    /**
+     * 冻结解析任务输入，避免应用层通过 Setter 拼装解析状态。
+     *
+     * @param parserType 解析器类型
+     * @param parserSnapshotJson 版本化解析快照 JSON
+     * @param boundaryType 分块边界策略
+     * @param hierarchyType 分块层级策略
+     * @param policySnapshotJson 分块策略快照 JSON
+     */
+    public void configureParse(
+            ParserType parserType, String parserSnapshotJson,
+            ChunkBoundaryType boundaryType, ChunkHierarchyType hierarchyType, String policySnapshotJson) {
+        if (this.stage != ResultStage.INIT || parserType == null
+                || parserSnapshotJson == null || parserSnapshotJson.isBlank()
+                || boundaryType == null || hierarchyType == null
+                || policySnapshotJson == null || policySnapshotJson.isBlank()) {
+            throw new DocumentProcessingException(Rag2OkfResultCode.TASK_INPUT_SUPERSEDED);
+        }
+        this.parserType = parserType;
+        this.parserSnapshotJson = parserSnapshotJson;
+        this.boundaryType = boundaryType;
+        this.hierarchyType = hierarchyType;
+        this.policySnapshotJson = policySnapshotJson;
     }
 
     /**
