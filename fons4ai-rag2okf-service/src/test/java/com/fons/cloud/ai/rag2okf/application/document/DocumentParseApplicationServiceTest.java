@@ -10,9 +10,11 @@ import com.fons.cloud.ai.rag2okf.common.constants.document.ProcessingTaskType;
 import com.fons.cloud.ai.rag2okf.common.constants.document.ResultStage;
 import com.fons.cloud.ai.rag2okf.common.constants.user.WorkspaceRole;
 import com.fons.cloud.ai.rag2okf.common.constants.Rag2OkfResultCode;
+import com.fons.cloud.ai.rag2okf.common.exception.document.DocumentProcessingException;
 import com.fons.cloud.ai.rag2okf.common.model.document.DocumentParseWorkflowResult;
 import com.fons.cloud.ai.rag2okf.common.model.document.ChunkPolicy;
 import com.fons.cloud.ai.rag2okf.common.model.document.ParseTaskSnapshot;
+import com.fons.cloud.ai.rag2okf.common.model.document.ParseIntent;
 import com.fons.cloud.ai.rag2okf.common.model.document.ParsedDocument;
 import com.fons.cloud.ai.rag2okf.common.request.document.DocumentParseRequest;
 import com.fons.cloud.ai.rag2okf.common.request.document.ChunkPolicyRequest;
@@ -34,6 +36,7 @@ import com.fons.cloud.ai.rag2okf.domain.service.user.KbWorkspaceDomainService;
 import com.fons.cloud.ai.rag2okf.infrastructure.adapter.document.FonsOssDocumentArtifactService;
 import com.fons.cloud.ai.rag2okf.infrastructure.adapter.user.SaTokenCurrentUserContext;
 import com.fons.cloud.ai.rag2okf.infrastructure.document.parser.DocumentParseWorkflow;
+import com.fons.cloud.ai.rag2okf.infrastructure.document.parser.ParseRecognizer;
 import com.fons.cloud.common.result.R;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,6 +56,7 @@ import java.util.function.Consumer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -74,6 +78,7 @@ class DocumentParseApplicationServiceTest {
     @Mock private KbDocumentResultDomainService resultService;
     @Mock private FonsOssDocumentArtifactService artifactService;
     @Mock private DocumentParseWorkflow parseWorkflow;
+    @Mock private ParseRecognizer parseRecognizer;
     @Mock private DocumentChunkApplicationService chunkApplicationService;
     @Mock private SaTokenCurrentUserContext currentUserContext;
     @Mock private UserWorkspaceAggregate userWorkspaceAggregate;
@@ -92,7 +97,7 @@ class DocumentParseApplicationServiceTest {
     void setUp() {
         service = new DocumentParseApplicationService(
                 taskService, documentService, resultService, artifactService, parseWorkflow,
-                chunkApplicationService,
+                parseRecognizer, chunkApplicationService,
                 currentUserContext, knowledgeBaseService, workspaceService, bindingService, profileService,
                 transactionTemplate);
         KbUser user = new KbUser();
@@ -115,6 +120,8 @@ class DocumentParseApplicationServiceTest {
                         "file-token", "internal/source", "report.pdf",
                         "application/pdf", 12L, "sha256"));
         source.setId(41L);
+        lenient().when(parseRecognizer.recognize("report.pdf", "application/pdf"))
+                .thenReturn(new ParseIntent("PDF", ParserType.BUILT_IN, List.of(), List.of(), List.of()));
         lenient().when(currentUserContext.requireCurrentUser()).thenReturn(user);
         lenient().when(documentService.findByDocumentKey("doc-key")).thenReturn(document);
         lenient().when(knowledgeBaseService.getById(21L)).thenReturn(knowledgeBase);
@@ -176,7 +183,8 @@ class DocumentParseApplicationServiceTest {
 
     @Test
     void shouldRejectMinerUBeforeTransactionOrPersistence() {
-        // isEnabled 未被 stub 时 mock 默认返回 false，等价于 MINERU 未启用
+        // 源文件被识别为 Built-in 时，请求 MinerU 必须在能力查询前直接拒绝。
+        when(resultService.findCurrentByDocumentId(11L)).thenReturn(source);
         R<DocumentParseResponse> result = service.startParse(
                 "doc-key", new DocumentParseRequest(ParserType.MINERU, null, false));
 
@@ -229,5 +237,33 @@ class DocumentParseApplicationServiceTest {
                 any(), any(), any(), any(), any(), anyInt(), anyInt(), anyInt(), any());
         assertEquals(ResultStage.PARSE, source.getStage());
         assertEquals(5, source.getVersion());
+    }
+
+    @Test
+    void shouldKeepPublishedDocumentVisibleWhenReparseFails() {
+        KbProcessingTask task = KbProcessingTask.create(
+                31L, 21L, 11L, ProcessingTaskType.PARSE, source.getResultKey(),
+                JSON.toJSONString(ParseTaskSnapshot.of(
+                        "workspace-key", "kb-key", "doc-key", "file-token", ParserType.BUILT_IN,
+                        null, new ChunkPolicy(ChunkBoundaryType.RECURSIVE, ChunkHierarchyType.PARENT_CHILD, Map.of()),
+                        Map.of(), false, 7L, new Date())), null);
+        task.setId(51L);
+        source.setStage(ResultStage.INIT);
+        source.setVersion(4);
+        document.setStatus(DocumentStatus.PUBLISHED);
+        DocumentProcessingException failure =
+                new DocumentProcessingException(Rag2OkfResultCode.PARSE_ARTIFACT_ERROR);
+        when(taskService.findByTaskKey(task.getTaskKey())).thenReturn(task);
+        when(documentService.getById(document.getId())).thenReturn(document);
+        when(resultService.findByResultKey(source.getResultKey())).thenReturn(source);
+        when(resultService.findCurrentByDocumentId(document.getId())).thenReturn(source);
+        when(parseWorkflow.process(any())).thenThrow(failure);
+
+        DocumentProcessingException exception = assertThrows(
+                DocumentProcessingException.class, () -> service.execute(task.getTaskKey()));
+
+        assertEquals(Rag2OkfResultCode.PARSE_ARTIFACT_ERROR.getCode(), exception.getCode());
+        verify(taskService).failRunningTask(task.getId(), failure.getCode(), failure.getMessage());
+        verify(documentService, never()).casTransitionStatus(any(), any(), any());
     }
 }

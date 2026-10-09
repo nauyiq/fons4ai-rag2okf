@@ -46,13 +46,27 @@ public class ParseRecognizer {
         if (precheckedFile == null) {
             throw new DocumentProcessingException(Rag2OkfResultCode.PAYLOAD_INVALID);
         }
-        DocumentFileCapability capability = capabilityCatalog.require(precheckedFile.getFilename(), precheckedFile.getContentType());
+        return recognize(precheckedFile.getFilename(), precheckedFile.getContentType());
+    }
+
+    /**
+     * 根据已冻结的上传预检文件事实识别唯一解析意图。
+     *
+     * <p>供异步解析任务恢复持久化的文件名和服务端 MIME 后调用；本方法不读取源流，
+     * 也不重新执行上传预检。</p>
+     *
+     * @param filename 已净化且经预检确认的文件名
+     * @param contentType 上传预检确认的服务端 MIME
+     * @return 不含秘密信息的解析意图
+     */
+    public ParseIntent recognize(String filename, String contentType) {
+        DocumentFileCapability capability = capabilityCatalog.require(filename, contentType);
         String extension = extensionOf(capability);
         return new ParseIntent(
                 capability.category(), ParserType.BUILT_IN,
                 capability.requiredCapabilities(), capability.enhancementCapabilities(),
                 List.of("VERIFIED_EXTENSION:" + extension,
-                        "VERIFIED_MIME:" + precheckedFile.getContentType().toLowerCase(Locale.ROOT)));
+                        "VERIFIED_MIME:" + contentType.toLowerCase(Locale.ROOT)));
     }
 
     private String extensionOf(DocumentFileCapability capability) {

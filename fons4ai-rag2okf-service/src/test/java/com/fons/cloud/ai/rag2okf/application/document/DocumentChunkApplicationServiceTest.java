@@ -115,15 +115,11 @@ class DocumentChunkApplicationServiceTest {
         when(documentDomainService.getById(DOCUMENT_ID)).thenReturn(document);
         when(resultDomainService.findByResultKey(RESULT_KEY)).thenReturn(result);
         when(resultDomainService.findCurrentByDocumentId(DOCUMENT_ID)).thenReturn(result);
-        doAnswer(invocation -> {
-            Consumer<?> callback = invocation.getArgument(0);
-            callback.accept(null);
-            return null;
-        }).when(transactionTemplate).executeWithoutResult(any());
     }
 
     @Test
     void shouldConsumeParsedDocumentAndCommitChunkManifest() {
+        executeTransactionsInline();
         ParsedDocument parsedDocument = new ParsedDocument();
         ChunkManifest manifest = new ChunkManifest();
         manifest.setParentCount(1);
@@ -151,6 +147,7 @@ class DocumentChunkApplicationServiceTest {
 
     @Test
     void shouldCompensateOnlyNewChunkArtifactWhenCasLoses() {
+        executeTransactionsInline();
         ParsedDocument parsedDocument = new ParsedDocument();
         ChunkManifest manifest = new ChunkManifest();
         when(artifactService.openParsed(PARSED_OBJECT_KEY)).thenReturn(
@@ -196,10 +193,31 @@ class DocumentChunkApplicationServiceTest {
         verify(artifactService, never()).deleteParsed(any());
     }
 
+    @Test
+    void shouldRecordGenericTaskErrorWhenInitialChunkFailsUnexpectedly() {
+        when(artifactService.openParsed(PARSED_OBJECT_KEY)).thenThrow(new IllegalStateException("storage unavailable"));
+
+        DocumentProcessingException exception = assertThrows(
+                DocumentProcessingException.class, () -> service.execute(TASK_KEY));
+
+        assertEquals(Rag2OkfResultCode.TASK_EXECUTION_ERROR.getCode(), exception.getCode());
+        verify(taskDomainService).failRunningTask(
+                task.getId(), Rag2OkfResultCode.TASK_EXECUTION_ERROR.getCode(),
+                Rag2OkfResultCode.TASK_EXECUTION_ERROR.getMessage());
+    }
+
     private String snapshotJson() {
         return JSON.toJSONString(new ChunkTaskSnapshot(
                 "workspace-key", "knowledge-base-key", "document-key", RESULT_KEY, RESULT_VERSION,
                 new ChunkPolicy(ChunkBoundaryType.RECURSIVE, ChunkHierarchyType.PARENT_CHILD, Map.of()),
                 Map.of(), 7L, new Date()));
+    }
+
+    private void executeTransactionsInline() {
+        doAnswer(invocation -> {
+            Consumer<?> callback = invocation.getArgument(0);
+            callback.accept(null);
+            return null;
+        }).when(transactionTemplate).executeWithoutResult(any());
     }
 }

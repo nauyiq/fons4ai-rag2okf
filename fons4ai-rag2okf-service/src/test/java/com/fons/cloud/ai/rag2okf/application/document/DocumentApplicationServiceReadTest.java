@@ -2,10 +2,16 @@ package com.fons.cloud.ai.rag2okf.application.document;
 
 import com.fons.cloud.ai.rag2okf.common.constants.document.CleanupStatus;
 import com.fons.cloud.ai.rag2okf.common.constants.document.DocumentStatus;
+import com.fons.cloud.ai.rag2okf.common.constants.document.ParserType;
+import com.fons.cloud.ai.rag2okf.common.constants.document.ProcessingMode;
 import com.fons.cloud.ai.rag2okf.common.constants.document.ProcessingTaskStatus;
 import com.fons.cloud.ai.rag2okf.common.constants.document.ProcessingTaskType;
 import com.fons.cloud.ai.rag2okf.common.constants.document.ResultStage;
 import com.fons.cloud.ai.rag2okf.common.constants.user.WorkspaceRole;
+import com.fons.cloud.ai.rag2okf.common.constants.Rag2OkfResultCode;
+import com.fons.cloud.ai.rag2okf.common.model.document.DocumentPrecheckedFile;
+import com.fons.cloud.ai.rag2okf.common.model.document.ParseIntent;
+import com.fons.cloud.ai.rag2okf.common.request.document.DocumentUploadRequest;
 import com.fons.cloud.common.result.PageResult;
 import com.fons.cloud.ai.rag2okf.common.response.document.DocumentDetailResponse;
 import com.fons.cloud.ai.rag2okf.common.response.document.DocumentSummaryResponse;
@@ -26,6 +32,7 @@ import com.fons.cloud.ai.rag2okf.infrastructure.adapter.document.FonsOssDocument
 import com.fons.cloud.ai.rag2okf.common.model.document.DocumentFileContent;
 import com.fons.cloud.ai.rag2okf.infrastructure.adapter.user.SaTokenCurrentUserContext;
 import com.fons.cloud.ai.rag2okf.infrastructure.document.parser.DocumentParserRegistry;
+import com.fons.cloud.ai.rag2okf.infrastructure.document.parser.ParseRecognizer;
 import com.fons.cloud.common.result.R;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,6 +40,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
 import java.util.List;
@@ -46,6 +54,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -65,6 +76,7 @@ class DocumentApplicationServiceReadTest {
     @Mock private FonsOssDocumentArtifactService documentArtifactService;
     @Mock private DocumentUploadPrecheckPolicy uploadPrecheckPolicy;
     @Mock private DocumentParserRegistry parserRegistry;
+    @Mock private ParseRecognizer parseRecognizer;
     @Mock private TransactionTemplate transactionTemplate;
 
     private DocumentApplicationService applicationService;
@@ -75,7 +87,8 @@ class DocumentApplicationServiceReadTest {
                 currentUserContext, knowledgeBaseDomainService,
                 workspaceDomainService, documentDomainService, documentResultDomainService,
                 processingTaskDomainService, modelBindingDomainService, modelProfileDomainService,
-                documentArtifactService, uploadPrecheckPolicy, parserRegistry, transactionTemplate);
+                documentArtifactService, uploadPrecheckPolicy, parserRegistry, parseRecognizer,
+                transactionTemplate);
         KbUser user = new KbUser();
         user.setId(7L);
         user.setUserKey("user-key");
@@ -150,6 +163,29 @@ class DocumentApplicationServiceReadTest {
         assertEquals("报告.pdf", file.getFilename());
         assertEquals(3, file.getSize());
         verify(documentArtifactService).openSource("internal/source-1");
+    }
+
+    @Test
+    void shouldRejectUploadParserRequestThatDiffersFromRecognizedIntent() throws Exception {
+        KbKnowledgeBase knowledgeBase = knowledgeBase();
+        MultipartFile file = mock(MultipartFile.class);
+        DocumentPrecheckedFile precheckedFile = new DocumentPrecheckedFile(
+                "report.pdf", "application/pdf", new ByteArrayInputStream(new byte[]{1, 2, 3}));
+        when(knowledgeBaseDomainService.findByKnowledgeBaseKey("kb-key")).thenReturn(knowledgeBase);
+        when(file.getOriginalFilename()).thenReturn("report.pdf");
+        when(file.getInputStream()).thenReturn(new ByteArrayInputStream(new byte[]{1, 2, 3}));
+        when(file.getSize()).thenReturn(3L);
+        when(uploadPrecheckPolicy.precheck(eq("report.pdf"), any(), eq(3L))).thenReturn(R.ok(precheckedFile));
+        when(parseRecognizer.recognize(precheckedFile)).thenReturn(
+                new ParseIntent("PDF", ParserType.BUILT_IN, List.of(), List.of(), List.of()));
+
+        R<?> result = applicationService.uploadDocument("kb-key", file,
+                new DocumentUploadRequest(ProcessingMode.PARSE, ParserType.MINERU, null));
+
+        assertFalse(result.isSuccess());
+        assertEquals(Rag2OkfResultCode.PARSER_NOT_AVAILABLE.getCode(), result.getCode());
+        verify(documentArtifactService, never()).storeSource(any());
+        verify(transactionTemplate, never()).execute(any());
     }
 
     private KbKnowledgeBase knowledgeBase() {

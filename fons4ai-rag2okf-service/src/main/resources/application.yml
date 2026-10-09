@@ -25,11 +25,6 @@ spring:
     name: fons4ai-rag2okf-service
   main:
     allow-bean-definition-overriding: true
-  autoconfigure:
-    exclude:
-      # rag2okf  不注册全局模型 Bean；
-      # 排除依赖 StreamingChatModel 的自动配置，避免启动失败
-      - com.fons.cloud.ai.agent.langchain.config.LangChain4jAgentAutoConfiguration
   datasource:
     type: com.alibaba.druid.pool.DruidDataSource
     url: jdbc:mysql://${DB_HOST}:${DB_PORT:3306}/rag2okf?useUnicode=true&autoReconnect=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull&allowMultiQueries=true&verifyServerCertificate=false&useSSL=false&allowPublicKeyRetrieval=true

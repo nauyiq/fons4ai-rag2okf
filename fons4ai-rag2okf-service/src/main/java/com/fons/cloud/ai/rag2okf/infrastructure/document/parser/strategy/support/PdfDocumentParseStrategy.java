@@ -7,6 +7,7 @@ import com.fons.cloud.ai.rag2okf.common.exception.document.DocumentProcessingExc
 import com.fons.cloud.ai.rag2okf.common.model.document.DocumentFileCapability;
 import com.fons.cloud.ai.rag2okf.common.model.document.DocumentSourceStreamProvider;
 import com.fons.cloud.ai.rag2okf.common.model.document.ParseExecutionContext;
+import com.fons.cloud.ai.rag2okf.common.model.document.ParseTraceStep;
 import com.fons.cloud.ai.rag2okf.common.model.document.PdfPageProbeResult;
 import com.fons.cloud.ai.rag2okf.common.model.document.RawParseBlock;
 import com.fons.cloud.ai.rag2okf.common.model.document.RawParseResult;
@@ -22,8 +23,6 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 
@@ -74,19 +73,19 @@ public class PdfDocumentParseStrategy implements DocumentParseStrategy {
     @Override
     public RawParseResult parse(ParseExecutionContext context, DocumentFileCapability capability) {
         PdfPageProbeResult probeResult = probe(context::openSourceStream);
-        RawParseResult nativeResult = baseExtractor.extractText(
-                context, probeResult.ocrPlan().mode() == OcrPlanMode.NONE);
         if (probeResult.ocrPlan().mode() == OcrPlanMode.NONE) {
+            RawParseResult nativeResult = baseExtractor.extractText(context, true);
             return copyWithMetadata(nativeResult, probeResult.pageCount(), List.of());
         }
         OcrDocumentResult ocrResult = requireOcrGateway().parse(
                 new OcrDocumentRequest(context.filename(), context::openSourceStream));
-        List<RawParseBlock> blocks = new ArrayList<>(nativeResult.blocks());
-        blocks.addAll(OcrPageResultMapper.map(ocrResult, new LinkedHashSet<>(probeResult.ocrPlan().pageNumbers())));
-        if (blocks.isEmpty()) {
+        List<RawParseBlock> blocks = OcrPageResultMapper.mapAll(ocrResult);
+        if (blocks.size() != probeResult.pageCount()) {
             throw new DocumentProcessingException(Rag2OkfResultCode.PARSE_UNEXPECTED_ERROR);
         }
-        return copyWithMetadata(nativeResult, probeResult.pageCount(), List.copyOf(blocks));
+        return new RawParseResult(null, null, probeResult.pageCount(), null, blocks, List.of(), List.of(
+                new ParseTraceStep("OFFICIAL_OCR", "OCR", null, ParseTraceStep.STATUS_SUCCESS,
+                        ParseTraceStep.UNKNOWN_DURATION_MILLIS, null)));
     }
 
     /**

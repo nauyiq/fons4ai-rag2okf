@@ -9,6 +9,7 @@ import com.fons.cloud.ai.rag2okf.common.model.document.ChunkPolicy;
 import com.fons.cloud.ai.rag2okf.common.model.document.ModelProfileReference;
 import com.fons.cloud.ai.rag2okf.common.model.document.ParsedBlock;
 import com.fons.cloud.ai.rag2okf.common.model.document.ParsedDocument;
+import com.fons.cloud.ai.rag2okf.common.model.document.SourceAnchor;
 import com.fons.cloud.ai.rag2okf.common.model.user.ModelCapabilityRequest;
 import com.fons.cloud.ai.rag2okf.common.model.user.ModelCapabilityResult;
 import com.fons.cloud.ai.rag2okf.infrastructure.document.chunking.ChunkingExecutionContext;
@@ -17,6 +18,7 @@ import com.fons.cloud.ai.rag2okf.infrastructure.document.chunking.strategy.Chunk
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -72,7 +74,8 @@ public class SemanticChunkBoundaryStrategy implements ChunkBoundaryStrategy {
             float[] currentVector = invokeEmbedding(profile, context.getRequestedBy(), text);
             if (previous != null && cosine(previousVector, currentVector) >= threshold) {
                 current = new ChunkCandidate(previous.content() + "\n" + text,
-                        mergeBlockIds(previous, block.blockId()), previous.sourceAnchor());
+                        mergeBlockIds(previous, block.blockId()), mergeAnchors(previous, block.anchor()),
+                        null, null, null);
                 candidates.removeLast();
             }
             candidates.add(current);
@@ -153,5 +156,18 @@ public class SemanticChunkBoundaryStrategy implements ChunkBoundaryStrategy {
         List<String> result = new ArrayList<>(previous.sourceBlockIds());
         result.add(currentBlockId);
         return result;
+    }
+
+    /**
+     * 合并相邻语义块已证明的来源锚点，并保持原文顺序去重。
+     *
+     * @param previous 前一候选块
+     * @param currentAnchor 当前原始块锚点
+     * @return 合并后的完整来源锚点
+     */
+    private List<SourceAnchor> mergeAnchors(ChunkCandidate previous, SourceAnchor currentAnchor) {
+        LinkedHashSet<SourceAnchor> anchors = new LinkedHashSet<>(previous.anchorRefs());
+        anchors.add(currentAnchor);
+        return List.copyOf(anchors);
     }
 }

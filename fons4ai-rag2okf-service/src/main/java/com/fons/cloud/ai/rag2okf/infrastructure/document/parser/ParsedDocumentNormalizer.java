@@ -1,5 +1,6 @@
 package com.fons.cloud.ai.rag2okf.infrastructure.document.parser;
 
+import com.fons.cloud.ai.rag2okf.common.constants.document.ParserType;
 import com.fons.cloud.ai.rag2okf.common.model.document.ParseExecutionContext;
 import com.fons.cloud.ai.rag2okf.common.model.document.ParsedBlock;
 import com.fons.cloud.ai.rag2okf.common.model.document.ParsedDocument;
@@ -26,7 +27,30 @@ import java.util.List;
 @Component
 public class ParsedDocumentNormalizer {
 
+    /**
+     * 按执行上下文中的解析器类型规范化原始结果。
+     *
+     * @param context 受控解析上下文
+     * @param raw 解析器原始结果
+     * @return 统一解析制品
+     */
     public ParsedDocument normalize(ParseExecutionContext context, RawParseResult raw) {
+        return normalize(context, raw, context.parserType());
+    }
+
+    /**
+     * 按实际路由的解析器类型规范化原始结果。
+     *
+     * <p>解析执行期必须以预检文件事实重新识别并路由 Parser；该参数确保制品中的
+     * parser 信息反映实际执行者，而不是过期或不一致的任务快照值。</p>
+     *
+     * @param context 受控解析上下文
+     * @param raw 解析器原始结果
+     * @param parserType 实际执行的解析器类型
+     * @return 统一解析制品
+     */
+    public ParsedDocument normalize(
+            ParseExecutionContext context, RawParseResult raw, ParserType parserType) {
         List<ParsedBlock> blocks = new ArrayList<>(raw.blocks().size());
         for (int index = 0; index < raw.blocks().size(); index++) {
             RawParseBlock block = raw.blocks().get(index);
@@ -42,7 +66,7 @@ public class ParsedDocumentNormalizer {
                 new ParsedDocumentSource(
                         context.sourceFileToken(), context.filename(),
                         context.contentType(), context.sha256()),
-                new ParsedParserInfo(context.parserType().getValue(), "builtin"),
+                new ParsedParserInfo(parserType.getValue(), "builtin"),
                 new ParsedDocumentMetadata(
                         raw.title(), raw.language(), raw.pageCount(), raw.durationMs()),
                 blocks,

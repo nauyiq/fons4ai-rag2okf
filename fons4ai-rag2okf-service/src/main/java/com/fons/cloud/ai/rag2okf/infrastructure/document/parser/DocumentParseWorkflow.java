@@ -3,6 +3,7 @@ package com.fons.cloud.ai.rag2okf.infrastructure.document.parser;
 import com.fons.cloud.ai.rag2okf.common.constants.document.ParserType;
 import com.fons.cloud.ai.rag2okf.common.model.document.DocumentParseWorkflowResult;
 import com.fons.cloud.ai.rag2okf.common.model.document.ParseExecutionContext;
+import com.fons.cloud.ai.rag2okf.common.model.document.ParseIntent;
 import com.fons.cloud.ai.rag2okf.common.model.document.ParsedDocument;
 import com.fons.cloud.ai.rag2okf.common.model.document.RawParseResult;
 import com.fons.cloud.ai.rag2okf.common.utils.ParsedDocumentValidator;
@@ -22,6 +23,12 @@ public class DocumentParseWorkflow {
      */
     private final DocumentParserRegistry parserRegistry;
 
+    /** 根据已验证文件事实生成唯一解析意图。 */
+    private final ParseRecognizer parseRecognizer;
+
+    /** 根据解析意图取得唯一启用解析器。 */
+    private final ParserRouter parserRouter;
+
     /**
      * 将解析器原始输出转换为统一文档结构的规范化器。
      */
@@ -36,14 +43,20 @@ public class DocumentParseWorkflow {
      * 创建解析技术流水线。
      *
      * @param parserRegistry      解析器注册表
+     * @param parseRecognizer     基于已验证文件事实的解析意图识别器
+     * @param parserRouter        按解析意图选择唯一启用解析器的路由器
      * @param normalizer          解析结果规范化器
      * @param parsedDocumentCodec 解析文档编码器
      */
     public DocumentParseWorkflow(
             DocumentParserRegistry parserRegistry,
+            ParseRecognizer parseRecognizer,
+            ParserRouter parserRouter,
             ParsedDocumentNormalizer normalizer,
             ParsedDocumentCodec parsedDocumentCodec) {
         this.parserRegistry = parserRegistry;
+        this.parseRecognizer = parseRecognizer;
+        this.parserRouter = parserRouter;
         this.normalizer = normalizer;
         this.parsedDocumentCodec = parsedDocumentCodec;
     }
@@ -65,11 +78,12 @@ public class DocumentParseWorkflow {
      * @return 已校验、已编码的解析制品
      */
     public DocumentParseWorkflowResult process(ParseExecutionContext context) {
-        // 步骤 1：调用任务冻结的解析器，得到与具体格式相关的原始解析结果。
-        RawParseResult rawResult = parserRegistry.requireEnabled(context.parserType()).parse(context);
+        // 步骤 1：依据已冻结的上传预检事实识别意图，并路由唯一启用解析器。
+        ParseIntent intent = parseRecognizer.recognize(context.filename(), context.contentType());
+        RawParseResult rawResult = parserRouter.require(intent).parse(context);
 
         // 步骤 2：统一为 ParsedDocument 并校验结构、来源锚点及敏感字段约束。
-        ParsedDocument parsedDocument = normalizer.normalize(context, rawResult);
+        ParsedDocument parsedDocument = normalizer.normalize(context, rawResult, intent.parserType());
         ParsedDocumentValidator.validate(parsedDocument);
 
         // 步骤 3：编码为稳定字节，交由 Application 决定何时写入对象存储。

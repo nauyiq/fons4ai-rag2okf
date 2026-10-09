@@ -8,6 +8,8 @@ import com.fons.cloud.ai.rag2okf.common.model.document.ParsedBlock;
 import com.fons.cloud.ai.rag2okf.common.model.document.ParsedDocument;
 import com.fons.cloud.ai.rag2okf.common.model.document.SourceAnchor;
 import com.fons.cloud.ai.rag2okf.infrastructure.document.chunking.strategy.ChunkCandidate;
+import com.fons.cloud.ai.rag.langchain.document.MarkdownHeaderParentSplitter.SourceRange;
+import com.fons.cloud.ai.rag.langchain.document.MarkdownHeaderParentSplitter.SourcedTextSegment;
 import com.fons.cloud.ai.rag.langchain.document.MetadataKeyConstants;
 import dev.langchain4j.data.document.Document;
 import dev.langchain4j.data.document.Metadata;
@@ -84,6 +86,34 @@ final class LangChain4jChunkingSupport {
         return documents;
     }
 
+    /**
+     * 将连续的 ParsedBlock 投影为单个 Markdown 运行时 Document，并保留字符范围来源。
+     *
+     * <p>页面块之间只补一个换行符以保持 Markdown 行语义；该分隔符不是来源内容，也不会成为
+     * 独立分块。Fons4AI 标题 splitter 根据来源范围返回每个标题范围涉及的全部块标识。</p>
+     */
+    static MarkdownSourceDocument toMarkdownSourceDocument(ParsedDocument parsedDocument) {
+        StringBuilder text = new StringBuilder();
+        List<SourceRange> sourceRanges = new ArrayList<>();
+        for (ParsedBlock block : parsedDocument.blocks()) {
+            String blockText = block.text();
+            if (blockText == null || blockText.isBlank() || block.blockId() == null || block.blockId().isBlank()
+                    || block.anchor() == null) {
+                continue;
+            }
+            if (!text.isEmpty()) {
+                text.append('\n');
+            }
+            int startInclusive = text.length();
+            text.append(blockText);
+            sourceRanges.add(new SourceRange(startInclusive, text.length(), block.blockId()));
+        }
+        if (sourceRanges.isEmpty()) {
+            throw invalid();
+        }
+        return new MarkdownSourceDocument(Document.from(text.toString()), List.copyOf(sourceRanges));
+    }
+
     /** 将 SDK/Fons4AI 输出还原为拥有完整来源事实的候选块。 */
     static List<ChunkCandidate> toCandidates(ParsedDocument document, List<TextSegment> segments) {
         Map<String, SourceAnchor> anchorsByBlockId = new LinkedHashMap<>();
@@ -114,6 +144,48 @@ final class LangChain4jChunkingSupport {
             throw invalid();
         }
         return candidates;
+    }
+
+    /** 将带范围来源的 Markdown splitter 输出映射为候选块。 */
+    static List<ChunkCandidate> toMarkdownCandidates(
+            ParsedDocument document, List<SourcedTextSegment> sourcedSegments) {
+        Map<String, SourceAnchor> anchorsByBlockId = anchorsByBlockId(document);
+        List<ChunkCandidate> candidates = new ArrayList<>();
+        for (SourcedTextSegment sourcedSegment : sourcedSegments) {
+            TextSegment segment = sourcedSegment.segment();
+            List<String> sourceBlockIds = sourcedSegment.sourceIds();
+            List<SourceAnchor> anchorRefs = sourceBlockIds.stream()
+                    .map(anchorsByBlockId::get)
+                    .toList();
+            if (segment.text().isBlank() || sourceBlockIds.isEmpty()
+                    || anchorRefs.stream().anyMatch(anchor -> anchor == null)) {
+                throw invalid();
+            }
+            Map<String, Object> metadata = segment.metadata().toMap();
+            ChunkRole role = roleOf(metadata);
+            String candidateKey = stringMetadata(metadata, MetadataKeyConstants.CHUNK_ID);
+            String parentCandidateKey = stringMetadata(metadata, MetadataKeyConstants.PARENT_CHUNK_ID);
+            if (role == ChunkRole.CHILD && (candidateKey == null || parentCandidateKey == null)) {
+                throw invalid();
+            }
+            if (role == ChunkRole.PARENT && candidateKey == null) {
+                throw invalid();
+            }
+            candidates.add(new ChunkCandidate(segment.text(), sourceBlockIds, anchorRefs,
+                    role, candidateKey, parentCandidateKey));
+        }
+        if (candidates.isEmpty()) {
+            throw invalid();
+        }
+        return candidates;
+    }
+
+    private static Map<String, SourceAnchor> anchorsByBlockId(ParsedDocument document) {
+        Map<String, SourceAnchor> anchorsByBlockId = new LinkedHashMap<>();
+        for (ParsedBlock block : document.blocks()) {
+            anchorsByBlockId.put(block.blockId(), block.anchor());
+        }
+        return anchorsByBlockId;
     }
 
     /** 解析 recursive 和 markdown-header 共用的三项数值参数。 */
@@ -173,5 +245,9 @@ final class LangChain4jChunkingSupport {
 
     /** 已校验的 SDK 分块参数。 */
     record Parameters(int chunkSize, int parentChunkSize, int overlap, int titleLevel) {
+    }
+
+    /** Markdown splitter 的单文档投影及其原始块范围。 */
+    record MarkdownSourceDocument(Document document, List<SourceRange> sourceRanges) {
     }
 }

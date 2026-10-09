@@ -13,6 +13,7 @@ import com.fons.cloud.ai.rag2okf.common.constants.knowledgebase.ModelBindingStat
 import com.fons.cloud.ai.rag2okf.common.constants.user.WorkspaceRole;
 import com.fons.cloud.ai.rag2okf.common.exception.document.DocumentProcessingException;
 import com.fons.cloud.ai.rag2okf.common.model.document.ParseExecutionContext;
+import com.fons.cloud.ai.rag2okf.common.model.document.ParseIntent;
 import com.fons.cloud.ai.rag2okf.common.model.document.ParseTaskSnapshot;
 import com.fons.cloud.ai.rag2okf.common.model.document.ChunkPolicy;
 import com.fons.cloud.ai.rag2okf.common.model.document.DocumentParseWorkflowResult;
@@ -38,6 +39,7 @@ import com.fons.cloud.ai.rag2okf.domain.service.user.KbWorkspaceDomainService;
 import com.fons.cloud.ai.rag2okf.infrastructure.adapter.document.FonsOssDocumentArtifactService;
 import com.fons.cloud.ai.rag2okf.infrastructure.adapter.user.SaTokenCurrentUserContext;
 import com.fons.cloud.ai.rag2okf.infrastructure.document.parser.DocumentParseWorkflow;
+import com.fons.cloud.ai.rag2okf.infrastructure.document.parser.ParseRecognizer;
 import com.fons.cloud.common.result.R;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -69,6 +71,7 @@ public class DocumentParseApplicationService {
     private final KbDocumentResultDomainService resultDomainService;
     private final FonsOssDocumentArtifactService artifactService;
     private final DocumentParseWorkflow parseWorkflow;
+    private final ParseRecognizer parseRecognizer;
     private final DocumentChunkApplicationService chunkApplicationService;
     private final SaTokenCurrentUserContext currentUserContext;
     private final KbKnowledgeBaseDomainService knowledgeBaseDomainService;
@@ -104,13 +107,9 @@ public class DocumentParseApplicationService {
         access.requireAccess(WorkspaceRole.ADMIN);
         KbWorkspace workspace = access.getWorkspace();
 
-        // 步骤 3：冻结本次请求的解析器和分块策略，拒绝不可用解析器及非法策略。
+        // 步骤 3：冻结分块策略；解析器由已保存的源文件事实识别，不信任请求值。
         DocumentParseRequest effective = request == null
                 ? new DocumentParseRequest(ParserType.BUILT_IN, null, false) : request;
-        ParserType parserType = effective.getParserType() == null ? ParserType.BUILT_IN : effective.getParserType();
-        if (!parseWorkflow.isEnabled(parserType)) {
-            return R.failed(Rag2OkfResultCode.PARSER_NOT_AVAILABLE);
-        }
         ChunkPolicy chunkPolicy = resolveChunkPolicy(effective.getChunkPolicy());
         if (chunkPolicy == null) {
             return R.failed(Rag2OkfResultCode.CHUNK_POLICY_INVALID);
@@ -119,6 +118,13 @@ public class DocumentParseApplicationService {
         KbDocumentResult source = resultDomainService.findCurrentByDocumentId(document.getId());
         if (source == null) {
             return R.failed(Rag2OkfResultCode.DOCUMENT_SOURCE_ARTIFACT_ERROR);
+        }
+        ParseIntent parseIntent = parseRecognizer.recognize(
+                source.getSourceOriginalFilename(), source.getSourceContentType());
+        ParserType parserType = parseIntent.parserType();
+        if ((effective.getParserType() != null && effective.getParserType() != parserType)
+                || !parseWorkflow.isEnabled(parserType)) {
+            return R.failed(Rag2OkfResultCode.PARSER_NOT_AVAILABLE);
         }
         Map<String, ModelProfileReference> profileRefs =
                 freezeModelProfileRefs(knowledgeBase.getId());
@@ -335,7 +341,8 @@ public class DocumentParseApplicationService {
         KbDocument document = documentDomainService.getById(task.getSourceDocumentId());
         KbDocumentResult current = document == null ? null : resultDomainService.findCurrentByDocumentId(document.getId());
         if (document == null || current == null || !task.getInputResultKey().equals(current.getResultKey())
-                || document.getStatus() == DocumentStatus.FAILED || document.getStatus() == DocumentStatus.DELETED) {
+                || document.getStatus() == DocumentStatus.FAILED || document.getStatus() == DocumentStatus.PUBLISHED
+                || document.getStatus() == DocumentStatus.DELETED) {
             return;
         }
         documentDomainService.casTransitionStatus(document.getId(), document.getStatus(), DocumentStatus.FAILED);

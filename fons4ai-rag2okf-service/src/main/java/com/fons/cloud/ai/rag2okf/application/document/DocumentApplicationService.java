@@ -20,6 +20,7 @@ import com.fons.cloud.ai.rag2okf.common.model.document.DocumentUploadOutcome;
 import com.fons.cloud.ai.rag2okf.common.model.document.DocumentPrecheckedFile;
 import com.fons.cloud.ai.rag2okf.common.model.document.DocumentReadBatch;
 import com.fons.cloud.ai.rag2okf.common.model.document.DocumentUploadAccessContext;
+import com.fons.cloud.ai.rag2okf.common.model.document.ParseIntent;
 import com.fons.cloud.ai.rag2okf.common.request.document.DocumentUploadRequest;
 import com.fons.cloud.ai.rag2okf.common.request.document.ChunkPolicyRequest;
 import com.fons.cloud.common.result.PageResult;
@@ -30,6 +31,7 @@ import com.fons.cloud.ai.rag2okf.common.response.document.DocumentTaskSummaryRes
 import com.fons.cloud.ai.rag2okf.common.response.document.DocumentUploadResponse;
 import com.fons.cloud.ai.rag2okf.common.utils.BusinessKeyGenerator;
 import com.fons.cloud.ai.rag2okf.infrastructure.document.parser.DocumentParserRegistry;
+import com.fons.cloud.ai.rag2okf.infrastructure.document.parser.ParseRecognizer;
 import com.fons.cloud.common.base.exception.BusinessRuntimeException;
 import com.fons.cloud.common.result.R;
 import com.fons.cloud.ai.rag2okf.domain.entity.document.KbDocument;
@@ -106,6 +108,7 @@ public class DocumentApplicationService {
     private final FonsOssDocumentArtifactService documentArtifactService;
     private final DocumentUploadPrecheckPolicy uploadPrecheckPolicy;
     private final DocumentParserRegistry parserRegistry;
+    private final ParseRecognizer parseRecognizer;
     private final TransactionTemplate transactionTemplate;
 
     // ────────────────────────────── 新上传契约（T011） ──────────────────────────────
@@ -141,17 +144,17 @@ public class DocumentApplicationService {
 
         DocumentUploadRequest effectiveRequest = request != null
                 ? request : new DocumentUploadRequest(ProcessingMode.DEFAULT, null, null);
-        R<DocumentUploadIntent> intentResult = resolveUploadIntent(knowledgeBase, effectiveRequest);
-        if (!intentResult.isSuccess()) {
-            return R.failed(intentResult);
-        }
-        DocumentUploadIntent intent = intentResult.getData();
-
         R<DocumentPrecheckedFile> precheckResult = precheckFile(file);
         if (!precheckResult.isSuccess()) {
             return R.failed(precheckResult);
         }
         DocumentPrecheckedFile precheckedFile = precheckResult.getData();
+        R<DocumentUploadIntent> intentResult = resolveUploadIntent(
+                knowledgeBase, effectiveRequest, precheckedFile);
+        if (!intentResult.isSuccess()) {
+            return R.failed(intentResult);
+        }
+        DocumentUploadIntent intent = intentResult.getData();
         String documentKey = BusinessKeyGenerator.nextKey();
         String fileToken = BusinessKeyGenerator.nextKey();
 
@@ -226,15 +229,21 @@ public class DocumentApplicationService {
     /**
      * 解析上传意图：解析器可用性预检、分块策略校验与任务创建决策。
      *
-     * <p>解析器预检在任何 IO（任务、MinIO、模型、网络）前执行：MINERU 直接
-     * {@code PARSER_NOT_AVAILABLE}，不创建文档与任务、不调用 Built-in（AC-003、AC-007）。
+     * <p>解析器类型以通过安全预检的文件事实识别为准；显式请求与识别结果不一致时直接
+     * {@code PARSER_NOT_AVAILABLE}，不创建文档与任务、不调用其他 Parser（AC-003、AC-007）。
      * chunkPolicy 只要提供就严格校验，非法值拒绝且不做默认回退；未提供时使用
      * 缺省 RECURSIVE+PARENT_CHILD。</p>
      */
-    private R<DocumentUploadIntent> resolveUploadIntent(KbKnowledgeBase knowledgeBase, DocumentUploadRequest request) {
+    private R<DocumentUploadIntent> resolveUploadIntent(
+            KbKnowledgeBase knowledgeBase, DocumentUploadRequest request,
+            DocumentPrecheckedFile precheckedFile) {
         ProcessingMode mode = request.getProcessingMode() != null
                 ? request.getProcessingMode() : ProcessingMode.DEFAULT;
-        ParserType parserType = request.getParserType() != null ? request.getParserType() : ParserType.BUILT_IN;
+        ParseIntent parseIntent = parseRecognizer.recognize(precheckedFile);
+        ParserType parserType = parseIntent.parserType();
+        if (request.getParserType() != null && request.getParserType() != parserType) {
+            return R.failed(Rag2OkfResultCode.PARSER_NOT_AVAILABLE);
+        }
         if (!parserRegistry.isEnabled(parserType)) {
             return R.failed(Rag2OkfResultCode.PARSER_NOT_AVAILABLE);
         }

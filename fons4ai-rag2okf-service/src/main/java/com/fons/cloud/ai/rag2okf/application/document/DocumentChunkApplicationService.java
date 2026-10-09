@@ -223,12 +223,14 @@ public class DocumentChunkApplicationService {
             executeRunning(task);
             taskDomainService.casTransitionStatus(task.getId(), ProcessingTaskStatus.RUNNING, ProcessingTaskStatus.SUCCEEDED);
         } catch (DocumentProcessingException exception) {
+            markInitialChunkFailed(task, exception);
             taskDomainService.failRunningTask(task.getId(), exception.getCode(), exception.getMessage());
             throw exception;
         } catch (RuntimeException exception) {
-            taskDomainService.failRunningTask(task.getId(), Rag2OkfResultCode.RECHUNK_UNEXPECTED_ERROR.getCode(),
-                    Rag2OkfResultCode.RECHUNK_UNEXPECTED_ERROR.getMessage());
-            throw new DocumentProcessingException(Rag2OkfResultCode.RECHUNK_UNEXPECTED_ERROR, exception);
+            markInitialChunkFailed(task, exception);
+            Rag2OkfResultCode errorCode = unexpectedErrorCode(task);
+            taskDomainService.failRunningTask(task.getId(), errorCode.getCode(), errorCode.getMessage());
+            throw new DocumentProcessingException(errorCode, exception);
         }
     }
 
@@ -277,7 +279,7 @@ public class DocumentChunkApplicationService {
             });
         } catch (IOException exception) {
             compensate(stored, exception);
-            throw new DocumentProcessingException(Rag2OkfResultCode.RECHUNK_ARTIFACT_ERROR, exception);
+            throw new DocumentProcessingException(artifactErrorCode(task), exception);
         } catch (RuntimeException exception) {
             compensate(stored, exception);
             throw exception;
@@ -288,6 +290,61 @@ public class DocumentChunkApplicationService {
         if (document.getStatus() != DocumentStatus.PARSED) {
             documentDomainService.casTransitionStatus(document.getId(), document.getStatus(), DocumentStatus.PARSED);
         }
+    }
+
+    /**
+     * 首次分块失败时将仍指向该任务输入的上传文档标记为失败。
+     *
+     * @param task 当前分块任务
+     * @param exception 当前执行异常
+     */
+    private void markInitialChunkFailed(KbProcessingTask task, RuntimeException exception) {
+        if (task.getTaskType() != ProcessingTaskType.CHUNK || isTaskInputSuperseded(exception)) {
+            return;
+        }
+        KbDocument document = documentDomainService.getById(task.getSourceDocumentId());
+        KbDocumentResult current = document == null ? null : resultDomainService.findCurrentByDocumentId(document.getId());
+        if (document == null || Boolean.TRUE.equals(document.getDeleted()) || current == null
+                || !task.getInputResultKey().equals(current.getResultKey())
+                || document.getStatus() != DocumentStatus.UPLOADED) {
+            return;
+        }
+        documentDomainService.casTransitionStatus(document.getId(), DocumentStatus.UPLOADED, DocumentStatus.FAILED);
+    }
+
+    /**
+     * 判断异常是否表示任务输入已被新版本结果替代。
+     *
+     * @param exception 当前执行异常
+     * @return 输入已被替代时返回 {@code true}
+     */
+    private boolean isTaskInputSuperseded(RuntimeException exception) {
+        return exception instanceof DocumentProcessingException documentException
+                && Rag2OkfResultCode.TASK_INPUT_SUPERSEDED.getCode().equals(documentException.getCode());
+    }
+
+    /**
+     * 解析制品读取失败时按首次分块或重新分块选择对应的安全错误码。
+     *
+     * @param task 当前分块任务
+     * @return 可对外登记的安全错误码
+     */
+    private Rag2OkfResultCode artifactErrorCode(KbProcessingTask task) {
+        return task.getTaskType() == ProcessingTaskType.CHUNK
+                ? Rag2OkfResultCode.TASK_EXECUTION_ERROR
+                : Rag2OkfResultCode.RECHUNK_ARTIFACT_ERROR;
+    }
+
+    /**
+     * 未预期异常时按首次分块或重新分块选择对应的安全错误码。
+     *
+     * @param task 当前分块任务
+     * @return 可对外登记的安全错误码
+     */
+    private Rag2OkfResultCode unexpectedErrorCode(KbProcessingTask task) {
+        return task.getTaskType() == ProcessingTaskType.CHUNK
+                ? Rag2OkfResultCode.TASK_EXECUTION_ERROR
+                : Rag2OkfResultCode.RECHUNK_UNEXPECTED_ERROR;
     }
 
     private KbProcessingTask requireQueuedTask(String taskKey) {
